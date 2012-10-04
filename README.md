@@ -7,6 +7,8 @@ This is the shared repository containing program code and files relating to the
 Getting started
 ---------------
 
+This repository is a ROS stack. It should be cloned into one of the directories in `ROS_PACKAGE_PATH`.
+
 Clone the repository. For read-only access:
 
     $ git clone https://github.com/tomh05/cued-ardrone.git
@@ -23,4 +25,10 @@ repository, and assuming that you are in the `cued-ardrone` directory:
     $ git submodule update
 
 See the [git submodule documentation](http://git-scm.com/book/en/Git-Tools-Submodules) for more information.
+
+Build the AR.Drone driver. See the documentation in the `ardrone_autonomy` directory. The short version is:
+
+    $ cd ardrone_autonomy
+    $ ./build_sdk.sh
+    $ rosmake
 
