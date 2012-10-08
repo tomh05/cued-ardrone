@@ -1,0 +1,18 @@
+<package>
+  <description brief="simpledrone">
+
+     simpledrone
+
+  </description>
+  <author>Tom Howe</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/simpledrone</url>
+  <depend package="ardrone_autonomy"/>
+  <depend package="artoolkit"/>
+  <depend package="cv_bridge"/>
+  <depend package="cv_bridge"/>
+  <rosdep name="opencv2"/>
+</package>
+
+
