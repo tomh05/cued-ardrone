@@ -1,3 +1,7 @@
+# Build and built files
+build/
+bin/
+
 # vim swap files
 .*.swp
 
