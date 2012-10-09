@@ -32,7 +32,7 @@
 #include <unistd.h>
 #include <vector>
 
-static const int DEFAULT_RATE = 60;
+static const int DEFAULT_RATE = 30;
 static const int DEFAULT_PORT = 5003;
 static const std::string DEFAULT_HOST = "USARsim";
 static const std::string DEFAULT_REQUEST = "OK\r\n";
@@ -110,13 +110,13 @@ int openSocket(std::string host, int port)
 void requestImage(int sockfd, std::string request)
 {
     int n = -1;
-    std::vector<unsigned char> x = intToBytes(320);
+    std::vector<unsigned char> x = intToBytes(640);
     std::string sx(reinterpret_cast<char*>(&x[0]), x.size());
     std::vector<unsigned char> y = intToBytes(0);
     std::string sy(reinterpret_cast<char*>(&y[0]), y.size());
-    std::vector<unsigned char> w = intToBytes(320);
+    std::vector<unsigned char> w = intToBytes(640);
     std::string sw(reinterpret_cast<char*>(&w[0]), w.size());
-    std::vector<unsigned char> h = intToBytes(240);
+    std::vector<unsigned char> h = intToBytes(360);
     std::string sh(reinterpret_cast<char*>(&h[0]), h.size());
     std::string strStart = "U";
     std::string strTerm  = "\r\n";
