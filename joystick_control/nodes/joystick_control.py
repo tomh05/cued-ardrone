@@ -10,9 +10,6 @@ from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Joy
 from ardrone_autonomy.msg import Navdata
 
-t = Twist()
-t.linear.x = 0.4
-
 last_navdata = Navdata()
 old_buttons = [0,] * 10
 
