@@ -1,3 +1,3 @@
 [submodule "ardrone_autonomy"]
 	path = ardrone_autonomy
-	url = https://github.com/AutonomyLab/ardrone_autonomy.git
+	url = https://github.com/tomh05/ardrone_autonomy.git
