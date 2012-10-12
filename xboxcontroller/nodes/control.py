@@ -20,7 +20,8 @@ def scanButtons(d): # debounce buttons and fire events
             button_state[i] = d.buttons[i] 
             if button_state[i]:
                 print i 
-                actions[i]()
+                if i >= 0 and i < len(actions):
+                    actions[i]()
 
 def takeoff():
     print "Taking off"
