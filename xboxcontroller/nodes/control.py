@@ -19,8 +19,9 @@ def scanButtons(d): # debounce buttons and fire events
         if d.buttons[i] != button_state[i]:
             button_state[i] = d.buttons[i] 
             if button_state[i]:
-                print i 
-                actions[i]()
+                rospy.loginfo('Button press: %s' % (i,))
+                if i >= 0 and i < len(actions):
+                    actions[i]()
 
 def takeoff():
     print "Taking off"
