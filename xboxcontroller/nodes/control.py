@@ -24,28 +24,67 @@ def scanButtons(d): # debounce buttons and fire events
                     actions[i]()
 
 def takeoff():
-    print "Taking off"
+    rospy.loginfo("Taking off")
     pub = rospy.Publisher('/ardrone/takeoff',Empty);
     pub.publish()
 
 def land():
-    print "landing"
+    rospy.loginfo("Landing")
     pub = rospy.Publisher('/ardrone/land',Empty);
     pub.publish()
 
 def reset():
-    print "resetting"
+    rospy.loginfo("Resetting")
     pub = rospy.Publisher('/ardrone/reset',Empty);
     pub.publish()
+
+def fire_a():
+    pub = rospy.Publisher('/xboxcontroller/button_a',Empty);
+    pub.publish()
+
+def fire_b():
+    pub = rospy.Publisher('/xboxcontroller/button_b',Empty);
+    pub.publish()
+    
+def fire_x():
+    pub = rospy.Publisher('/xboxcontroller/button_x',Empty);
+    pub.publish()
+
+def fire_y():
+    pub = rospy.Publisher('/xboxcontroller/button_y',Empty);
+    pub.publish()
+
+def fire_back():
+    pub = rospy.Publisher('/xboxcontroller/button_back',Empty);
+    pub.publish()  
+
+def fire_start():
+    pub = rospy.Publisher('/xboxcontroller/button_start',Empty);
+    pub.publish()  
+
+def fire_left_pad_button():
+    pub = rospy.Publisher('/xboxcontroller/button_left_pad',Empty);
+    pub.publish()  
+
+def fire_right_pad_button():
+    pub = rospy.Publisher('/xboxcontroller/button_right_pad',Empty);
+    pub.publish()  
 def nowt():
     pass
 
 
 actions = {
-    0: nowt,
-    1: reset,
-    2: takeoff,
-    3: land,
+    0: fire_a,
+    1: fire_b,
+    2: fire_x,
+    3: fire_y,
+    4: land,
+    5: takeoff,
+    6: fire_back,
+    7: fire_start,
+    8: reset,
+    9: fire_left_pad_button,
+    10: fire_right_pad_button
 }
 
 def scanAxes(d):
