@@ -10,6 +10,7 @@ from std_msgs.msg import Empty, UInt8
 from time import time, sleep
 import sys
 from numpy import pi
+import pickle
 
 #from imageprocessor import imageprocessor
 
@@ -56,6 +57,10 @@ class dronecontroller:
 		self.error = {'al':[], 'ps':[]}
 		self.pnotr = True
 	
+	def cleartwist(self):
+		self.twist.linear.x= 0.0; self.twist.linear.y= 0.0; self.twist.linear.z= 0.0
+		self.twist.angular.x= 0.0; self.twist.angular.y= 0.0; self.twist.angular.z= 0.0; 
+	
 	def nd_logger(self,msg):
 		if (time() > self.logstart):
 			self.nd_log['tm'].append(time()-self.reftm)
@@ -87,13 +92,15 @@ class dronecontroller:
 	
 	def main_procedure(self):
 		sleep(1)	#nb: sleep 0.3 is min necessary wait before you can publish. perhaps bc ros master takes time to setup publisher.
+		self.cleartwist()
+		self.cmdpub.publish(self.twist);
 		self.camselectclient(1);
 		#self.improc = imageprocessor(self)
 		self.takeoffpub.publish(Empty()); print 'takeoff'
 		while (time() < (self.logstart+2)):
 			pass
 		print 'start control'
-		rospy.Timer(rospy.Duration(1.0/15.0), self.main_timer_callback)
+		self.main_timer = rospy.Timer(rospy.Duration(1.0/15.0), self.main_timer_callback)
 	
 	def main_timer_callback(self,event):
 		if (self.nd_log['al'][-1]>1500):
@@ -104,15 +111,23 @@ class dronecontroller:
 		#print self.nd_log['al'][-1]
 
 		#endif height and yaw control are activated
-		if (time() > self.logstart + 8 and time() < self.logstart + 10):
-			print -0.2
-			self.twist.linear.y=-0.2
-		if (time() > self.logstart + 10 and time() < self.logstart + 13):
-			print 0.2
-			self.twist.linear.y=0.2
-		if (time() > self.logstart + 13):
-			print 0.0
-			self.twist.linear.y=0.0
+		if (time() > self.logstart + 6 and time() < self.logstart + 7.5):
+			print '-0.2'
+			self.twist.linear.y=-0.5
+		if (time() > self.logstart + 7.5 and time() < self.logstart + 9):
+			print '0.2'
+			self.twist.linear.y=0.5
+		if (time() > self.logstart + 9 and time() < self.logstart + 10):
+			print '-0.2'
+			self.twist.linear.y=-0.5
+		if (time() > self.logstart + 10):
+			self.cleartwist()
+			print 'land'
+			self.landpub.publish(Empty())
+			file1 = open('roll_0_5_altctrl.pkl','w')
+			pickle.dump([self.nd_log, self.cmd_log],file1)
+			file1.close()
+			self.main_timer.shutdown()
 
 		self.cmdpub.publish(self.twist)
 		self.cmd_logger(self.twist)
