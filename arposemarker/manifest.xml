@@ -1,17 +1,17 @@
 <package>
-  <description brief="simpledrone">
+  <description brief="arposemarker">
 
-     simpledrone
+     arposemarker
 
   </description>
   <author>Tom Howe</author>
   <license>BSD</license>
   <review status="unreviewed" notes=""/>
-  <url>http://ros.org/wiki/simpledrone</url>
+  <url>http://ros.org/wiki/arposemarker</url>
   <depend package="ardrone_autonomy"/>
   <depend package="artoolkit"/>
   <depend package="cv_bridge"/>
-  <depend package="cv_bridge"/>
+  <depend package="ar_pose"/>
   <rosdep name="opencv2"/>
 </package>
 
