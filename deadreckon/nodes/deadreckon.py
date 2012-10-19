@@ -101,18 +101,19 @@ class DeadReckoning:
         #quaternion_inverse = tf.transformations.quaternion_inverse(quaternion)
         #dir = tf.transformations.quaternion_matrix(quaternion_inverse)
 
-        corr_angle = self.gamma - self.rotZoffset 
-        vx_rot = math.cos(corr_angle)*vx - math.sin(corr_angle)*vy
-        vy_rot = math.sin(corr_angle)*vx + math.cos(corr_angle)*vy
-        self.x += vx_rot*deltat
-        self.y += vy_rot*deltat
-        #self.x += vx*deltat 
-        #self.y += vy*deltat 
-        #self.z = d.altd
+        # radians to rotate from camera to world frame
+        cam_yaw = self.gamma - self.rotZoffset 
+        
+        vx_rot = math.cos(cam_yaw)*vx - math.sin(cam_yaw)*vy
+        vy_rot = math.sin(cam_yaw)*vx + math.cos(cam_yaw)*vy
+
+        self.x += vx_rot*deltat / 1000 # convert mm/s to ROS standard unit of m/s
+        self.y += vy_rot*deltat / 1000
+        self.z = d.altd / 1000
 
 
 
-                        # Apply rotation matrix
+        # Apply rotation matrix
         #vel_vector = R.dot(vel_vector)
         
         
@@ -139,14 +140,10 @@ class DeadReckoning:
                          "world")
 
         '''
-        # Publish Path
+        # Publish path visualisation data
         '''
-        #print "Test"
-        #print self.trackPath
-
+        # copy headers over from Navdata
         self.trackPath.header        = d.header
-        #self.trackPath.frame_id      = 'world'
-
         newPose = PoseStamped()
         newPose.header               = d.header
         newPose.header.frame_id      = 'world'
@@ -155,10 +152,14 @@ class DeadReckoning:
         newPose.pose.position.y      = self.y
         newPose.pose.position.z      = self.z
         newPose.pose.orientation.x   = self.alpha  
+        newPose.pose.orientation.y   = self.beta  
+        newPose.pose.orientation.z   = self.gamma
+        
         self.trackPath.poses.append(newPose)
-        #print newPose
+
         pathPub = rospy.Publisher('deadreckon_path',Path)
         pathPub.publish(self.trackPath)
+
 
 if __name__ == '__main__':
     dead_reckon = DeadReckoning() # Initialise class to preserve vars
