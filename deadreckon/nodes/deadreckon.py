@@ -6,14 +6,28 @@ import ardrone_autonomy.msg
 import tf
 import math
 import numpy as np
+from   std_msgs.msg import Empty
+from nav_msgs.msg import Path
+from geometry_msgs.msg import PoseStamped
 
 class DeadReckoning:
     def __init__(self):
         self.x = 0.0 # x location in world
         self.y = 0.0 # y location in world
-        self.z = 0.0 # z locarion in world
+        self.z = 0.0 # z location in world
         self.prevtime = None # time (float secs) of prev frame
         self.v_buffer = [] # buffer of last 10 frames [d.vx, d.vy]
+        self.rotZoffset = 0 # initial value of yaw to allow for offsets
+        self.trackPath = Path()
+
+    def reset(self,d):
+        print "resetting"
+        self.x = 0.0 # x location in world
+        self.y = 0.0 # y location in world
+        self.z = 0.0 # z location in world
+        self.rotZoffset = self.gamma 
+        self.trackPath = Path()
+
 
     def navdataCallback(self, d):
         
@@ -42,8 +56,8 @@ class DeadReckoning:
             self.v_buffer.append([d.vx, d.vy])
             vx = np.median(zip(*self.v_buffer)[0])
             vy = np.median(zip(*self.v_buffer)[1])
-    
-        #print d.rotX
+        vx = d.vx 
+        vy = d.vy 
         #print str(d.vx) + "," + str(d.vy) + "," + str(d.vz)
         
         
@@ -52,11 +66,11 @@ class DeadReckoning:
         # Create rotation quaternion
         '''
         # Euler angles in radians
-        alpha = d.rotX * math.pi / 180 # roll
-        beta  = d.rotY * math.pi / 180 # pitch
-        gamma = d.rotZ * math.pi / 180 # yaw
+        self.alpha = math.radians(d.rotX) # roll
+        self.beta  = math.radians(d.rotY) # pitch
+        self.gamma = math.radians(d.rotZ) # yaw
         # produce quaternion
-        quaternion = tf.transformations.quaternion_from_euler(alpha, beta, gamma)
+        quaternion = tf.transformations.quaternion_from_euler(self.alpha, self.beta, self.gamma - self.rotZoffset)
         
         #print "bearing " + str(alpha) + ", " + str(beta)+", "+str(gamma)
         
@@ -65,7 +79,7 @@ class DeadReckoning:
         
         '''
         # Resolve into co-ordinate system
-        # The euler angles effective give quad rotations from the world
+        # The euler angles effectively give quad rotations from the world
         # vx and vy need to be resolved back by these to world axis
         '''
         
@@ -74,30 +88,43 @@ class DeadReckoning:
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         
         # Produce reverse rotation matrix
-        origin, xaxis, yaxis, zaxis = [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
-        Rx = tf.transformations.rotation_matrix(-alpha, xaxis)
-        Ry = tf.transformations.rotation_matrix(-beta, yaxis)
-        Rz = tf.transformations.rotation_matrix(-gamma, zaxis)
-        R = tf.transformations.concatenate_matrices(Rx, Ry, Rz)
-        R = R[:3, :3] # Is homonogenous ???
+        #origin, xaxis, yaxis, zaxis = [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]
+        #Rx = tf.transformations.rotation_matrix(-alpha, xaxis)
+        #Ry = tf.transformations.rotation_matrix(-beta, yaxis)
+        #Rz = tf.transformations.rotation_matrix(-gamma, zaxis)
+        #R = tf.transformations.concatenate_matrices(Rx, Ry, Rz)
+        #R = R[:3, :3] # Is homonogenous ???
         
         # vectorize
-        vel_vector = np.asmatrix([vx, vy, 0.]).T
-        print vel_vector
-        
-        # Apply rotayion matrix
-        vel_vector = R.dot(vel_vector)
+                #vel_vector = np.asmatrix([vx, vy, 0.]).btT
+        #print vel_vector
+        #quaternion_inverse = tf.transformations.quaternion_inverse(quaternion)
+        #dir = tf.transformations.quaternion_matrix(quaternion_inverse)
+
+        corr_angle = self.gamma - self.rotZoffset 
+        vx_rot = math.cos(corr_angle)*vx - math.sin(corr_angle)*vy
+        vy_rot = math.sin(corr_angle)*vx + math.cos(corr_angle)*vy
+        self.x += vx_rot*deltat
+        self.y += vy_rot*deltat
+        #self.x += vx*deltat 
+        #self.y += vy*deltat 
+        #self.z = d.altd
+
+
+
+                        # Apply rotation matrix
+        #vel_vector = R.dot(vel_vector)
         
         
         '''
         # Update location
         '''
-        vel_list = list(vel_vector.flat)
+        #vel_list = list(vel_vector.flat)
         #print vel_list
-        self.x += vel_list[0]*deltat
-        self.y += vel_list[1]*deltat
+        #self.x += vel_list[0]*deltat
+        #self.y += vel_list[1]*deltat
         
-        print str(self.x) + "," + str(self.y) + "," + str(self.z)
+        #print str(self.x) + "," + str(self.y) + "," + str(self.z)
         
         
         
@@ -105,15 +132,38 @@ class DeadReckoning:
         # Publish tf
         '''
         br = tf.TransformBroadcaster() #create broadcaster
-        br.sendTransform((self.x,self.y,self.z),
+        br.sendTransform((self.x,self.y,self.z), # translation happens first, then rotation
                          quaternion,
                          rospy.Time.now(), # NB: 'now' is not the same as time data was sent from drone
                          "ardrone_base_link",
                          "world")
+
+        '''
+        # Publish Path
+        '''
+        #print "Test"
+        #print self.trackPath
+
+        self.trackPath.header        = d.header
+        #self.trackPath.frame_id      = 'world'
+
+        newPose = PoseStamped()
+        newPose.header               = d.header
+        newPose.header.frame_id      = 'world'
+
+        newPose.pose.position.x      = self.x
+        newPose.pose.position.y      = self.y
+        newPose.pose.position.z      = self.z
+        newPose.pose.orientation.x   = self.alpha  
+        self.trackPath.poses.append(newPose)
+        #print newPose
+        pathPub = rospy.Publisher('deadreckon_path',Path)
+        pathPub.publish(self.trackPath)
 
 if __name__ == '__main__':
     dead_reckon = DeadReckoning() # Initialise class to preserve vars
     rospy.init_node('deadreckon_broadcaster')
     #turtlename = rospy.get_param('~turtle')
     rospy.Subscriber('/ardrone/navdata',ardrone_autonomy.msg.Navdata,dead_reckon.navdataCallback)
+    rospy.Subscriber('/xboxcontroller/button_start',Empty,dead_reckon.reset)
     rospy.spin()
