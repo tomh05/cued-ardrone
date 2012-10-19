@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import roslib; roslib.load_manifest('simpledrone')
+import roslib; roslib.load_manifest('arposemarker')
 import rospy
 import ardrone_autonomy.msg
 from sensor_msgs.msg import Image
@@ -17,11 +17,6 @@ def imgproc(d):
 	bridge = CvBridge()
 	cvimg = bridge.imgmsg_to_cv(d,"bgr8")
 	npimg = numpy.asarray(cvimg)
-	print "got image"
-
-
-
-
 
 	cv2.imshow("Output",npimg)
 	cv2.waitKey(1)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import roslib; roslib.load_manifest('simpledrone')
+import roslib; roslib.load_manifest('arposemarker')
 import rospy
 import ardrone_autonomy.msg
 from sensor_msgs.msg import Image

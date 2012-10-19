@@ -1,6 +1,6 @@
 <launch>
     <node name="ardrone_driver" pkg="ardrone_autonomy" type="ardrone_driver" />
-    <node name="basic" pkg="simpledrone" type="basic.py"/>
+    <node name="basic" pkg="arposemarker" type="basic.py"/>
     <group ns="ardrone/front">
     <node name="image_proc" pkg="image_proc" type="image_proc" />
     </group>
