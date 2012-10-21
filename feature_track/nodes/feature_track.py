@@ -1,18 +1,40 @@
 #!/usr/bin/env python
 
-#===================Changelog===========================================
+#===================Changelog==================================================
 # Initial Creation
 # Added undistort
 # Added 3D via fundamental matrix
 # Added 3D via essential matrix
 # Efficiency improvements by buffering now to previous
-#=======================================================================
+#-----------------------------------------------------
+# Fixed buffering
+# Added fundamental matrix error check
+# Added extraction of projection matrices
+# Added selection of best case projection matrix
+# Added 3D point projection
+#==============================================================================
+
+#=====================Notes====================================================
+# At present the outliers in fundamental matrix calculation are not removed to
+# the final stage. However, points are removed by the correctMatches check.
+# This happens before outlier masking so means the mask is no longer valid if 
+# points were removed. Either should drop outliers straight away, or filter 
+# outlier mask with correctMatches results.
+# 
+# It is unclear whether the translation matrix needs rescaling by camera proj
+#
+# It may be worth reading camera cal .yamls from disk if missing
+#
+# The various checks and filters carried out here should allow us to provide
+# a quantified measure of confidence in the result
+#==============================================================================
 
 import roslib; roslib.load_manifest('feature_track')
 import rospy
 import ardrone_autonomy.msg
 from sensor_msgs.msg import Image
 import cv2 
+import cv
 from cv_bridge import CvBridge
 import numpy as np
 import sensor_msgs.msg
@@ -46,6 +68,7 @@ class FeatureTracker:
         self.calibrated = False
         self.fd = cv2.FeatureDetector_create('ORB')
         self.de = cv2.DescriptorExtractor_create('FREAK')
+        self.dm = cv2.DescriptorMatcher_create('BruteForce')
         self.pts1 = None
         self.desc1 = None
         self.kp1 = None
@@ -59,10 +82,43 @@ class FeatureTracker:
         #print('Previous: %s' % (self.previous))
         self.previous = thing
         
+    def compute_fundamental(self, x1,x2):
+        n = x1.shape[1]
+        # build matrix for equations
+        A = np.zeros((n,9))
+        for i in range(n):
+            A[i] = [x1[0,i]*x2[0,i], x1[0,i]*x2[1,i], x1[0,i]*1.,
+            x1[1,i]*x2[0,i], x1[1,i]*x2[1,i], x1[1,i]*1.,
+            1.*x2[0,i], 1.*x2[1,i], 1. ]
+        # compute linear least square solution
+        U,S,V = np.linalg.svd(A)
+        F = V[-1].reshape(3,3)
+        # constrain F
+        # make rank 2 by zeroing out last singular value
+        U,S,V = np.linalg.svd(F)
+        S[2] = 0
+        F = np.dot(U,np.dot(np.diag(S),V))
+        return F
+
+        
+    def compute_F_error(self, F, x1_32, x2_32):
+        errs = []
+        for i, p in enumerate(zip(x1_32.T, x2_32.T)):
+            errs.append(np.r_[p[1], 1].T.dot(F).dot(np.r_[p[0], 1]))
+        return np.mean(errs)
+        
+    def compute_correct_projection(self, F):        
+        return
+
+        
     def featureTrack(self, img):
         """Takes a cv2 numpy array image and compared to a previously
         buffered image. Features are extracted from each frame, 
         undistorted and matched."""
+        
+        print ""
+
+        #img = cv2.imread("/home/alex/frame0000.jpg")
         
         # Initialise previous image buffer
         if self.previous == None:
@@ -71,13 +127,19 @@ class FeatureTracker:
             
 
         # Skip frames. Need to add ROS parameter to allow setting
+        
         self.frameskip += 1
-        if self.frameskip == 4:
-            self.frameskip = 0
+        if self.frameskip < 4:
             return
+            
+        self.frameskip = 0
+        
             
         # Convert working images to monochrome
         grey_previous = self.grey_previous
+        #grey_previous = cv2.cvtColor(cv2.imread("/home/alex/frame0001.jpg"), cv2.COLOR_BGR2GRAY)
+        grey_now = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        #img = cv2.imread("/home/alex/frame0002.jpg")
         grey_now = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         
         # Initialise features and descriptor
@@ -101,11 +163,12 @@ class FeatureTracker:
             self.grey_previous = grey_now
             self.pts1 = pts2
             self.kp1, self.desc1 = kp2, desc2
+            print "No Features Found"
             return
         
         # Create descriptor matcher and match features
-        dm = cv2.DescriptorMatcher_create('BruteForce')
-        matches = dm.match(desc1, desc2)
+        
+        matches = self.dm.match(desc1, desc2)
 
         # Produce ordered arrays of paired points
         i1_indices = list(x.queryIdx for x in matches)
@@ -119,63 +182,301 @@ class FeatureTracker:
         if (len(i1_pts) > 4):
             if (len(i2_pts) > 4): # this is redundant as matched lists
                 
+                
+                
                 if self.calibrated:
                     # Undistort points using calibration data
                     i1_mat = np.array([i1_pts])
                     i2_mat = np.array([i2_pts])                    
-                    i1_pts_undistorted = cv2.undistortPoints(i1_mat, self.cameraMatrix, self.distCoeffs, P=self.P)[0]
-                    i2_pts_undistorted = cv2.undistortPoints(i2_mat, self.cameraMatrix, self.distCoeffs, P=self.P)[0]
+                    i1_pts_undistorted = cv2.undistortPoints(i1_mat, self.cameraMatrix, self.distCoeffs, P=self.P) #Do not pass camera P here as working in normalised
+                    #print i1_pts_undistorted
+                    i2_pts_undistorted = cv2.undistortPoints(i2_mat, self.cameraMatrix, self.distCoeffs, P=self.P)
+                    
+                    #print i2_pts_undistorted
                 else:
                     # Use distorted points as calibration missing
                     print "WARNING: No calibration info. Using distorted feature positions"
+                    print "This will be wrong as not normalised"
                     i1_pts_undistorted = i1_pts
                     i2_pts_undistorted = i2_pts
-
+                
+                    
+                #print i1_pts_undistorted #= i1_pts
+                #print i2_pts_undistorted #= i2_pts
+                
+                #cv2.stereoRectify(self.cameraMatrix, self.distCoeff, self.cameraMatrix, self.distCoeff, img.shape, 
+                
+                
                 # Extract fundamental matrix
-                F, mask = cv2.findFundamentalMat(i1_pts_undistorted, i2_pts_undistorted, cv2.FM_RANSAC)
+                F, mask = cv2.findFundamentalMat(i1_pts, i2_pts, cv2.FM_RANSAC, param1 = 1., param2 = 0.99)
                 # F contains fundamental matrix
                 # mask is a binary mask of points fitting the matrix
+
+                
+                
+                np.set_printoptions(suppress=True, precision=6)
+
+                print "F : "
+                print F             
+                                
+                avg_error = self.compute_F_error(F, i1_pts_undistorted[0].transpose(), i2_pts_undistorted[0].transpose())
+                print "Avg error : ", avg_error
+                if (abs(avg_error)>0.3):
+                    print "===================="
+                    print "F Error too high"
+                    print "===================="
+                    self.update_previous(img)
+                    self.grey_previous = grey_now
+                    self.pts1 = pts2
+                    self.kp1, self.desc1 = kp2, desc2
+                    return
+                
+                '''    
+                F2 = self.compute_fundamental(i1_pts, i2_pts)
+                print "F2 : "
+                print F2
+                avg_error = self.compute_F_error(F, i1_pts_undistorted[0].transpose(), i2_pts_undistorted[0].transpose())
+                print "Avg error : ", avg_error
+                '''
+                
+                
+
+                
+                
+                
+                
+                #epilines = cv.CreateMat(len(i1_pts_undistorted), 3, cv.CV_32F)
+                #cv.ComputeCorrespondEpilines(cv.fromarray(i1_pts_undistorted), 1, cv.fromarray(F), epilines)
+                #epilines =  np.array(epilines)
+                
+                
+                
                 
                 # Filter points that fit F
-                #print i1_pts_undistorted
-                i1_pts_undistorted = np.array([i1_pts_undistorted])
-                #print i1_pts_undistorted
-                #print "--"
-                i2_pts_undistorted = np.array([i2_pts_undistorted])
-                #print i2_pts_undistorted
                 i1_pts_corr, i2_pts_corr = cv2.correctMatches(F, i1_pts_undistorted, i2_pts_undistorted)
+                i1_pts_corr = i1_pts_corr[0]
+                i2_pts_corr = i2_pts_corr[0]
+                #i1_pts_corr, i2_pts_corr = i1_pts_undistorted, i2_pts_undistorted
+                
+                # Filter nans
+                """If values are not normalised, then>=0 check is invalid"""
+                #i1_pts_corr = np.reshape(i1_pts_corr[(i1_pts_corr>=0)], (-1, 2))
+                #i2_pts_corr = np.reshape(i2_pts_corr[(i2_pts_corr>=0)], (-1, 2))
+                                
+                #print "i1_pts_corr"
+                #print i1_pts_corr
+                
+                E = self.cameraMatrix.transpose().dot(F.dot(self.cameraMatrix))
+                #E = E.dot(self.cameraMatrix) 
+                E /= E[2,2]
+                print "E"
+                print E
+                
+                W = np.array([[0, -1, 0],[1, 0, 0], [0, 0, 1]])
+                Z = np.array([[0, 1, 0],[-1, 0, 0], [0, 0, 0]])
+                #print "W"
+                #print W   
+                #print "W'"
+                #print W.transpose() 
+                #print "Z"
+                #print Z
+                               
+                U,SIGMA,V = np.linalg.svd(E)
+                if np.linalg.det(U.dot(V))<0:
+                    V = -V
+                #print "True SIGMA"
+                #print SIGMA
+                sigma_avg = (SIGMA[0]+SIGMA[1])/2
+                #print "sigma avg"
+                #print sigma_avg
+                #SIGMA = np.diag([sigma_avg, sigma_avg, 0])
+                SIGMA = np.diag(SIGMA)
+                SIGMA[2,2] = 0
+                if SIGMA[0,0] < 0.7*SIGMA[1,1] or SIGMA[1,1] < 0.7*SIGMA[0,0]:
+                    print "WARNING: Disparate singular values"
+                E2 = U.dot(SIGMA).dot(V)
+                #print "E2"
+                #print E2
+                #print "U"
+                #print U
+                #print "U'"
+                #print U.transpose()
+                print "SIGMA"
+                print SIGMA
+                #print "V"
+                #print V
+                #print "V'"
+                #print V.transpose()
+                # First Projection Matrix
+                P1 = np.append(np.identity(3), [[0], [0], [0]], 1)
+                #print "P1"
+                #print P1
+                """============================================================
+                # Compute the four possible P2 projection matrices
+                # Note in particular the matrix multiplication order
+                # This caught me out for a long while
+                ============================================================"""
+                projections = []
+                projections.append(np.append(U.dot(W.dot(V)),np.array([U[:,2]]).transpose(),1))
+                #print [np.vstack((np.dot(U,np.dot(W,V)).T,U[:,2])).T]
+                projections.append(np.append(U.dot(W.dot(V)),np.array([-U[:,2]]).transpose(),1))
+                #print [np.vstack((np.dot(U,np.dot(W,V)).T,-U[:,2])).T]
+                projections.append(np.append(U.dot(W.transpose().dot(V)),np.array([U[:,2]]).transpose(),1))
+                #print [np.vstack((np.dot(U,np.dot(W.T,V)).T,U[:,2])).T]
+                projections.append(np.append(U.dot(W.transpose().dot(V)),np.array([-U[:,2]]).transpose(),1))
+                #print [np.vstack((np.dot(U,np.dot(W.T,V)).T,-U[:,2])).T]
                 
                 
-                #print i1_pts_corr[0]
-                #print "---"
-                #print i2_pts_corr[0]
+                
+                # Bottom out on no accepted points
+                if i1_pts_corr.size == 0:
+                    self.update_previous(img)
+                    self.grey_previous = grey_now
+                    self.pts1 = pts2
+                    self.kp1, self.desc1 = kp2, desc2
+                    print "No Accepted Points"
+                    return
+                
+                """============================================================
+                # Determine projection with most valid point
+                # Produce boolean mask for best case
+                ============================================================"""
+                ind = 0
+                maxres = 0
+                for i, P2 in enumerate(projections):
+                    points4D = cv2.triangulatePoints(P1, P2, i1_pts_corr.transpose(), i2_pts_corr.transpose())
+                    d1 = np.dot(P1,points4D)[2]
+                    d2 = np.dot(P2,points4D)[2]
+                    if sum(d1>0)+sum(d2>0) > maxres:
+                        maxres = sum(d1>0)+sum(d2>0)
+                        #print "maxres : ", maxres
+                        ind = i
+                        infront = (d1>0) & (d2>0)
+                        #print "infront : ", infront
+                        
+                    #print P2
+                    #print points4D
+                    
+
+                #print ind
+                P2 = projections[ind]
+                
+                print "P1"
+                print P1                
+                print "P2 selected : "
+                print projections[ind]
+                print sum(infront), " valid points"
+                
+                print "Rotation Matrix : "
+                print P2[:,:3]
+                print "Translation Vector : "
+                t = P2[:,3:4]
+                print t
+                
+                #print t.shape
+                #print(t.dot(P2))
                 
                 
+                
+                
+                #print i1_pts_corr.shape
+                #print infront.shape
+                # triangulate inliers and remove points not in front of both cameras
+                X = cv2.triangulatePoints(P1, projections[ind], i1_pts_corr.transpose(), i2_pts_corr.transpose())
+                #print "4D points"
+                #print X
+                X1 = np.dot(P1,points4D)
+                #print "X1"
+                #print X1
+                X1 = X
+                
+                
+                points3D = []
+                Idx = 0
+                for i, h in enumerate(zip(*X1)): # Should attempt to do this as a matrix mult
+                    #print "h[0] : ", h[0]
+                    #print "h[1] : ", h[1]
+                    #print "h[2] : ", h[2]
+                    #print "h[3] : ", h[3]
+                    #print infront[i]
+                    if infront[i] == False:
+                        continue                    
+                    points3D.append([h[0]/h[3], h[1]/h[3], h[2]/h[3]])
+                    #print points3D[Idx]
+                    Idx += 1
+                #print "X1"
+                #print X1
+                print "no of supporting points: ", len(points3D)
+                X2 = np.dot(P2,points4D)
+                #print "X2"
+                #print X2
+                #print X
+                X = X[:,infront]
+                #print "X Filtered"
+                #print X
+                #print "X"
+                #print X
+                
+                '''
+                points3D = []
+                for i, h in enumerate(zip(*points4D)):
+                    points3D.append([h[0]/h[3], h[1]/h[3], h[2]/h[3]])
+                    #cloud.points.append(gm.Point32())
+                    #cloud.points[i].x = h[0]/h[3]
+                    #cloud.points[i].y = h[1]/h[3]
+                    #cloud.points[i].z = h[2]/h[3]
+                    #print points3D[i]
+                # 3D plot
+                import matplotlib.pyplot as plot
+                from mpl_toolkits.mplot3d import Axes3D
+                #fig = plot.figure()
+                #ax = Axes3D(fig)
+                #rint points3D
+                #print zip(*points3D)[2]
+                #ax.plot(-zip(*points3D)[0],zip(*points3D)[1],zip(*points3D)[2])
+                '''
+                
+                
+                '''
+                retval, H1, H2 = cv2.stereoRectifyUncalibrated(i1_pts_undistorted, i2_pts_undistorted, F, (640,360))
+                print "retval, H1, H2"
+                print retval
+                print H1
+                print H2
+                
+                warp1 = cv2.warpPerspective(grey_now,      H1, (640,360))
+                warp2 = cv2.warpPerspective(grey_previous, H2, (640,360))
+                cv2.imshow("warp1", warp2)
+                cv2.waitKey(1)
+                
+                cv2.imshow("warp2", warp1)
+                cv2.waitKey(1)
+                '''
+                
+                
+                '''
                 U,SIGMA,V = np.linalg.svd(F)
                 
                 SIGMA = np.diag(SIGMA)
+                
                 SIGMA[2] = [0., 0., 0.]
                 #print SIGMA
                 
                 #print V
                 left_epipolar = V[:, 2]
-                #print "left epi"
-                #print left_epipolar
+                print "left epi"
+                print left_epipolar
                 
                 E_SM = np.array([[0, -left_epipolar[2], left_epipolar[1]], [left_epipolar[2], 0, -left_epipolar[0]], [-left_epipolar[1], left_epipolar[0], 0]], dtype=np.float32)
                 #print "E_SM"
                 #print E_SM
-                
-                # First Projection Matrix
-                P1 = np.append(np.identity(3), [[0], [0], [0]], 1)
-                print "P1"
-                print P1
                 
                 # Second Projection Matrix
                 left_epipolar = np.array([left_epipolar]).transpose()
                 P2 = np.append(E_SM.dot(F),left_epipolar,1)
                 print "P2"
                 print P2
+                '''
                 
                 '''
                 print i1_pts_corr
@@ -192,57 +493,69 @@ class FeatureTracker:
                 # Calculate via essential matrix
                 '''
                 
-                E = self.cameraMatrix.transpose().dot(F)
-                E = E.dot(self.cameraMatrix) 
-                print "E"
-                print E
                 
-                W = np.array([[0, -1, 0],[1, 0, 0], [0, 0, 1]])
-                print "W"
-                print W    
-                               
-                U,SIGMA,V = np.linalg.svd(E)
                 
-                R = U.dot(W).dot(V.transpose())
-                print "R"
-                print R
+
+                
+
+                
+
+                '''
+                """=====================================================
+                # Compute R and S
+                # According to HZ 9.14 there are four factorisations
+                # S = (+/-)UZU', R1 = (+/-)UWV' or R2 = (+/-)UW'V'
+                ====================================================="""                
+                S = U.dot(Z).dot(U.transpose())
+                print "S"
+                print S
+                R1 = U.dot(W).dot(V.transpose())
+                print "R1"
+                print R1
+                #print "R.R'"
+                #print R.dot(R.transpose())                
+                R2 = U.dot(W.transpose()).dot(V.transpose())
+                print "R2"
+                print R2
+                #print "wiki_R.wiki_R'"
+                #print wiki_R.dot(wiki_R.transpose())
+                SR1 = S.dot(R1)
+                SR1 /= SR1[2,2]
+                print "SR1"
+                print SR1
+                SR2 = S.dot(R2)
+                SR2 /= SR2[2,2]
+                #print "SR2"
+                #print SR2
+                R = R2
                 
                 t = U[:, 2]
                 print "t"
                 print t
+                '''
                 
+
+                
+                '''
                 P2E = np.array([[R[0,0],R[0,1],R[0,2],t[0]],[R[1,0], R[1,1], R[1,2], t[1]],[R[2, 0], R[2,1], R[2,2], t[2]]])
-                print "P2E"
-                print P2E
+                #print "P2E"
+                #print P2E
+                '''
                 
                 
-                
-                
-                
-                
-                
-                
-                # Filter nans
-                i1_pts_corr = np.reshape(i1_pts_corr[(i1_pts_corr>=0)], (-1, 2))
-                i2_pts_corr = np.reshape(i2_pts_corr[(i2_pts_corr>=0)], (-1, 2))
-                
-                #print "i1_pts_corr"
-                #print i1_pts_corr
-                
-                # Bottom out on no accepted points
-                if i1_pts_corr.size == 0:
-                    self.update_previous(img)
-                    self.grey_previous = grey_now
-                    self.pts1 = pts2
-                    self.kp1, self.desc1 = kp2, desc2
-                    return
-                
-                points4D = cv2.triangulatePoints(P1, P2E, i1_pts_corr.transpose(), i2_pts_corr.transpose())
+                '''
+                fig = plot.figure(1)
+                ax = Axes3D(fig)
+                ax.scatter(zip(*points3D)[0], zip(*points3D)[1],zip(*points3D)[2])
+                '''
                
                 
-                # 4D homogeneous to 3D
+                '''
+                # 4D homogeneous to 3D Point Cloud
                 points3D = []
                 cloud = PointCloud()
+                cloud.header.stamp = rospy.Time.now()
+                cloud.header.frame_id = "ardrone_base_link"
                 #print "cloud"
                 #print cloud
                 
@@ -253,10 +566,16 @@ class FeatureTracker:
                     cloud.points[i].y = h[1]/h[3]
                     cloud.points[i].z = h[2]/h[3]
                     #print h
-                    
+                
+                
                 self.cloud_pub.publish(cloud)
+                '''
+                
+                
+                
                 #fig = plot.figure(1)
                 #ax = Axes3D(fig)
+                #ax.scatter(zip(*points3D)[0], zip(*points3D)[1],zip(*points3D)[2])
                 #ax.plot(zip(*points3D)[0], zip(*points3D)[1],zip(*points3D)[2])
                 
                     
@@ -270,7 +589,7 @@ class FeatureTracker:
 
                 
                 
-                
+                print "no of drawn points : ", len(i1_pts_corr)
 
                 # Plot tracked features on stacked images
                 ml = list(mask.flat)                
@@ -284,7 +603,8 @@ class FeatureTracker:
                     cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (255, 0 , 255), 1)
                 cv2.imshow("track", img2)
                 cv2.waitKey(5)
-                #plot.pause(0.5)
+                plot.pause(0.05)
+                
             
         # Update previous image buffer
         self.update_previous(img)
@@ -313,7 +633,8 @@ class FeatureTracker:
             self.cameraMatrix =  np.array([[ci.K[0], ci.K[1], ci.K[2]], [ci.K[3], ci.K[4], ci.K[5]], [ci.K[6], ci.K[7], ci.K[8]]], dtype=np.float32)
             self.distCoeffs = np.array([ci.D], dtype=np.float32)
             self.P = np.array([ci.P[:4],ci.P[4:8],ci.P[8:12]])
-            self.calibrated = True      
+            self.calibrated = True    
+            print "Calibration Initialised"
   
 def connect(m):
     rospy.init_node('Feature_Tracker')
