@@ -6,20 +6,18 @@
 # Added 3D via fundamental matrix
 # Added 3D via essential matrix
 # Efficiency improvements by buffering now to previous
-#-----------------------------------------------------
+#------------------------------------------------------------------------------
 # Fixed buffering
 # Added fundamental matrix error check
 # Added extraction of projection matrices
 # Added selection of best case projection matrix
 # Added 3D point projection
+#------------------------------------------------------------------------------
+# Switched to efficient np-style filters
+# Corrected filtering of rejected points through each stage
 #==============================================================================
 
 #=====================Notes====================================================
-# At present the outliers in fundamental matrix calculation are not removed to
-# the final stage. However, points are removed by the correctMatches check.
-# This happens before outlier masking so means the mask is no longer valid if 
-# points were removed. Either should drop outliers straight away, or filter 
-# outlier mask with correctMatches results.
 # 
 # It is unclear whether the translation matrix needs rescaling by camera proj
 #
@@ -178,6 +176,8 @@ class FeatureTracker:
         i1_pts = kp1_array[i1_indices,:]
         i2_pts = kp2_array[i2_indices,:]
         
+        
+        
         # Check for sufficient pairs for fundamental matrix extraction
         if (len(i1_pts) > 4):
             if (len(i2_pts) > 4): # this is redundant as matched lists
@@ -206,16 +206,38 @@ class FeatureTracker:
                 
                 #cv2.stereoRectify(self.cameraMatrix, self.distCoeff, self.cameraMatrix, self.distCoeff, img.shape, 
                 
-                
+                """============================================================
+                # Extract fundamental matrix and then remove outliers
+                # FM_RANSAC should be good with lowish outliers
+                # FM_LMEDS may be more robust in some cases
+                ============================================================"""
                 # Extract fundamental matrix
-                F, mask = cv2.findFundamentalMat(i1_pts, i2_pts, cv2.FM_RANSAC, param1 = 1., param2 = 0.99)
                 # F contains fundamental matrix
                 # mask is a binary mask of points fitting the matrix
+                F, mask = cv2.findFundamentalMat(i1_pts, i2_pts, cv2.FM_RANSAC, param1 = 1., param2 = 0.99)
+                # Expand mask for easy filtering
+                mask_prepped = np.append(mask, mask, 1.)
+                print "No of matched points : ", len(i1_pts_undistorted[0])
+                # Efficient np-style filtering, then reform
+                i1_pts_masked = np.reshape(i1_pts_undistorted[0][mask_prepped==1], (-1, 2))
+                i2_pts_masked = np.reshape(i2_pts_undistorted[0][mask_prepped==1], (-1, 2))
+                print "No of masked points : ", len(i1_pts_masked) 
+                """========================================================="""
+                
+                i1_pts_undistorted = np.array([i1_pts_masked])
+                i2_pts_undistorted = np.array([i2_pts_masked])
 
                 
                 
-                np.set_printoptions(suppress=True, precision=6)
+                #np.set_printoptions(suppress=True, precision=6)
 
+
+                """============================================================
+                # Examine quality of F
+                # Reject if error is too high and go to next frame
+                # Error is given to a scale of in pixels depending on if input
+                # is normalised
+                ============================================================"""
                 print "F : "
                 print F             
                                 
@@ -230,6 +252,7 @@ class FeatureTracker:
                     self.pts1 = pts2
                     self.kp1, self.desc1 = kp2, desc2
                     return
+                """========================================================="""
                 
                 '''    
                 F2 = self.compute_fundamental(i1_pts, i2_pts)
@@ -249,22 +272,20 @@ class FeatureTracker:
                 #cv.ComputeCorrespondEpilines(cv.fromarray(i1_pts_undistorted), 1, cv.fromarray(F), epilines)
                 #epilines =  np.array(epilines)
                 
-                
-                
-                
-                # Filter points that fit F
+                """============================================================
+                # Filter points that fit F using cv2.correctMatches
+                # This unhelpfully overwrites np.nan over rejected entried
+                # np.nan == np.nan returns false so have to use np.isnan(.)
+                # NB: This check appears redundant as F is calculated to match
+                ============================================================"""
                 i1_pts_corr, i2_pts_corr = cv2.correctMatches(F, i1_pts_undistorted, i2_pts_undistorted)
-                i1_pts_corr = i1_pts_corr[0]
-                i2_pts_corr = i2_pts_corr[0]
-                #i1_pts_corr, i2_pts_corr = i1_pts_undistorted, i2_pts_undistorted
+                print i1_pts_corr
+                mask_nan = np.isnan(i1_pts_corr[0])
+                i1_pts_corr = np.reshape(i1_pts_corr[0][mask_nan == False], (-1, 2))
+                i2_pts_corr = np.reshape(i2_pts_corr[0][mask_nan == False], (-1, 2))
+                print "No of corrected points: ", len(i1_pts_corr)
+                """========================================================="""
                 
-                # Filter nans
-                """If values are not normalised, then>=0 check is invalid"""
-                #i1_pts_corr = np.reshape(i1_pts_corr[(i1_pts_corr>=0)], (-1, 2))
-                #i2_pts_corr = np.reshape(i2_pts_corr[(i2_pts_corr>=0)], (-1, 2))
-                                
-                #print "i1_pts_corr"
-                #print i1_pts_corr
                 
                 E = self.cameraMatrix.transpose().dot(F.dot(self.cameraMatrix))
                 #E = E.dot(self.cameraMatrix) 
@@ -325,7 +346,7 @@ class FeatureTracker:
                 #print [np.vstack((np.dot(U,np.dot(W.T,V)).T,U[:,2])).T]
                 projections.append(np.append(U.dot(W.transpose().dot(V)),np.array([-U[:,2]]).transpose(),1))
                 #print [np.vstack((np.dot(U,np.dot(W.T,V)).T,-U[:,2])).T]
-                
+                """========================================================="""
                 
                 
                 # Bottom out on no accepted points
@@ -338,12 +359,16 @@ class FeatureTracker:
                     return
                 
                 """============================================================
-                # Determine projection with most valid point
+                # Determine projection with most valid points
                 # Produce boolean mask for best case
                 ============================================================"""
                 ind = 0
                 maxres = 0
                 for i, P2 in enumerate(projections):
+                    # NB: At present the infront check does not match the
+                    # performance index used. This may or may not be a problem
+                    # PI tests most matches in each dimension
+                    # infront accept only both dimensions
                     points4D = cv2.triangulatePoints(P1, P2, i1_pts_corr.transpose(), i2_pts_corr.transpose())
                     d1 = np.dot(P1,points4D)[2]
                     d2 = np.dot(P2,points4D)[2]
@@ -359,13 +384,21 @@ class FeatureTracker:
                     
 
                 #print ind
+                #print "infront : ", infront
                 P2 = projections[ind]
                 
                 print "P1"
                 print P1                
                 print "P2 selected : "
                 print projections[ind]
-                print sum(infront), " valid points"
+                print "No of valid points : ", sum(infront)
+                
+                # Filter points
+                infront = np.array([infront]).transpose()
+                infront = np.append(infront, infront, 1)
+                i1_pts_corr = np.reshape(i1_pts_corr[infront==True], (-1, 2))
+                i2_pts_corr = np.reshape(i2_pts_corr[infront==True], (-1, 2))
+                print "No of points infront : ", len(i1_pts_corr)
                 
                 print "Rotation Matrix : "
                 print P2[:,:3]
@@ -378,7 +411,7 @@ class FeatureTracker:
                 
                 
                 
-                
+                """
                 #print i1_pts_corr.shape
                 #print infront.shape
                 # triangulate inliers and remove points not in front of both cameras
@@ -398,24 +431,22 @@ class FeatureTracker:
                     #print "h[1] : ", h[1]
                     #print "h[2] : ", h[2]
                     #print "h[3] : ", h[3]
-                    #print infront[i]
-                    if infront[i] == False:
-                        continue                    
+                    #print infront[i]                 
                     points3D.append([h[0]/h[3], h[1]/h[3], h[2]/h[3]])
                     #print points3D[Idx]
                     Idx += 1
                 #print "X1"
                 #print X1
-                print "no of supporting points: ", len(points3D)
                 X2 = np.dot(P2,points4D)
                 #print "X2"
                 #print X2
                 #print X
-                X = X[:,infront]
+                #X = X[:,infront]
                 #print "X Filtered"
                 #print X
                 #print "X"
                 #print X
+                """
                 
                 '''
                 points3D = []
@@ -589,19 +620,22 @@ class FeatureTracker:
 
                 
                 
-                print "no of drawn points : ", len(i1_pts_corr)
+                #print "no of pre-drawn points : ", len(i1_pts_corr)
 
                 # Plot tracked features on stacked images
                 ml = list(mask.flat)                
                 img2 = stackImagesVertically(grey_previous, grey_now)
                 imh = grey_previous.shape[0]
                 idx = 0
+                county = 0
                 for p1, p2 in zip(i1_pts_corr, i2_pts_corr):
-                    idx += 1
-                    if ml[idx - 1] == 0:
-                        continue
+                    #idx += 1
+                    #if ml[idx - 1] == 0:
+                    #    continue
+                    county += 1
                     cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (255, 0 , 255), 1)
                 cv2.imshow("track", img2)
+                print "No of drawn points : ", county
                 cv2.waitKey(5)
                 plot.pause(0.05)
                 
