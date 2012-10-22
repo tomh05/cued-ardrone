@@ -127,7 +127,7 @@ class FeatureTracker:
         # Skip frames. Need to add ROS parameter to allow setting
         
         self.frameskip += 1
-        if self.frameskip < 4:
+        if self.frameskip < 2:
             return
             
         self.frameskip = 0
@@ -179,8 +179,8 @@ class FeatureTracker:
         
         
         # Check for sufficient pairs for fundamental matrix extraction
-        if (len(i1_pts) > 4):
-            if (len(i2_pts) > 4): # this is redundant as matched lists
+        if (len(i1_pts) > 8):
+            if (len(i2_pts) > 8): # this is redundant as matched lists
                 
                 
                 
@@ -243,7 +243,7 @@ class FeatureTracker:
                                 
                 avg_error = self.compute_F_error(F, i1_pts_undistorted[0].transpose(), i2_pts_undistorted[0].transpose())
                 print "Avg error : ", avg_error
-                if (abs(avg_error)>0.3):
+                if (abs(avg_error)>1):
                     print "===================="
                     print "F Error too high"
                     print "===================="
@@ -279,7 +279,6 @@ class FeatureTracker:
                 # NB: This check appears redundant as F is calculated to match
                 ============================================================"""
                 i1_pts_corr, i2_pts_corr = cv2.correctMatches(F, i1_pts_undistorted, i2_pts_undistorted)
-                print i1_pts_corr
                 mask_nan = np.isnan(i1_pts_corr[0])
                 i1_pts_corr = np.reshape(i1_pts_corr[0][mask_nan == False], (-1, 2))
                 i2_pts_corr = np.reshape(i2_pts_corr[0][mask_nan == False], (-1, 2))
@@ -360,45 +359,55 @@ class FeatureTracker:
                 
                 """============================================================
                 # Determine projection with most valid points
-                # Produce boolean mask for best case
+                # Produce boolean mask for best case and filter pts
                 ============================================================"""
                 ind = 0
                 maxres = 0
                 for i, P2 in enumerate(projections):
-                    # NB: At present the infront check does not match the
-                    # performance index used. This may or may not be a problem
-                    # PI tests most matches in each dimension
-                    # infront accept only both dimensions
+                    # infront accepts only both dimensions
                     points4D = cv2.triangulatePoints(P1, P2, i1_pts_corr.transpose(), i2_pts_corr.transpose())
                     d1 = np.dot(P1,points4D)[2]
                     d2 = np.dot(P2,points4D)[2]
-                    if sum(d1>0)+sum(d2>0) > maxres:
-                        maxres = sum(d1>0)+sum(d2>0)
+                    #if sum(d1>0)+sum(d2>0) > maxres:
+                    if sum((d1>0) & (d2>0)) > maxres:
+                        #maxres = sum(d1>0)+sum(d2>0)
+                        maxres = sum((d1>0) & (d2>0))
                         #print "maxres : ", maxres
                         ind = i
                         infront = (d1>0) & (d2>0)
-                        #print "infront : ", infront
-                        
-                    #print P2
-                    #print points4D
-                    
-
                 #print ind
                 #print "infront : ", infront
+                if (maxres == 0):
+                    print "===================="
+                    print "P2 not extracted"
+                    print "===================="
+                    self.update_previous(img)
+                    self.grey_previous = grey_now
+                    self.pts1 = pts2
+                    self.kp1, self.desc1 = kp2, desc2
+                    return
                 P2 = projections[ind]
-                
                 print "P1"
                 print P1                
                 print "P2 selected : "
                 print projections[ind]
                 print "No of valid points : ", sum(infront)
                 
+                
+                #print "i1_pts_corr : ", i1_pts_corr
+                #print "i2_pts_corr : ", i2_pts_corr
+                
+                #print "infront : ", infront 
                 # Filter points
                 infront = np.array([infront]).transpose()
                 infront = np.append(infront, infront, 1)
+                #print "Prepped infront : ", print infront
                 i1_pts_corr = np.reshape(i1_pts_corr[infront==True], (-1, 2))
                 i2_pts_corr = np.reshape(i2_pts_corr[infront==True], (-1, 2))
+                #print "i1_pts_infront : ", i1_pts_corr
+                #print "i2_pts_infront : ", i2_pts_corr
                 print "No of points infront : ", len(i1_pts_corr)
+                """========================================================="""
                 
                 print "Rotation Matrix : "
                 print P2[:,:3]
@@ -406,84 +415,49 @@ class FeatureTracker:
                 t = P2[:,3:4]
                 print t
                 
-                #print t.shape
-                #print(t.dot(P2))
-                
-                
-                
-                """
-                #print i1_pts_corr.shape
-                #print infront.shape
-                # triangulate inliers and remove points not in front of both cameras
-                X = cv2.triangulatePoints(P1, projections[ind], i1_pts_corr.transpose(), i2_pts_corr.transpose())
+                points4D = cv2.triangulatePoints(P1, projections[ind], i1_pts_corr.transpose(), i2_pts_corr.transpose())
                 #print "4D points"
                 #print X
                 X1 = np.dot(P1,points4D)
-                #print "X1"
-                #print X1
-                X1 = X
+                print "X1"
+                print X1
+                X2 = P2.dot(points4D)
+                print "X2"
+                print X2
+                
+                points3D1 = zip(*X1)
+                points3D2 = zip(*X2)
+                
+                                
+                # Publish point cloud
+                cloud = PointCloud()
+                cloud.header.stamp = rospy.Time.now()
+                cloud.header.frame_id = "ardrone_base_link" #Should be front camera really
+                #print "cloud"
+                #print cloud
+                
+                for i, p in enumerate(points3D1):
+                    cloud.points.append(gm.Point32())
+                    cloud.points[i].x = -p[0]
+                    cloud.points[i].y = p[1]
+                    cloud.points[i].z = p[2]
+                
+                self.cloud_pub.publish(cloud)
                 
                 
-                points3D = []
-                Idx = 0
-                for i, h in enumerate(zip(*X1)): # Should attempt to do this as a matrix mult
-                    #print "h[0] : ", h[0]
-                    #print "h[1] : ", h[1]
-                    #print "h[2] : ", h[2]
-                    #print "h[3] : ", h[3]
-                    #print infront[i]                 
-                    points3D.append([h[0]/h[3], h[1]/h[3], h[2]/h[3]])
-                    #print points3D[Idx]
-                    Idx += 1
-                #print "X1"
-                #print X1
-                X2 = np.dot(P2,points4D)
-                #print "X2"
-                #print X2
-                #print X
-                #X = X[:,infront]
-                #print "X Filtered"
-                #print X
-                #print "X"
-                #print X
-                """
+                #print points3D1
                 
                 '''
-                points3D = []
-                for i, h in enumerate(zip(*points4D)):
-                    points3D.append([h[0]/h[3], h[1]/h[3], h[2]/h[3]])
-                    #cloud.points.append(gm.Point32())
-                    #cloud.points[i].x = h[0]/h[3]
-                    #cloud.points[i].y = h[1]/h[3]
-                    #cloud.points[i].z = h[2]/h[3]
-                    #print points3D[i]
                 # 3D plot
                 import matplotlib.pyplot as plot
                 from mpl_toolkits.mplot3d import Axes3D
-                #fig = plot.figure()
-                #ax = Axes3D(fig)
-                #rint points3D
-                #print zip(*points3D)[2]
-                #ax.plot(-zip(*points3D)[0],zip(*points3D)[1],zip(*points3D)[2])
+                first = True
+                if first:
+                    first = False
+                    fig = plot.figure(1)
+                    ax = Axes3D(fig)
+                ax.scatter(-X1[0],X1[1],X1[2])
                 '''
-                
-                
-                '''
-                retval, H1, H2 = cv2.stereoRectifyUncalibrated(i1_pts_undistorted, i2_pts_undistorted, F, (640,360))
-                print "retval, H1, H2"
-                print retval
-                print H1
-                print H2
-                
-                warp1 = cv2.warpPerspective(grey_now,      H1, (640,360))
-                warp2 = cv2.warpPerspective(grey_previous, H2, (640,360))
-                cv2.imshow("warp1", warp2)
-                cv2.waitKey(1)
-                
-                cv2.imshow("warp2", warp1)
-                cv2.waitKey(1)
-                '''
-                
                 
                 '''
                 U,SIGMA,V = np.linalg.svd(F)
@@ -523,12 +497,6 @@ class FeatureTracker:
                 '''
                 # Calculate via essential matrix
                 '''
-                
-                
-                
-
-                
-
                 
 
                 '''
@@ -581,33 +549,11 @@ class FeatureTracker:
                 '''
                
                 
-                '''
-                # 4D homogeneous to 3D Point Cloud
-                points3D = []
-                cloud = PointCloud()
-                cloud.header.stamp = rospy.Time.now()
-                cloud.header.frame_id = "ardrone_base_link"
-                #print "cloud"
-                #print cloud
-                
-                for i, h in enumerate(zip(*points4D)):
-                    points3D.append([h[0]/h[3], h[1]/h[3], h[2]/h[3]])
-                    cloud.points.append(gm.Point32())
-                    cloud.points[i].x = h[0]/h[3]
-                    cloud.points[i].y = h[1]/h[3]
-                    cloud.points[i].z = h[2]/h[3]
-                    #print h
-                
-                
-                self.cloud_pub.publish(cloud)
-                '''
+
                 
                 
                 
-                #fig = plot.figure(1)
-                #ax = Axes3D(fig)
-                #ax.scatter(zip(*points3D)[0], zip(*points3D)[1],zip(*points3D)[2])
-                #ax.plot(zip(*points3D)[0], zip(*points3D)[1],zip(*points3D)[2])
+                
                 
                     
                     
@@ -622,11 +568,9 @@ class FeatureTracker:
                 
                 #print "no of pre-drawn points : ", len(i1_pts_corr)
 
-                # Plot tracked features on stacked images
-                ml = list(mask.flat)                
+                # Plot tracked features on stacked images   
                 img2 = stackImagesVertically(grey_previous, grey_now)
                 imh = grey_previous.shape[0]
-                idx = 0
                 county = 0
                 for p1, p2 in zip(i1_pts_corr, i2_pts_corr):
                     #idx += 1
@@ -637,7 +581,7 @@ class FeatureTracker:
                 cv2.imshow("track", img2)
                 print "No of drawn points : ", county
                 cv2.waitKey(5)
-                plot.pause(0.05)
+                #plot.pause(0.05)
                 
             
         # Update previous image buffer
