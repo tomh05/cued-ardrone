@@ -335,18 +335,41 @@ class FeatureTracker:
                 # Compute the four possible P2 projection matrices
                 # Note in particular the matrix multiplication order
                 # This caught me out for a long while
+                # Also the V returned by np's svd is V'
                 ============================================================"""
                 projections = []
+                # UWV'|u3
                 projections.append(np.append(U.dot(W.dot(V)),np.array([U[:,2]]).transpose(),1))
                 #print [np.vstack((np.dot(U,np.dot(W,V)).T,U[:,2])).T]
+                # UWV'|-u3
                 projections.append(np.append(U.dot(W.dot(V)),np.array([-U[:,2]]).transpose(),1))
                 #print [np.vstack((np.dot(U,np.dot(W,V)).T,-U[:,2])).T]
+                # UW'V'|u3
                 projections.append(np.append(U.dot(W.transpose().dot(V)),np.array([U[:,2]]).transpose(),1))
                 #print [np.vstack((np.dot(U,np.dot(W.T,V)).T,U[:,2])).T]
+                # UW'V'|-u3
                 projections.append(np.append(U.dot(W.transpose().dot(V)),np.array([-U[:,2]]).transpose(),1))
                 #print [np.vstack((np.dot(U,np.dot(W.T,V)).T,-U[:,2])).T]
                 """========================================================="""
                 
+                """Check E=RS as t appears wrong"""                
+                R = projections[0][:,:3]
+                print "Rotation Matrix : ", R
+                t = projections[0][:,3:4]
+                print "magnitude sq", t.transpose().dot(t)
+                print "Translation Vector : ", t
+                
+                S = np.array([[0., t[2], -t[1]],
+                              [-t[2], 0., t[0]],
+                              [t[1], -t[0], 0.]])
+                #print "S : ", S
+                SR = S.dot(R)
+                SR = SR/SR[2,2]
+                #print "SR : ", SR
+                
+                print t.shape
+                print self.cameraMatrix.shape
+                print self.cameraMatrix.dot(t)
                 
                 # Bottom out on no accepted points
                 if i1_pts_corr.size == 0:
@@ -360,24 +383,39 @@ class FeatureTracker:
                 """============================================================
                 # Determine projection with most valid points
                 # Produce boolean mask for best case and filter pts
+                ===============================================================
+                # Note: This currently checks for positive P1 and P2 projection
+                # However, the P2 check is assuming the camera does not move
+                # Given the P1 camera is set as origin, P2 check should be wrt
+                # the translation vector
+                # As translation vector appears wrong, it may be worth going
+                # with P1 check only (P1 and P2 projection produce exact same
+                # 3D points in the ideal case)
+                # -----------> This didn't help trying, disparate PI
                 ============================================================"""
+                
                 ind = 0
-                maxres = 0
+                maxfit = 0
                 for i, P2 in enumerate(projections):
                     # infront accepts only both dimensions
                     points4D = cv2.triangulatePoints(P1, P2, i1_pts_corr.transpose(), i2_pts_corr.transpose())
                     d1 = np.dot(P1,points4D)[2]
                     d2 = np.dot(P2,points4D)[2]
-                    #if sum(d1>0)+sum(d2>0) > maxres:
-                    if sum((d1>0) & (d2>0)) > maxres:
-                        #maxres = sum(d1>0)+sum(d2>0)
-                        maxres = sum((d1>0) & (d2>0))
-                        #print "maxres : ", maxres
+                    #PI =  sum(d1>0)+sum(d2>0)
+                    PI = sum((d1>0) & (d2>0))
+                    #PI = sum((d1>0))
+                    #print P2
+                    print "Performance index ", i, " : ", PI
+                    if PI > maxfit:
+                        #maxfit = sum(d1>0)+sum(d2>0)
+                        maxfit = sum((d1>0) & (d2>0))
+                        #maxfit = sum((d1>0))
+                        #print "maxfit : ", maxfit
                         ind = i
                         infront = (d1>0) & (d2>0)
                 #print ind
                 #print "infront : ", infront
-                if (maxres == 0):
+                if (maxfit == 0):
                     print "===================="
                     print "P2 not extracted"
                     print "===================="
@@ -410,7 +448,19 @@ class FeatureTracker:
                 """========================================================="""
                 
                 print "Rotation Matrix : "
-                print P2[:,:3]
+                R = P2[:,:3]
+                R4 = np.diag([0., 0., 0., 1.])
+                R4[:3, :3] = R
+                print "R4 : ", R4
+                quat = tf.transformations.quaternion_from_matrix(R4)
+                
+                br = tf.TransformBroadcaster() #create broadcaster
+                br.sendTransform((0, 0, 0),
+                         quat,
+                         rospy.Time.now(), # NB: 'now' is not the same as time data was sent from drone
+                         "image_rotation",
+                         "world")
+                
                 print "Translation Vector : "
                 t = P2[:,3:4]
                 print t
@@ -420,14 +470,15 @@ class FeatureTracker:
                 #print X
                 X1 = np.dot(P1,points4D)
                 print "X1"
-                print X1
+                #print X1
                 X2 = P2.dot(points4D)
                 print "X2"
-                print X2
+                #print X2
                 
                 points3D1 = zip(*X1)
                 points3D2 = zip(*X2)
-                
+                print "points3D1 max x, y, z: ", max(X1[0]), max(X1[1]), max(X1[2])
+                print "points3D1 min x, y, z: ", min(X1[0]), min(X1[1]), min(X1[2])
                                 
                 # Publish point cloud
                 cloud = PointCloud()
@@ -438,7 +489,7 @@ class FeatureTracker:
                 
                 for i, p in enumerate(points3D1):
                     cloud.points.append(gm.Point32())
-                    cloud.points[i].x = -p[0]
+                    cloud.points[i].x = p[0]
                     cloud.points[i].y = p[1]
                     cloud.points[i].z = p[2]
                 
