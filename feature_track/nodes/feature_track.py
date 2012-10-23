@@ -41,7 +41,7 @@ import matplotlib.pyplot as plot
 from mpl_toolkits.mplot3d import Axes3D
 import tf
 from sensor_msgs.msg import PointCloud
-
+import math
     
 def stackImagesVertically(top_image, bottom_image):
     """Takes two cv2 numpy array images top_image, bottom_image
@@ -76,8 +76,6 @@ class FeatureTracker:
     def update_previous(self, thing):
         """Takes a cv2 numpy array image and sets the FeatureTracker
         previous image to it"""
-        #print('Now: %s' % (thing,))
-        #print('Previous: %s' % (self.previous))
         self.previous = thing
         
     def compute_fundamental(self, x1,x2):
@@ -114,9 +112,10 @@ class FeatureTracker:
         buffered image. Features are extracted from each frame, 
         undistorted and matched."""
         
+        DEF_SET_DATA = False # Switches in fixed data
+        
         print ""
 
-        #img = cv2.imread("/home/alex/frame0000.jpg")
         
         # Initialise previous image buffer
         if self.previous == None:
@@ -124,20 +123,15 @@ class FeatureTracker:
             self.grey_previous = cv2.cvtColor(self.previous, cv2.COLOR_BGR2GRAY)
             
 
-        # Skip frames. Need to add ROS parameter to allow setting
-        
+        # Skip frames. Need to add ROS parameter to allow setting        
         self.frameskip += 1
-        if self.frameskip < 2:
-            return
-            
+        if self.frameskip < 5:
+            return            
         self.frameskip = 0
         
             
         # Convert working images to monochrome
         grey_previous = self.grey_previous
-        #grey_previous = cv2.cvtColor(cv2.imread("/home/alex/frame0001.jpg"), cv2.COLOR_BGR2GRAY)
-        grey_now = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        #img = cv2.imread("/home/alex/frame0002.jpg")
         grey_now = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         
         # Initialise features and descriptor
@@ -146,14 +140,21 @@ class FeatureTracker:
             self.kp1, self.desc1 = self.de.compute(grey_now, self.pts1)
             return
 
-        # Create feature detector and extracts points
+        if DEF_SET_DATA:
+            img1 = cv2.imread("/home/alex/testData/1.jpg")
+            img2 = cv2.imread("/home/alex/testData/4.jpg")
+            grey_now = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
+            grey_previous = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+            self.pts1 = self.fd.detect(grey_previous)
+            self.kp1, self.desc1 = self.de.compute(grey_previous, self.pts1)
+
+        # Detect points
         pts1 = self.pts1
         pts2 = self.fd.detect(grey_now)
 
-        # Create a descriptor extractor and describe points
-        
+        # Describe points        
         kp1, desc1 = self.kp1, self.desc1
-        kp2, desc2 = self.de.compute(grey_now, pts2)
+        kp2, desc2 = self.de.compute(grey_now, pts2)            
         
         # Bottom out if failed to get features
         if desc1 == None or desc2 == None or len(desc1) == 0 or len(desc2) == 0:
@@ -164,8 +165,7 @@ class FeatureTracker:
             print "No Features Found"
             return
         
-        # Create descriptor matcher and match features
-        
+        # Match features        
         matches = self.dm.match(desc1, desc2)
 
         # Produce ordered arrays of paired points
@@ -181,40 +181,29 @@ class FeatureTracker:
         # Check for sufficient pairs for fundamental matrix extraction
         if (len(i1_pts) > 8):
             if (len(i2_pts) > 8): # this is redundant as matched lists
-                
-                
-                
                 if self.calibrated:
                     # Undistort points using calibration data
                     i1_mat = np.array([i1_pts])
-                    i2_mat = np.array([i2_pts])                    
-                    i1_pts_undistorted = cv2.undistortPoints(i1_mat, self.cameraMatrix, self.distCoeffs, P=self.P) #Do not pass camera P here as working in normalised
-                    #print i1_pts_undistorted
+                    i2_mat = np.array([i2_pts])               
+                    i1_pts_undistorted = cv2.undistortPoints(i1_mat, self.cameraMatrix, self.distCoeffs, P=self.P) #Do not pass camera P here if working in normalised
                     i2_pts_undistorted = cv2.undistortPoints(i2_mat, self.cameraMatrix, self.distCoeffs, P=self.P)
-                    
-                    #print i2_pts_undistorted
                 else:
-                    # Use distorted points as calibration missing
+                    # Use distorted points if calibration missing
                     print "WARNING: No calibration info. Using distorted feature positions"
                     print "This will be wrong as not normalised"
                     i1_pts_undistorted = i1_pts
                     i2_pts_undistorted = i2_pts
-                
-                    
-                #print i1_pts_undistorted #= i1_pts
-                #print i2_pts_undistorted #= i2_pts
-                
-                #cv2.stereoRectify(self.cameraMatrix, self.distCoeff, self.cameraMatrix, self.distCoeff, img.shape, 
+               
                 
                 """============================================================
                 # Extract fundamental matrix and then remove outliers
                 # FM_RANSAC should be good with lowish outliers
                 # FM_LMEDS may be more robust in some cases
+                #
+                # F is the matrix itself, mask is contains 1s for inliers
                 ============================================================"""
-                # Extract fundamental matrix
-                # F contains fundamental matrix
-                # mask is a binary mask of points fitting the matrix
-                F, mask = cv2.findFundamentalMat(i1_pts, i2_pts, cv2.FM_RANSAC, param1 = 1., param2 = 0.99)
+                print "i1", i1_pts_undistorted
+                F, mask = cv2.findFundamentalMat(i1_pts_undistorted, i2_pts_undistorted, cv2.FM_RANSAC, param1 = 1., param2 = 0.99)
                 # Expand mask for easy filtering
                 mask_prepped = np.append(mask, mask, 1.)
                 print "No of matched points : ", len(i1_pts_undistorted[0])
@@ -222,15 +211,14 @@ class FeatureTracker:
                 i1_pts_masked = np.reshape(i1_pts_undistorted[0][mask_prepped==1], (-1, 2))
                 i2_pts_masked = np.reshape(i2_pts_undistorted[0][mask_prepped==1], (-1, 2))
                 print "No of masked points : ", len(i1_pts_masked) 
-                """========================================================="""
-                
+                print "masked : ", i1_pts_masked
                 i1_pts_undistorted = np.array([i1_pts_masked])
                 i2_pts_undistorted = np.array([i2_pts_masked])
-
+                """========================================================="""
                 
                 
-                #np.set_printoptions(suppress=True, precision=6)
 
+                
 
                 """============================================================
                 # Examine quality of F
@@ -238,9 +226,9 @@ class FeatureTracker:
                 # Error is given to a scale of in pixels depending on if input
                 # is normalised
                 ============================================================"""
+                
                 print "F : "
-                print F             
-                                
+                print F        
                 avg_error = self.compute_F_error(F, i1_pts_undistorted[0].transpose(), i2_pts_undistorted[0].transpose())
                 print "Avg error : ", avg_error
                 if (abs(avg_error)>1):
@@ -252,25 +240,11 @@ class FeatureTracker:
                     self.pts1 = pts2
                     self.kp1, self.desc1 = kp2, desc2
                     return
+                    
                 """========================================================="""
                 
-                '''    
-                F2 = self.compute_fundamental(i1_pts, i2_pts)
-                print "F2 : "
-                print F2
-                avg_error = self.compute_F_error(F, i1_pts_undistorted[0].transpose(), i2_pts_undistorted[0].transpose())
-                print "Avg error : ", avg_error
-                '''
                 
                 
-
-                
-                
-                
-                
-                #epilines = cv.CreateMat(len(i1_pts_undistorted), 3, cv.CV_32F)
-                #cv.ComputeCorrespondEpilines(cv.fromarray(i1_pts_undistorted), 1, cv.fromarray(F), epilines)
-                #epilines =  np.array(epilines)
                 
                 """============================================================
                 # Filter points that fit F using cv2.correctMatches
@@ -278,59 +252,44 @@ class FeatureTracker:
                 # np.nan == np.nan returns false so have to use np.isnan(.)
                 # NB: This check appears redundant as F is calculated to match
                 ============================================================"""
+                
                 i1_pts_corr, i2_pts_corr = cv2.correctMatches(F, i1_pts_undistorted, i2_pts_undistorted)
                 mask_nan = np.isnan(i1_pts_corr[0])
                 i1_pts_corr = np.reshape(i1_pts_corr[0][mask_nan == False], (-1, 2))
                 i2_pts_corr = np.reshape(i2_pts_corr[0][mask_nan == False], (-1, 2))
                 print "No of corrected points: ", len(i1_pts_corr)
+                
                 """========================================================="""
                 
                 
+                
+                # Camera Matrices to extract essential matrix
                 E = self.cameraMatrix.transpose().dot(F.dot(self.cameraMatrix))
-                #E = E.dot(self.cameraMatrix) 
+                # Normalise E
                 E /= E[2,2]
                 print "E"
                 print E
                 
+                
                 W = np.array([[0, -1, 0],[1, 0, 0], [0, 0, 1]])
                 Z = np.array([[0, 1, 0],[-1, 0, 0], [0, 0, 0]])
-                #print "W"
-                #print W   
-                #print "W'"
-                #print W.transpose() 
-                #print "Z"
-                #print Z
-                               
+                            
+                # SVD of E
                 U,SIGMA,V = np.linalg.svd(E)
                 if np.linalg.det(U.dot(V))<0:
                     V = -V
-                #print "True SIGMA"
-                #print SIGMA
-                sigma_avg = (SIGMA[0]+SIGMA[1])/2
-                #print "sigma avg"
-                #print sigma_avg
-                #SIGMA = np.diag([sigma_avg, sigma_avg, 0])
+                # Contruct Diagonal
                 SIGMA = np.diag(SIGMA)
+                # Force third eig to zero
                 SIGMA[2,2] = 0
                 if SIGMA[0,0] < 0.7*SIGMA[1,1] or SIGMA[1,1] < 0.7*SIGMA[0,0]:
-                    print "WARNING: Disparate singular values"
-                E2 = U.dot(SIGMA).dot(V)
-                #print "E2"
-                #print E2
-                #print "U"
-                #print U
-                #print "U'"
-                #print U.transpose()
+                    print "WARNING: Disparate singular values"                    
                 print "SIGMA"
                 print SIGMA
-                #print "V"
-                #print V
-                #print "V'"
-                #print V.transpose()
-                # First Projection Matrix
+                
+                # Use image1 as origin
                 P1 = np.append(np.identity(3), [[0], [0], [0]], 1)
-                #print "P1"
-                #print P1
+                
                 """============================================================
                 # Compute the four possible P2 projection matrices
                 # Note in particular the matrix multiplication order
@@ -340,19 +299,17 @@ class FeatureTracker:
                 projections = []
                 # UWV'|u3
                 projections.append(np.append(U.dot(W.dot(V)),np.array([U[:,2]]).transpose(),1))
-                #print [np.vstack((np.dot(U,np.dot(W,V)).T,U[:,2])).T]
                 # UWV'|-u3
                 projections.append(np.append(U.dot(W.dot(V)),np.array([-U[:,2]]).transpose(),1))
-                #print [np.vstack((np.dot(U,np.dot(W,V)).T,-U[:,2])).T]
                 # UW'V'|u3
                 projections.append(np.append(U.dot(W.transpose().dot(V)),np.array([U[:,2]]).transpose(),1))
-                #print [np.vstack((np.dot(U,np.dot(W.T,V)).T,U[:,2])).T]
                 # UW'V'|-u3
                 projections.append(np.append(U.dot(W.transpose().dot(V)),np.array([-U[:,2]]).transpose(),1))
-                #print [np.vstack((np.dot(U,np.dot(W.T,V)).T,-U[:,2])).T]
                 """========================================================="""
                 
-                """Check E=RS as t appears wrong"""                
+                """============================================================
+                # Check E=RS as t appears wrong
+                ============================================================"""                
                 R = projections[0][:,:3]
                 print "Rotation Matrix : ", R
                 t = projections[0][:,3:4]
@@ -366,10 +323,8 @@ class FeatureTracker:
                 SR = S.dot(R)
                 SR = SR/SR[2,2]
                 #print "SR : ", SR
+                """========================================================="""
                 
-                print t.shape
-                print self.cameraMatrix.shape
-                print self.cameraMatrix.dot(t)
                 
                 # Bottom out on no accepted points
                 if i1_pts_corr.size == 0:
@@ -401,20 +356,12 @@ class FeatureTracker:
                     points4D = cv2.triangulatePoints(P1, P2, i1_pts_corr.transpose(), i2_pts_corr.transpose())
                     d1 = np.dot(P1,points4D)[2]
                     d2 = np.dot(P2,points4D)[2]
-                    #PI =  sum(d1>0)+sum(d2>0)
                     PI = sum((d1>0) & (d2>0))
-                    #PI = sum((d1>0))
-                    #print P2
                     print "Performance index ", i, " : ", PI
                     if PI > maxfit:
-                        #maxfit = sum(d1>0)+sum(d2>0)
                         maxfit = sum((d1>0) & (d2>0))
-                        #maxfit = sum((d1>0))
-                        #print "maxfit : ", maxfit
                         ind = i
                         infront = (d1>0) & (d2>0)
-                #print ind
-                #print "infront : ", infront
                 if (maxfit == 0):
                     print "===================="
                     print "P2 not extracted"
@@ -431,19 +378,11 @@ class FeatureTracker:
                 print projections[ind]
                 print "No of valid points : ", sum(infront)
                 
-                
-                #print "i1_pts_corr : ", i1_pts_corr
-                #print "i2_pts_corr : ", i2_pts_corr
-                
-                #print "infront : ", infront 
                 # Filter points
                 infront = np.array([infront]).transpose()
                 infront = np.append(infront, infront, 1)
-                #print "Prepped infront : ", print infront
                 i1_pts_corr = np.reshape(i1_pts_corr[infront==True], (-1, 2))
                 i2_pts_corr = np.reshape(i2_pts_corr[infront==True], (-1, 2))
-                #print "i1_pts_infront : ", i1_pts_corr
-                #print "i2_pts_infront : ", i2_pts_corr
                 print "No of points infront : ", len(i1_pts_corr)
                 """========================================================="""
                 
@@ -453,6 +392,19 @@ class FeatureTracker:
                 R4[:3, :3] = R
                 print "R4 : ", R4
                 quat = tf.transformations.quaternion_from_matrix(R4)
+                angles = tf.transformations.euler_from_quaternion(quat, axes='sxyz')
+                #alpha = math.atan(R[1, 0]/R[0, 0])
+                #beta = math.atan(-R[2,0]/((R[2,1]**2+R[2, 2]**2)**0.5))
+                #gamma = math.atan(R[2,1]/R[2,2])
+                
+                print ""
+                print "Euler angles (yaw, pitch, roll): ", angles
+                #print "Recalc angles : ", alpha, ", ", beta, ", ", gamma
+                print ""
+                
+                    
+                
+                
                 
                 br = tf.TransformBroadcaster() #create broadcaster
                 br.sendTransform((0, 0, 0),
@@ -495,129 +447,7 @@ class FeatureTracker:
                 
                 self.cloud_pub.publish(cloud)
                 
-                
-                #print points3D1
-                
-                '''
-                # 3D plot
-                import matplotlib.pyplot as plot
-                from mpl_toolkits.mplot3d import Axes3D
-                first = True
-                if first:
-                    first = False
-                    fig = plot.figure(1)
-                    ax = Axes3D(fig)
-                ax.scatter(-X1[0],X1[1],X1[2])
-                '''
-                
-                '''
-                U,SIGMA,V = np.linalg.svd(F)
-                
-                SIGMA = np.diag(SIGMA)
-                
-                SIGMA[2] = [0., 0., 0.]
-                #print SIGMA
-                
-                #print V
-                left_epipolar = V[:, 2]
-                print "left epi"
-                print left_epipolar
-                
-                E_SM = np.array([[0, -left_epipolar[2], left_epipolar[1]], [left_epipolar[2], 0, -left_epipolar[0]], [-left_epipolar[1], left_epipolar[0], 0]], dtype=np.float32)
-                #print "E_SM"
-                #print E_SM
-                
-                # Second Projection Matrix
-                left_epipolar = np.array([left_epipolar]).transpose()
-                P2 = np.append(E_SM.dot(F),left_epipolar,1)
-                print "P2"
-                print P2
-                '''
-                
-                '''
-                print i1_pts_corr
-                print zip(*i1_pts_corr[0])[0]
-                x1 = np.array([zip(*i1_pts_corr[0])[0]]).transpose()
-                x2 = np.array([zip(*i1_pts_corr[0])[1]]).transpose()
-                print np.append(x1, x2, 1)
-                
-                proj1 = zip(*i1_pts_corr[0])[0]
-                print proj1
-                '''
-                
-                '''
-                # Calculate via essential matrix
-                '''
-                
-
-                '''
-                """=====================================================
-                # Compute R and S
-                # According to HZ 9.14 there are four factorisations
-                # S = (+/-)UZU', R1 = (+/-)UWV' or R2 = (+/-)UW'V'
-                ====================================================="""                
-                S = U.dot(Z).dot(U.transpose())
-                print "S"
-                print S
-                R1 = U.dot(W).dot(V.transpose())
-                print "R1"
-                print R1
-                #print "R.R'"
-                #print R.dot(R.transpose())                
-                R2 = U.dot(W.transpose()).dot(V.transpose())
-                print "R2"
-                print R2
-                #print "wiki_R.wiki_R'"
-                #print wiki_R.dot(wiki_R.transpose())
-                SR1 = S.dot(R1)
-                SR1 /= SR1[2,2]
-                print "SR1"
-                print SR1
-                SR2 = S.dot(R2)
-                SR2 /= SR2[2,2]
-                #print "SR2"
-                #print SR2
-                R = R2
-                
-                t = U[:, 2]
-                print "t"
-                print t
-                '''
-                
-
-                
-                '''
-                P2E = np.array([[R[0,0],R[0,1],R[0,2],t[0]],[R[1,0], R[1,1], R[1,2], t[1]],[R[2, 0], R[2,1], R[2,2], t[2]]])
-                #print "P2E"
-                #print P2E
-                '''
-                
-                
-                '''
-                fig = plot.figure(1)
-                ax = Axes3D(fig)
-                ax.scatter(zip(*points3D)[0], zip(*points3D)[1],zip(*points3D)[2])
-                '''
-               
-                
-
-                
-                
-                
-                
-                
-                    
-                    
-                
-                #points3D = cv2.convertPointsFromHomogeneous(points4D)
-                
-                #print "points3D"
-                #print points3D
-                
-
-                
-                
-                #print "no of pre-drawn points : ", len(i1_pts_corr)
+                       
 
                 # Plot tracked features on stacked images   
                 img2 = stackImagesVertically(grey_previous, grey_now)
@@ -628,7 +458,7 @@ class FeatureTracker:
                     #if ml[idx - 1] == 0:
                     #    continue
                     county += 1
-                    cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (255, 0 , 255), 1)
+                    cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
                 cv2.imshow("track", img2)
                 print "No of drawn points : ", county
                 cv2.waitKey(5)
@@ -650,7 +480,7 @@ class FeatureTracker:
         cvimg = bridge.imgmsg_to_cv(d,"bgr8")
         # cv to cv2 numpy array image
         npimg = np.asarray(cvimg)
-        # Pass to FeatureTrackerr
+        # Pass to FeatureTracker
         self.featureTrack(npimg)
         
     def setCameraInfo(self, ci):
