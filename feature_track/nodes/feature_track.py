@@ -60,6 +60,8 @@ def stackImagesVertically(top_image, bottom_image):
     
 class FeatureTracker:
     def __init__(self):
+        self.roll = 0.
+        self.quaternion = tf.transformations.quaternion_from_euler(0.,0.,0., axes='sxyz')
         self.previous = None
         self.grey_previous = None
         self.frameskip = 0
@@ -103,8 +105,32 @@ class FeatureTracker:
             errs.append(np.r_[p[1], 1].T.dot(F).dot(np.r_[p[0], 1]))
         return np.mean(errs)
         
-    def compute_correct_projection(self, F):        
-        return
+    def triangulate_point(self, x1,x2,P1,P2):
+        """ Point pair triangulation from
+        least squares solution. """
+        M = np.zeros((6,6))
+        M[:3,:4] = P1
+        M[3:,:4] = P2
+        M[:3,4] = -x1
+        M[3:,5] = -x2
+        U,S,V = np.linalg.svd(M)
+        X = V[-1,:4]
+        return X / X[3]
+        
+    def triangulate_points(self, x1,x2,P1,P2):
+        """ Two-view triangulation of points in
+        x1,x2 (3*n coordingates)
+        x1,x2 (3*n homog. coordinates). """
+        n = x1.shape[1]
+        if x2.shape[1] != n:
+            raise ValueError("Number of points don't match.")
+        # Make homogenous
+        x1 = np.append(x1, np.array([np.ones(x1.shape[1])]), 0)
+        x2 = np.append(x2, np.array([np.ones(x2.shape[1])]), 0)
+        # Triangulate for each pair
+        X = [ self.triangulate_point(x1[:,i],x2[:,i],P1,P2) for i in range(n)]
+        return np.array(X).T
+
 
         
     def featureTrack(self, img):
@@ -114,7 +140,7 @@ class FeatureTracker:
         
         DEF_SET_DATA = False # Switches in fixed data
         
-        print ""
+        #print ""
 
         
         # Initialise previous image buffer
@@ -202,16 +228,16 @@ class FeatureTracker:
                 #
                 # F is the matrix itself, mask is contains 1s for inliers
                 ============================================================"""
-                print "i1", i1_pts_undistorted
+                #print "i1", i1_pts_undistorted
                 F, mask = cv2.findFundamentalMat(i1_pts_undistorted, i2_pts_undistorted, cv2.FM_RANSAC, param1 = 1., param2 = 0.99)
                 # Expand mask for easy filtering
                 mask_prepped = np.append(mask, mask, 1.)
-                print "No of matched points : ", len(i1_pts_undistorted[0])
+                #print "No of matched points : ", len(i1_pts_undistorted[0])
                 # Efficient np-style filtering, then reform
                 i1_pts_masked = np.reshape(i1_pts_undistorted[0][mask_prepped==1], (-1, 2))
                 i2_pts_masked = np.reshape(i2_pts_undistorted[0][mask_prepped==1], (-1, 2))
-                print "No of masked points : ", len(i1_pts_masked) 
-                print "masked : ", i1_pts_masked
+                #print "No of masked points : ", len(i1_pts_masked) 
+                #print "masked : ", i1_pts_masked
                 i1_pts_undistorted = np.array([i1_pts_masked])
                 i2_pts_undistorted = np.array([i2_pts_masked])
                 """========================================================="""
@@ -227,10 +253,10 @@ class FeatureTracker:
                 # is normalised
                 ============================================================"""
                 
-                print "F : "
-                print F        
+                #print "F : "
+                #print F        
                 avg_error = self.compute_F_error(F, i1_pts_undistorted[0].transpose(), i2_pts_undistorted[0].transpose())
-                print "Avg error : ", avg_error
+                #print "Avg error : ", avg_error
                 if (abs(avg_error)>1):
                     print "===================="
                     print "F Error too high"
@@ -257,7 +283,7 @@ class FeatureTracker:
                 mask_nan = np.isnan(i1_pts_corr[0])
                 i1_pts_corr = np.reshape(i1_pts_corr[0][mask_nan == False], (-1, 2))
                 i2_pts_corr = np.reshape(i2_pts_corr[0][mask_nan == False], (-1, 2))
-                print "No of corrected points: ", len(i1_pts_corr)
+                #print "No of corrected points: ", len(i1_pts_corr)
                 
                 """========================================================="""
                 
@@ -267,8 +293,8 @@ class FeatureTracker:
                 E = self.cameraMatrix.transpose().dot(F.dot(self.cameraMatrix))
                 # Normalise E
                 E /= E[2,2]
-                print "E"
-                print E
+                #print "E"
+                #print E
                 
                 
                 W = np.array([[0, -1, 0],[1, 0, 0], [0, 0, 1]])
@@ -284,8 +310,8 @@ class FeatureTracker:
                 SIGMA[2,2] = 0
                 if SIGMA[0,0] < 0.7*SIGMA[1,1] or SIGMA[1,1] < 0.7*SIGMA[0,0]:
                     print "WARNING: Disparate singular values"                    
-                print "SIGMA"
-                print SIGMA
+                #print "SIGMA"
+                #print SIGMA
                 
                 # Use image1 as origin
                 P1 = np.append(np.identity(3), [[0], [0], [0]], 1)
@@ -311,10 +337,10 @@ class FeatureTracker:
                 # Check E=RS as t appears wrong
                 ============================================================"""                
                 R = projections[0][:,:3]
-                print "Rotation Matrix : ", R
+                #print "Rotation Matrix : ", R
                 t = projections[0][:,3:4]
-                print "magnitude sq", t.transpose().dot(t)
-                print "Translation Vector : ", t
+                #print "magnitude sq", t.transpose().dot(t)
+                #print "Translation Vector : ", t
                 
                 S = np.array([[0., t[2], -t[1]],
                               [-t[2], 0., t[0]],
@@ -339,68 +365,76 @@ class FeatureTracker:
                 # Determine projection with most valid points
                 # Produce boolean mask for best case and filter pts
                 ===============================================================
-                # Note: This currently checks for positive P1 and P2 projection
-                # However, the P2 check is assuming the camera does not move
-                # Given the P1 camera is set as origin, P2 check should be wrt
-                # the translation vector
-                # As translation vector appears wrong, it may be worth going
-                # with P1 check only (P1 and P2 projection produce exact same
-                # 3D points in the ideal case)
-                # -----------> This didn't help trying, disparate PI
+                # A comparison between manually triangulated and cv2 tri found
+                # different results. It turns out cv2 output un-normalised homo
+                # co-ords (i.e. non-unity w)
                 ============================================================"""
                 
                 ind = 0
                 maxfit = 0
                 for i, P2 in enumerate(projections):
                     # infront accepts only both dimensions
+                    # WARNING: cv2.tri produces unnormalised homo coords
                     points4D = cv2.triangulatePoints(P1, P2, i1_pts_corr.transpose(), i2_pts_corr.transpose())
+                    # normalise homogenous coords
+                    points4D /= points4D[3]
+                    #points4D = self.triangulate_points(i1_pts_corr.transpose(), i2_pts_corr.transpose(), P1, P2)
                     d1 = np.dot(P1,points4D)[2]
                     d2 = np.dot(P2,points4D)[2]
                     PI = sum((d1>0) & (d2>0))
                     print "Performance index ", i, " : ", PI
+                    #print P2
                     if PI > maxfit:
                         maxfit = sum((d1>0) & (d2>0))
                         ind = i
                         infront = (d1>0) & (d2>0)
                 if (maxfit == 0):
-                    print "===================="
+                    print "==================================================="
                     print "P2 not extracted"
-                    print "===================="
+                    print "==================================================="
                     self.update_previous(img)
                     self.grey_previous = grey_now
                     self.pts1 = pts2
                     self.kp1, self.desc1 = kp2, desc2
                     return
                 P2 = projections[ind]
-                print "P1"
-                print P1                
-                print "P2 selected : "
+                #print "P1"
+                #print P1                
+                #print "P2 selected : "
                 print projections[ind]
-                print "No of valid points : ", sum(infront)
+                #print "No of valid points : ", sum(infront)
                 
                 # Filter points
                 infront = np.array([infront]).transpose()
                 infront = np.append(infront, infront, 1)
                 i1_pts_corr = np.reshape(i1_pts_corr[infront==True], (-1, 2))
                 i2_pts_corr = np.reshape(i2_pts_corr[infront==True], (-1, 2))
-                print "No of points infront : ", len(i1_pts_corr)
+                #print "No of points infront : ", len(i1_pts_corr)
                 """========================================================="""
                 
-                print "Rotation Matrix : "
+                #print "Rotation Matrix : "
                 R = P2[:,:3]
                 R4 = np.diag([0., 0., 0., 1.])
                 R4[:3, :3] = R
-                print "R4 : ", R4
+                #print "R4 : ", R4
                 quat = tf.transformations.quaternion_from_matrix(R4)
+                self.quaternion = self.quaternion*quat
                 angles = tf.transformations.euler_from_quaternion(quat, axes='sxyz')
                 #alpha = math.atan(R[1, 0]/R[0, 0])
                 #beta = math.atan(-R[2,0]/((R[2,1]**2+R[2, 2]**2)**0.5))
                 #gamma = math.atan(R[2,1]/R[2,2])
                 
-                print ""
-                print "Euler angles (yaw, pitch, roll): ", angles
+                #print ""
+                #print "Euler angles (yaw, pitch, roll): ", angles
+                #print 
+                #delta = angles[2]*180/np.pi
+                #print delta
+                #if abs(delta) < 135:
+                #    self.roll += angles[2] # This could potentially overflow
+                #print "Cumulative roll", self.roll * 180/np.pi
+                #print "Cumulative quat", self.quaternion[2]*180/np.pi
                 #print "Recalc angles : ", alpha, ", ", beta, ", ", gamma
-                print ""
+                #print ""
                 
                     
                 
@@ -413,24 +447,23 @@ class FeatureTracker:
                          "image_rotation",
                          "world")
                 
-                print "Translation Vector : "
+                #print "Translation Vector : "
                 t = P2[:,3:4]
-                print t
+                #print t
                 
-                points4D = cv2.triangulatePoints(P1, projections[ind], i1_pts_corr.transpose(), i2_pts_corr.transpose())
+                points4D = self.triangulate_points(i1_pts_corr.transpose(), i2_pts_corr.transpose(), P1, P2)
                 #print "4D points"
-                #print X
-                X1 = np.dot(P1,points4D)
-                print "X1"
-                #print X1
+                #print points4D
+                X1 = P1.dot(points4D)
+                #print "X1", X1
                 X2 = P2.dot(points4D)
-                print "X2"
+                #print "X2"
                 #print X2
                 
                 points3D1 = zip(*X1)
                 points3D2 = zip(*X2)
-                print "points3D1 max x, y, z: ", max(X1[0]), max(X1[1]), max(X1[2])
-                print "points3D1 min x, y, z: ", min(X1[0]), min(X1[1]), min(X1[2])
+                #print "points3D1 max x, y, z: ", max(X1[0]), max(X1[1]), max(X1[2])
+                #print "points3D1 min x, y, z: ", min(X1[0]), min(X1[1]), min(X1[2])
                                 
                 # Publish point cloud
                 cloud = PointCloud()
@@ -453,14 +486,17 @@ class FeatureTracker:
                 img2 = stackImagesVertically(grey_previous, grey_now)
                 imh = grey_previous.shape[0]
                 county = 0
+                l = 35
                 for p1, p2 in zip(i1_pts_corr, i2_pts_corr):
                     #idx += 1
                     #if ml[idx - 1] == 0:
                     #    continue
                     county += 1
                     cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
+                cv2.line(img2, (320, 160), (int(320+l*math.cos(self.roll)), int(160+l*math.sin(self.roll))), (255, 255, 255), 1)
+                cv2.putText(img2, str(self.roll*180/np.pi), (25,25), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255))
                 cv2.imshow("track", img2)
-                print "No of drawn points : ", county
+                #print "No of drawn points : ", county
                 cv2.waitKey(5)
                 #plot.pause(0.05)
                 
