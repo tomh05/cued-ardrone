@@ -80,7 +80,7 @@ class FeatureTracker:
         previous image to it"""
         self.previous = thing
         
-    def compute_fundamental(self, x1,x2):
+    def compute_fundamental(self, x1,x2): # Not used
         n = x1.shape[1]
         # build matrix for equations
         A = np.zeros((n,9))
@@ -97,7 +97,6 @@ class FeatureTracker:
         S[2] = 0
         F = np.dot(U,np.dot(np.diag(S),V))
         return F
-
         
     def compute_F_error(self, F, x1_32, x2_32):
         errs = []
@@ -105,7 +104,7 @@ class FeatureTracker:
             errs.append(np.r_[p[1], 1].T.dot(F).dot(np.r_[p[0], 1]))
         return np.mean(errs)
         
-    def triangulate_point(self, x1,x2,P1,P2):
+    def triangulate_point(self, x1,x2,P1,P2): # Not used
         """ Point pair triangulation from
         least squares solution. """
         M = np.zeros((6,6))
@@ -117,10 +116,9 @@ class FeatureTracker:
         X = V[-1,:4]
         return X / X[3]
         
-    def triangulate_points(self, x1,x2,P1,P2):
+    def triangulate_points(self, x1,x2,P1,P2): # Not used
         """ Two-view triangulation of points in
-        x1,x2 (3*n coordingates)
-        x1,x2 (3*n homog. coordinates). """
+        x1,x2 (3*n coordingates)"""
         n = x1.shape[1]
         if x2.shape[1] != n:
             raise ValueError("Number of points don't match.")
@@ -131,17 +129,230 @@ class FeatureTracker:
         X = [ self.triangulate_point(x1[:,i],x2[:,i],P1,P2) for i in range(n)]
         return np.array(X).T
 
+    def quaternion_multiply(self, quat1, quat2):
+        v1 = np.array([quat1[0],quat1[1],quat1[2]])
+        v2 = np.array([quat2[0],quat2[1],quat2[2]])
+        cp = np.cross(v1, v2)
+        x = quat1[0]+quat2[0]+cp[0]
+        y = quat1[1]+quat2[1]+cp[1]
+        z = quat1[2]+quat2[2]+cp[2]
+        w = quat1[3]*quat2[3]-np.dot(v1, v2)
+        return np.array([x,y,z,w])
+        
+    def find_and_match_points(self, img, grey_now):
+        
+        # Detect points
+        pts1 = self.pts1
+        pts2 = self.fd.detect(grey_now)
+        self.pts2 = pts2
 
+        # Describe points        
+        kp1, desc1 = self.kp1, self.desc1
+        kp2, desc2 = self.de.compute(grey_now, pts2)
+        self.kp2, self.desc2 = kp2, desc2            
+        
+        # Bottom out if failed to get features
+        if desc1 == None or desc2 == None or len(desc1) == 0 or len(desc2) == 0:
+            self.update_previous(img)
+            self.grey_previous = grey_now
+            self.pts1 = pts2
+            self.kp1, self.desc1 = kp2, desc2
+            print "No Features Found"
+            return False, None, None
+        
+        # Match features        
+        matches = self.dm.match(desc1, desc2)
+
+        # Produce ordered arrays of paired points
+        i1_indices = list(x.queryIdx for x in matches)
+        i2_indices = list(x.trainIdx for x in matches)
+        kp1_array = np.array(list(x.pt for x in kp1))
+        kp2_array = np.array(list(x.pt for x in kp2))
+        i1_pts = kp1_array[i1_indices,:]
+        i2_pts = kp2_array[i2_indices,:]
+        
+        # Bottom out if failed to get enough matches
+        if len(i1_pts) < 8:
+            self.update_previous(img)
+            self.grey_previous = grey_now
+            self.pts1 = pts2
+            self.kp1, self.desc1 = kp2, desc2
+            print "Insufficient matches"
+            return False, None, None
+        
+        return True, i1_pts, i2_pts
+        
+    def extract_fundamental(self, i1_pts_undistorted, i2_pts_undistorted):
+        """
+        Extract fundamental matrix and then remove outliers
+        FM_RANSAC should be good with lowish outliers
+        FM_LMEDS may be more robust in some cases
+        """
+        F, mask = cv2.findFundamentalMat(i1_pts_undistorted, i2_pts_undistorted, cv2.FM_RANSAC, param1 = 1., param2 = 0.99)
+        # Expand mask for easy filtering
+        mask_prepped = np.append(mask, mask, 1.)
+        # Efficient np-style filtering, then reform
+        i1_pts_masked = np.reshape(i1_pts_undistorted[0][mask_prepped==1], (-1, 2))
+        i2_pts_masked = np.reshape(i2_pts_undistorted[0][mask_prepped==1], (-1, 2))
+        i1_pts_undistorted = np.array([i1_pts_masked])
+        i2_pts_undistorted = np.array([i2_pts_masked])
+        
+        """============================================================
+        # Filter points that fit F using cv2.correctMatches
+        # This unhelpfully overwrites np.nan over rejected entried
+        # np.nan == np.nan returns false so have to use np.isnan(.)
+        # NB: This check appears redundant as F is calculated to match
+        ============================================================"""
+                
+        i1_pts_corr, i2_pts_corr = cv2.correctMatches(F, i1_pts_undistorted, i2_pts_undistorted)
+        mask_nan = np.isnan(i1_pts_corr[0])
+        i1_pts_corr = np.reshape(i1_pts_corr[0][mask_nan == False], (-1, 2))
+        i2_pts_corr = np.reshape(i2_pts_corr[0][mask_nan == False], (-1, 2))               
+        
+        return F, i1_pts_corr, i2_pts_corr
+        
+    def filter_correct_matches(self, i1_pts_undistorted, i2_pts_undistorted):
+        """
+        Filter points that fit F using cv2.correctMatches
+        This unhelpfully overwrites np.nan over rejected entried
+        np.nan == np.nan returns false so have to use np.isnan(.)
+        NB: This check appears redundant as F is calculated to match
+        """        
+        i1_pts_corr, i2_pts_corr = cv2.correctMatches(F, i1_pts_undistorted, i2_pts_undistorted)
+        mask_nan = np.isnan(i1_pts_corr[0])
+        i1_pts_corr = np.reshape(i1_pts_corr[0][mask_nan == False], (-1, 2))
+        i2_pts_corr = np.reshape(i2_pts_corr[0][mask_nan == False], (-1, 2))
+        return i1_pts_corr, i2_pts_corr
+        
+    def extract_projections(self, F, i1_pts_corr, i2_pts_corr):
+        """
+        Uses known camera calibration to extract E
+        Produces 4 possible P2 via linear algebra
+        Isolates best P2 by projecting data points
+        Filters out conflicting points
+        """
+        # Camera Matrices to extract essential matrix and then normalise
+        E = self.cameraMatrix.transpose().dot(F.dot(self.cameraMatrix))
+        E /= E[2,2]
+        
+        W = np.array([[0, -1, 0],[1, 0, 0], [0, 0, 1]])
+        Z = np.array([[0, 1, 0],[-1, 0, 0], [0, 0, 0]])
+                    
+        # SVD of E
+        U,SIGMA,V = np.linalg.svd(E)
+        if np.linalg.det(U.dot(V))<0:
+            V = -V
+        # Contruct Diagonal
+        SIGMA = np.diag(SIGMA)
+        # Force third eig to zero
+        SIGMA[2,2] = 0
+        if SIGMA[0,0] < 0.7*SIGMA[1,1] or SIGMA[1,1] < 0.7*SIGMA[0,0]:
+            print "WARNING: Disparate singular values"
+        
+        # Use camera1 as origin viewpoint
+        P1 = np.append(np.identity(3), [[0], [0], [0]], 1)
+        
+        """============================================================
+        # Compute the four possible P2 projection matrices
+        # Note in particular the matrix multiplication order
+        # This caught me out for a long while
+        # Also the V returned by np's svd is V'
+        ============================================================"""
+        projections = []
+        # UWV'|u3
+        projections.append(np.append(U.dot(W.dot(V)),np.array([U[:,2]]).transpose(),1))
+        # UWV'|-u3
+        projections.append(np.append(U.dot(W.dot(V)),np.array([-U[:,2]]).transpose(),1))
+        # UW'V'|u3
+        projections.append(np.append(U.dot(W.transpose().dot(V)),np.array([U[:,2]]).transpose(),1))
+        # UW'V'|-u3
+        projections.append(np.append(U.dot(W.transpose().dot(V)),np.array([-U[:,2]]).transpose(),1))
+        
+        """============================================================
+        # Determine projection with most valid points
+        # Produce boolean mask for best case and filter pts
+        ===============================================================
+        # A comparison between manually triangulated and cv2 tri found
+        # different results. It turns out cv2 output un-normalised homo
+        # co-ords (i.e. non-unity w)
+        ============================================================"""        
+        ind = 0
+        maxfit = 0
+        for i, P2 in enumerate(projections):
+            # infront accepts only both dimensions
+            # WARNING: cv2.tri produces unnormalised homo coords
+            points4D = cv2.triangulatePoints(P1, P2, i1_pts_corr.transpose(), i2_pts_corr.transpose())
+            # normalise homogenous coords
+            points4D /= points4D[3]
+            #points4D = self.triangulate_points(i1_pts_corr.transpose(), i2_pts_corr.transpose(), P1, P2)
+            d1 = np.dot(P1,points4D)[2]
+            d2 = np.dot(P2,points4D)[2]
+            PI = sum((d1>0) & (d2>0))
+            print "Performance index ", i, " : ", PI
+            if PI > maxfit:
+                maxfit = sum((d1>0) & (d2>0))
+                ind = i
+                infront = (d1>0) & (d2>0)
+        if (maxfit == 0):
+            print "==================================================="
+            print "P2 not extracted"
+            print "==================================================="
+            return False, None, None, None, None
+        
+        # Filter points
+        infront = np.array([infront]).transpose()
+        infront = np.append(infront, infront, 1)
+        i1_pts_corr = np.reshape(i1_pts_corr[infront==True], (-1, 2))
+        i2_pts_corr = np.reshape(i2_pts_corr[infront==True], (-1, 2))
+        
+        return True, P1, projections[ind], i1_pts_corr, i2_pts_corr
+    
+    def update_quaternion(self, R):
+        """Updates the cumulative local axis stored in self.quaternion"""
+        
+        # Make homogenous rotation matrix from R
+        R4 = np.diag([0., 0., 0., 1.])
+        R4[:3, :3] = R
+        
+        # Update Quaternion
+        quat = tf.transformations.quaternion_from_matrix(R4)
+        self.quaternion = self.quaternion_multiply(self.quaternion,quat)
+        
+        br = tf.TransformBroadcaster() #create broadcaster
+        br.sendTransform((0, 0, 0),
+                         self.quaternion,
+                         rospy.Time.now(), # NB: 'now' is not the same as time data was sent from drone
+                         "image_rotation",
+                         "world")
+        
+        # Output cumulative angles
+        angles = tf.transformations.euler_from_quaternion(self.quaternion, axes='sxyz')
+        print angles[0]*180/np.pi, ", ", angles[1]*180/np.pi, ", ", angles[2]*180/np.pi # I don't think these angles are in the conventional roll, yaw, pitch order
+        return angles
+    
+    def publish_cloud(self, points):
+        cloud = PointCloud()
+        cloud.header.stamp = rospy.Time.now() # Should copy img header
+        cloud.header.frame_id = "ardrone_base_link" # Should be front camera really
+        
+        for i, p in enumerate(points): # Ideally done without a loop
+            cloud.points.append(gm.Point32())
+            cloud.points[i].x = p[0]
+            cloud.points[i].y = p[1]
+            cloud.points[i].z = p[2]
+        
+        self.cloud_pub.publish(cloud)
         
     def featureTrack(self, img):
         """Takes a cv2 numpy array image and compared to a previously
         buffered image. Features are extracted from each frame, 
-        undistorted and matched."""
+        undistorted and matched.
+        Multiple view geometry is then used to calculate the rotation and
+        translation of the camera between frames and the position of observed
+        points"""
         
         DEF_SET_DATA = False # Switches in fixed data
         
-        #print ""
-
         
         # Initialise previous image buffer
         if self.previous == None:
@@ -166,6 +377,7 @@ class FeatureTracker:
             self.kp1, self.desc1 = self.de.compute(grey_now, self.pts1)
             return
 
+        # Swap in artificial data is necessary
         if DEF_SET_DATA:
             img1 = cv2.imread("/home/alex/testData/1.jpg")
             img2 = cv2.imread("/home/alex/testData/4.jpg")
@@ -174,338 +386,124 @@ class FeatureTracker:
             self.pts1 = self.fd.detect(grey_previous)
             self.kp1, self.desc1 = self.de.compute(grey_previous, self.pts1)
 
-        # Detect points
-        pts1 = self.pts1
-        pts2 = self.fd.detect(grey_now)
-
-        # Describe points        
-        kp1, desc1 = self.kp1, self.desc1
-        kp2, desc2 = self.de.compute(grey_now, pts2)            
+        """====================================================================
+        Find matched points in both images
+        ===================================================================="""
+        success, i1_pts, i2_pts = self.find_and_match_points(img, grey_now)
+        if not success:
+            return
         
-        # Bottom out if failed to get features
-        if desc1 == None or desc2 == None or len(desc1) == 0 or len(desc2) == 0:
+        
+        
+        if self.calibrated:
+            # Undistort points using calibration data
+            i1_mat = np.array([i1_pts])
+            i2_mat = np.array([i2_pts])               
+            i1_pts_undistorted = cv2.undistortPoints(i1_mat, self.cameraMatrix, self.distCoeffs, P=self.P) #Do not pass camera P here if working in normalised
+            i2_pts_undistorted = cv2.undistortPoints(i2_mat, self.cameraMatrix, self.distCoeffs, P=self.P)
+        else:
+            print "WARNING: No calibration info. Cannot Continue"
+            return
+            
+            
+        """============================================================
+        Extract F and filter outliers
+        ============================================================"""
+        F, i1_pts_corr, i2_pts_corr = self.extract_fundamental(i1_pts_undistorted, i2_pts_undistorted)
+
+                     
+
+        """============================================================
+        # Examine quality of F
+        # Reject if error is too high and go to next frame
+        ============================================================"""   
+        avg_error = self.compute_F_error(F, i1_pts_corr.transpose(), i2_pts_corr.transpose())
+        print "Avg F error : ", avg_error
+        if (abs(avg_error)>1): # Bottom out on high error
+            print "===================="
+            print "F Error too high"
+            print "===================="
             self.update_previous(img)
             self.grey_previous = grey_now
             self.pts1 = pts2
-            self.kp1, self.desc1 = kp2, desc2
-            print "No Features Found"
+            self.kp1, self.desc1 = self.kp2, self.desc2
             return
         
-        # Match features        
-        matches = self.dm.match(desc1, desc2)
-
-        # Produce ordered arrays of paired points
-        i1_indices = list(x.queryIdx for x in matches)
-        i2_indices = list(x.trainIdx for x in matches)
-        kp1_array = np.array(list(x.pt for x in kp1))
-        kp2_array = np.array(list(x.pt for x in kp2))
-        i1_pts = kp1_array[i1_indices,:]
-        i2_pts = kp2_array[i2_indices,:]
+        
+            
+        """============================================================
+        # Extract P1 and P2 via E
+        ============================================================"""
+        success, P1, P2, i1_pts_corr, i2_pts_corr = self.extract_projections(F, i1_pts_corr, i2_pts_corr)
+        if not success: # Bottom out on fail
+            self.update_previous(img)
+            self.grey_previous = grey_now
+            self.pts1 = self.pts2
+            self.kp1, self.desc1 = self.kp2, self.desc2
+            return
+        
+        R = P2[:,:3]
+        #print "Rotation Matrix : ", R
+        t = P2[:,3:4]
+        #print "Translation Vector : ", t
+        
+        """============================================================
+        # Update cumulative orientation quaternion 
+        ============================================================"""                
+        angles = self.update_quaternion(R) 
         
         
+        """====================================================================
+        # Calculate 3D points
+        ===================================================================="""
+        points4D = cv2.triangulatePoints(P1, P2, i1_pts_corr.transpose(), i2_pts_corr.transpose())
+        # normalise homogenous coords
+        points4D /= points4D[3]
         
-        # Check for sufficient pairs for fundamental matrix extraction
-        if (len(i1_pts) > 8):
-            if (len(i2_pts) > 8): # this is redundant as matched lists
-                if self.calibrated:
-                    # Undistort points using calibration data
-                    i1_mat = np.array([i1_pts])
-                    i2_mat = np.array([i2_pts])               
-                    i1_pts_undistorted = cv2.undistortPoints(i1_mat, self.cameraMatrix, self.distCoeffs, P=self.P) #Do not pass camera P here if working in normalised
-                    i2_pts_undistorted = cv2.undistortPoints(i2_mat, self.cameraMatrix, self.distCoeffs, P=self.P)
-                else:
-                    # Use distorted points if calibration missing
-                    print "WARNING: No calibration info. Using distorted feature positions"
-                    print "This will be wrong as not normalised"
-                    i1_pts_undistorted = i1_pts
-                    i2_pts_undistorted = i2_pts
-               
-                
-                """============================================================
-                # Extract fundamental matrix and then remove outliers
-                # FM_RANSAC should be good with lowish outliers
-                # FM_LMEDS may be more robust in some cases
-                #
-                # F is the matrix itself, mask is contains 1s for inliers
-                ============================================================"""
-                #print "i1", i1_pts_undistorted
-                F, mask = cv2.findFundamentalMat(i1_pts_undistorted, i2_pts_undistorted, cv2.FM_RANSAC, param1 = 1., param2 = 0.99)
-                # Expand mask for easy filtering
-                mask_prepped = np.append(mask, mask, 1.)
-                #print "No of matched points : ", len(i1_pts_undistorted[0])
-                # Efficient np-style filtering, then reform
-                i1_pts_masked = np.reshape(i1_pts_undistorted[0][mask_prepped==1], (-1, 2))
-                i2_pts_masked = np.reshape(i2_pts_undistorted[0][mask_prepped==1], (-1, 2))
-                #print "No of masked points : ", len(i1_pts_masked) 
-                #print "masked : ", i1_pts_masked
-                i1_pts_undistorted = np.array([i1_pts_masked])
-                i2_pts_undistorted = np.array([i2_pts_masked])
-                """========================================================="""
-                
-                
+        # From camera one frame of ref
+        X1 = P1.dot(points4D)
+        
+        # From camera two frame of ref
+        X2 = P2.dot(points4D)
+        
+        # Reform
+        points3D1 = zip(*X1)
+        points3D2 = zip(*X2)
+        
+        
+        """============================================================
+        # Publish point cloud
+        ============================================================"""
+        self.publish_cloud(points3D1)
 
-                
-
-                """============================================================
-                # Examine quality of F
-                # Reject if error is too high and go to next frame
-                # Error is given to a scale of in pixels depending on if input
-                # is normalised
-                ============================================================"""
-                
-                #print "F : "
-                #print F        
-                avg_error = self.compute_F_error(F, i1_pts_undistorted[0].transpose(), i2_pts_undistorted[0].transpose())
-                #print "Avg error : ", avg_error
-                if (abs(avg_error)>1):
-                    print "===================="
-                    print "F Error too high"
-                    print "===================="
-                    self.update_previous(img)
-                    self.grey_previous = grey_now
-                    self.pts1 = pts2
-                    self.kp1, self.desc1 = kp2, desc2
-                    return
-                    
-                """========================================================="""
-                
-                
-                
-                
-                """============================================================
-                # Filter points that fit F using cv2.correctMatches
-                # This unhelpfully overwrites np.nan over rejected entried
-                # np.nan == np.nan returns false so have to use np.isnan(.)
-                # NB: This check appears redundant as F is calculated to match
-                ============================================================"""
-                
-                i1_pts_corr, i2_pts_corr = cv2.correctMatches(F, i1_pts_undistorted, i2_pts_undistorted)
-                mask_nan = np.isnan(i1_pts_corr[0])
-                i1_pts_corr = np.reshape(i1_pts_corr[0][mask_nan == False], (-1, 2))
-                i2_pts_corr = np.reshape(i2_pts_corr[0][mask_nan == False], (-1, 2))
-                #print "No of corrected points: ", len(i1_pts_corr)
-                
-                """========================================================="""
-                
-                
-                
-                # Camera Matrices to extract essential matrix
-                E = self.cameraMatrix.transpose().dot(F.dot(self.cameraMatrix))
-                # Normalise E
-                E /= E[2,2]
-                #print "E"
-                #print E
-                
-                
-                W = np.array([[0, -1, 0],[1, 0, 0], [0, 0, 1]])
-                Z = np.array([[0, 1, 0],[-1, 0, 0], [0, 0, 0]])
-                            
-                # SVD of E
-                U,SIGMA,V = np.linalg.svd(E)
-                if np.linalg.det(U.dot(V))<0:
-                    V = -V
-                # Contruct Diagonal
-                SIGMA = np.diag(SIGMA)
-                # Force third eig to zero
-                SIGMA[2,2] = 0
-                if SIGMA[0,0] < 0.7*SIGMA[1,1] or SIGMA[1,1] < 0.7*SIGMA[0,0]:
-                    print "WARNING: Disparate singular values"                    
-                #print "SIGMA"
-                #print SIGMA
-                
-                # Use image1 as origin
-                P1 = np.append(np.identity(3), [[0], [0], [0]], 1)
-                
-                """============================================================
-                # Compute the four possible P2 projection matrices
-                # Note in particular the matrix multiplication order
-                # This caught me out for a long while
-                # Also the V returned by np's svd is V'
-                ============================================================"""
-                projections = []
-                # UWV'|u3
-                projections.append(np.append(U.dot(W.dot(V)),np.array([U[:,2]]).transpose(),1))
-                # UWV'|-u3
-                projections.append(np.append(U.dot(W.dot(V)),np.array([-U[:,2]]).transpose(),1))
-                # UW'V'|u3
-                projections.append(np.append(U.dot(W.transpose().dot(V)),np.array([U[:,2]]).transpose(),1))
-                # UW'V'|-u3
-                projections.append(np.append(U.dot(W.transpose().dot(V)),np.array([-U[:,2]]).transpose(),1))
-                """========================================================="""
-                
-                """============================================================
-                # Check E=RS as t appears wrong
-                ============================================================"""                
-                R = projections[0][:,:3]
-                #print "Rotation Matrix : ", R
-                t = projections[0][:,3:4]
-                #print "magnitude sq", t.transpose().dot(t)
-                #print "Translation Vector : ", t
-                
-                S = np.array([[0., t[2], -t[1]],
-                              [-t[2], 0., t[0]],
-                              [t[1], -t[0], 0.]])
-                #print "S : ", S
-                SR = S.dot(R)
-                SR = SR/SR[2,2]
-                #print "SR : ", SR
-                """========================================================="""
-                
-                
-                # Bottom out on no accepted points
-                if i1_pts_corr.size == 0:
-                    self.update_previous(img)
-                    self.grey_previous = grey_now
-                    self.pts1 = pts2
-                    self.kp1, self.desc1 = kp2, desc2
-                    print "No Accepted Points"
-                    return
-                
-                """============================================================
-                # Determine projection with most valid points
-                # Produce boolean mask for best case and filter pts
-                ===============================================================
-                # A comparison between manually triangulated and cv2 tri found
-                # different results. It turns out cv2 output un-normalised homo
-                # co-ords (i.e. non-unity w)
-                ============================================================"""
-                
-                ind = 0
-                maxfit = 0
-                for i, P2 in enumerate(projections):
-                    # infront accepts only both dimensions
-                    # WARNING: cv2.tri produces unnormalised homo coords
-                    points4D = cv2.triangulatePoints(P1, P2, i1_pts_corr.transpose(), i2_pts_corr.transpose())
-                    # normalise homogenous coords
-                    points4D /= points4D[3]
-                    #points4D = self.triangulate_points(i1_pts_corr.transpose(), i2_pts_corr.transpose(), P1, P2)
-                    d1 = np.dot(P1,points4D)[2]
-                    d2 = np.dot(P2,points4D)[2]
-                    PI = sum((d1>0) & (d2>0))
-                    print "Performance index ", i, " : ", PI
-                    #print P2
-                    if PI > maxfit:
-                        maxfit = sum((d1>0) & (d2>0))
-                        ind = i
-                        infront = (d1>0) & (d2>0)
-                if (maxfit == 0):
-                    print "==================================================="
-                    print "P2 not extracted"
-                    print "==================================================="
-                    self.update_previous(img)
-                    self.grey_previous = grey_now
-                    self.pts1 = pts2
-                    self.kp1, self.desc1 = kp2, desc2
-                    return
-                P2 = projections[ind]
-                #print "P1"
-                #print P1                
-                #print "P2 selected : "
-                print projections[ind]
-                #print "No of valid points : ", sum(infront)
-                
-                # Filter points
-                infront = np.array([infront]).transpose()
-                infront = np.append(infront, infront, 1)
-                i1_pts_corr = np.reshape(i1_pts_corr[infront==True], (-1, 2))
-                i2_pts_corr = np.reshape(i2_pts_corr[infront==True], (-1, 2))
-                #print "No of points infront : ", len(i1_pts_corr)
-                """========================================================="""
-                
-                #print "Rotation Matrix : "
-                R = P2[:,:3]
-                R4 = np.diag([0., 0., 0., 1.])
-                R4[:3, :3] = R
-                #print "R4 : ", R4
-                quat = tf.transformations.quaternion_from_matrix(R4)
-                self.quaternion = self.quaternion*quat
-                angles = tf.transformations.euler_from_quaternion(quat, axes='sxyz')
-                #alpha = math.atan(R[1, 0]/R[0, 0])
-                #beta = math.atan(-R[2,0]/((R[2,1]**2+R[2, 2]**2)**0.5))
-                #gamma = math.atan(R[2,1]/R[2,2])
-                
-                #print ""
-                #print "Euler angles (yaw, pitch, roll): ", angles
-                #print 
-                #delta = angles[2]*180/np.pi
-                #print delta
-                #if abs(delta) < 135:
-                #    self.roll += angles[2] # This could potentially overflow
-                #print "Cumulative roll", self.roll * 180/np.pi
-                #print "Cumulative quat", self.quaternion[2]*180/np.pi
-                #print "Recalc angles : ", alpha, ", ", beta, ", ", gamma
-                #print ""
-                
-                    
-                
-                
-                
-                br = tf.TransformBroadcaster() #create broadcaster
-                br.sendTransform((0, 0, 0),
-                         quat,
-                         rospy.Time.now(), # NB: 'now' is not the same as time data was sent from drone
-                         "image_rotation",
-                         "world")
-                
-                #print "Translation Vector : "
-                t = P2[:,3:4]
-                #print t
-                
-                points4D = self.triangulate_points(i1_pts_corr.transpose(), i2_pts_corr.transpose(), P1, P2)
-                #print "4D points"
-                #print points4D
-                X1 = P1.dot(points4D)
-                #print "X1", X1
-                X2 = P2.dot(points4D)
-                #print "X2"
-                #print X2
-                
-                points3D1 = zip(*X1)
-                points3D2 = zip(*X2)
-                #print "points3D1 max x, y, z: ", max(X1[0]), max(X1[1]), max(X1[2])
-                #print "points3D1 min x, y, z: ", min(X1[0]), min(X1[1]), min(X1[2])
-                                
-                # Publish point cloud
-                cloud = PointCloud()
-                cloud.header.stamp = rospy.Time.now()
-                cloud.header.frame_id = "ardrone_base_link" #Should be front camera really
-                #print "cloud"
-                #print cloud
-                
-                for i, p in enumerate(points3D1):
-                    cloud.points.append(gm.Point32())
-                    cloud.points[i].x = p[0]
-                    cloud.points[i].y = p[1]
-                    cloud.points[i].z = p[2]
-                
-                self.cloud_pub.publish(cloud)
-                
-                       
-
-                # Plot tracked features on stacked images   
-                img2 = stackImagesVertically(grey_previous, grey_now)
-                imh = grey_previous.shape[0]
-                county = 0
-                l = 35
-                for p1, p2 in zip(i1_pts_corr, i2_pts_corr):
-                    #idx += 1
-                    #if ml[idx - 1] == 0:
-                    #    continue
-                    county += 1
-                    cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
-                cv2.line(img2, (320, 160), (int(320+l*math.cos(self.roll)), int(160+l*math.sin(self.roll))), (255, 255, 255), 1)
-                cv2.putText(img2, str(self.roll*180/np.pi), (25,25), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255))
-                cv2.imshow("track", img2)
-                #print "No of drawn points : ", county
-                cv2.waitKey(5)
-                #plot.pause(0.05)
+        
+        """====================================================================
+        # Plot fully tracked points
+        # Only that fit with the calculated geometry are plotted
+        # Note: This plots undistorted points on the distorted image
+        ===================================================================="""
+        img2 = stackImagesVertically(grey_previous, grey_now)
+        imh = grey_previous.shape[0]
+        county = 0
+        l = 35
+        for p1, p2 in zip(i1_pts_corr, i2_pts_corr):
+            county += 1
+            cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
+        cv2.line(img2, (320, 160), (int(320+l*math.cos(angles[2])), int(160+l*math.sin(angles[2]))), (255, 255, 255), 1)
+        # Example of overlay text (more readable than console)
+        #cv2.putText(img2, 'example', (25,25), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255))
+        cv2.imshow("track", img2)
+        #print "No of drawn points : ", county
+        cv2.waitKey(1)
                 
             
+        """====================================================================
         # Update previous image buffer
+        ===================================================================="""
         self.update_previous(img)
         self.grey_previous = grey_now
-        self.pts1 = pts2
-        self.kp1, self.desc1 = kp2, desc2
+        self.pts1 = self.pts2
+        self.kp1, self.desc1 = self.kp2, self.desc2
 
 
     def imgproc(self, d):
