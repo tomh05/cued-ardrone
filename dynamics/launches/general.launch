@@ -9,8 +9,4 @@
 		<param name="threshold" type="int" value="50"/>
     </node>
     
-    <node name="navdata_echo" pkg="rostopic" type="echo">
-	    <param name="topic-name" type="string" value="/ardrone/navdata/">
-	</node>	
-    
 </launch>
