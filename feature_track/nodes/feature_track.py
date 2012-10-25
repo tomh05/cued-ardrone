@@ -77,7 +77,7 @@ class FeatureTracker:
         self.kp1 = None
         cv2.namedWindow("track")
         self.cloud_pub = rospy.Publisher('pointCloud', PointCloud)
-        #self.preload_template('/home/alex/cued-ardrone/feature_track/nodes/boxTemplate.png')
+        self.preload_template('/home/alex/cued-ardrone/feature_track/nodes/boxTemplate.png')
         
     def preload_template(self, path):
         """Template features and descriptors need only be extracted once, so
@@ -85,7 +85,7 @@ class FeatureTracker:
         template = cv2.imread(path) # This should really use the ROS_PACKAGE_PATH
         self.grey_template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
         template_pts = self.fd.detect(self.grey_template)
-        self.template_kp, self.template_desc = self.de.compute(grey_template, self.template_pts)
+        self.template_kp, self.template_desc = self.de.compute(self.grey_template, template_pts)
         
     def compute_fundamental(self, x1,x2): # Not used
         n = x1.shape[1]
@@ -219,6 +219,21 @@ class FeatureTracker:
         
         return F, i1_pts_corr, i2_pts_corr
         
+    def extract_homography(self, i1_pts_undistorted, i2_pts_undistorted):
+        """
+        Extract homography and then remove outliers
+        """
+        H, mask = cv2.findHomography(i1_pts_undistorted, i2_pts_undistorted, cv2.RANSAC)
+        # Expand mask for easy filtering
+        mask_prepped = np.append(mask, mask, 1.)
+        # Efficient np-style filtering, then reform
+        i1_pts_masked = np.reshape(i1_pts_undistorted[0][mask_prepped==1], (-1, 2))
+        i2_pts_masked = np.reshape(i2_pts_undistorted[0][mask_prepped==1], (-1, 2))
+        i1_pts_undistorted = np.array([i1_pts_masked])
+        i2_pts_undistorted = np.array([i2_pts_masked])              
+        
+        return H, i1_pts_undistorted[0], i2_pts_undistorted[0]
+        
     def filter_correct_matches(self, i1_pts_undistorted, i2_pts_undistorted):
         """
         Filter points that fit F using cv2.correctMatches
@@ -351,6 +366,49 @@ class FeatureTracker:
         
         self.cloud_pub.publish(cloud)
         
+    def templateTrack(self, grey_now):
+        """====================================================================
+        Match points with template (reusing previously calculated data)
+        ===================================================================="""
+        t_i1_pts, t_i2_pts = self.match_points(self.template_kp, self.kp2, self.template_desc, self.desc2)
+        if t_i1_pts == None or len(t_i1_pts) < 4:
+            print "No template matches"
+            return
+            
+        
+        
+        """====================================================================
+        Undistort points using known camera calibration
+        ===================================================================="""
+        if self.calibrated:
+            # Undistort points using calibration data
+            t_i1_pts_undistorted = cv2.undistortPoints(np.array([t_i1_pts]), self.cameraMatrix, self.distCoeffs, P=self.P)
+            t_i2_pts_undistorted = cv2.undistortPoints(np.array([t_i2_pts]), self.cameraMatrix, self.distCoeffs, P=self.P)
+        else:
+            print "WARNING: No calibration info. Cannot Continue"
+            return
+            
+        """====================================================================
+        Compute Planar Homography
+        ===================================================================="""
+        H, t_i1_pts_corr, t_i2_pts_corr = self.extract_homography(t_i1_pts_undistorted, t_i2_pts_undistorted)
+        if t_i1_pts_corr == None or len(t_i1_pts_corr) < 4:
+            print "Failed to extract homography"
+            return        
+        
+        img2 = stackImagesVertically(self.grey_template, grey_now)
+        imh = self.grey_template.shape[0]
+        county = 0
+        l = 35
+        for p1, p2 in zip(t_i1_pts_corr, t_i2_pts_corr):
+            print p2[1]
+            county += 1
+            #cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
+            cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
+        #print "No of drawn points : ", county
+        cv2.imshow("template", img2)
+        
+        
     def featureTrack(self, img):
         """Takes a cv2 numpy array image and compared to a previously
         buffered image. Features are extracted from each frame, 
@@ -384,6 +442,8 @@ class FeatureTracker:
             pts1 = self.fd.detect(grey_now)
             self.kp1, self.desc1 = self.de.compute(grey_now, pts1)
             return
+            
+        # Carry out template match
 
         # Swap in artificial data is necessary
         if DEF_SET_DATA:
@@ -400,23 +460,21 @@ class FeatureTracker:
         success, i1_pts, i2_pts = self.find_and_match_points(grey_now)
         if not success:
             return
+            
+        # Carry out template match - Note this is the full procedure call and should really be threaded
+        self.templateTrack(grey_now)
         
         """====================================================================
-        Match points with template
+        Undistort points using known camera calibration
         ===================================================================="""
-        #template_i1_pts, template_i2_pts = self.match_points(self.template.pts, pts2, self.template.kp1, 
-        
         if self.calibrated:
-            # Undistort points using calibration data
-            i1_mat = np.array([i1_pts])
-            i2_mat = np.array([i2_pts])               
-            i1_pts_undistorted = cv2.undistortPoints(i1_mat, self.cameraMatrix, self.distCoeffs, P=self.P) #Do not pass camera P here if working in normalised
-            i2_pts_undistorted = cv2.undistortPoints(i2_mat, self.cameraMatrix, self.distCoeffs, P=self.P)
+            # Undistort points using calibration data    
+            i1_pts_undistorted = cv2.undistortPoints(np.array([i1_pts]), self.cameraMatrix, self.distCoeffs, P=self.P) #Do not pass camera P here if working in normalised
+            i2_pts_undistorted = cv2.undistortPoints(np.array([i2_pts]), self.cameraMatrix, self.distCoeffs, P=self.P)
         else:
             print "WARNING: No calibration info. Cannot Continue"
             return
-            
-            
+        
         """============================================================
         Extract F and filter outliers
         ============================================================"""
@@ -487,7 +545,7 @@ class FeatureTracker:
         ============================================================"""
         self.publish_cloud(points3D1)
 
-        
+        print "final : ", i1_pts_final
         """====================================================================
         # Plot fully tracked points
         # Only that fit with the calculated geometry are plotted
@@ -504,7 +562,6 @@ class FeatureTracker:
         # Example of overlay text (more readable than console)
         #cv2.putText(img2, 'example', (25,25), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255))
         cv2.imshow("track", img2)
-        #print "No of drawn points : ", county
         cv2.waitKey(1)
                 
             
