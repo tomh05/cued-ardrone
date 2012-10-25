@@ -25,6 +25,11 @@
 #
 # The various checks and filters carried out here should allow us to provide
 # a quantified measure of confidence in the result
+#
+# At present template is recalc'ed at every frame. It should really be pre-
+# -calculated once and handled in parallel.
+#
+# Only need to store the keypoints and descriptors (kp# and desc#)
 #==============================================================================
 
 import roslib; roslib.load_manifest('feature_track')
@@ -62,23 +67,25 @@ class FeatureTracker:
     def __init__(self):
         self.roll = 0.
         self.quaternion = tf.transformations.quaternion_from_euler(0.,0.,0., axes='sxyz')
-        self.previous = None
         self.grey_previous = None
         self.frameskip = 0
         self.calibrated = False
         self.fd = cv2.FeatureDetector_create('ORB')
         self.de = cv2.DescriptorExtractor_create('FREAK')
         self.dm = cv2.DescriptorMatcher_create('BruteForce')
-        self.pts1 = None
         self.desc1 = None
         self.kp1 = None
         cv2.namedWindow("track")
         self.cloud_pub = rospy.Publisher('pointCloud', PointCloud)
-    
-    def update_previous(self, thing):
-        """Takes a cv2 numpy array image and sets the FeatureTracker
-        previous image to it"""
-        self.previous = thing
+        #self.preload_template('/home/alex/cued-ardrone/feature_track/nodes/boxTemplate.png')
+        
+    def preload_template(self, path):
+        """Template features and descriptors need only be extracted once, so
+        they are pre-calced here"""
+        template = cv2.imread(path) # This should really use the ROS_PACKAGE_PATH
+        self.grey_template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+        template_pts = self.fd.detect(self.grey_template)
+        self.template_kp, self.template_desc = self.de.compute(grey_template, self.template_pts)
         
     def compute_fundamental(self, x1,x2): # Not used
         n = x1.shape[1]
@@ -139,10 +146,9 @@ class FeatureTracker:
         w = quat1[3]*quat2[3]-np.dot(v1, v2)
         return np.array([x,y,z,w])
         
-    def find_and_match_points(self, img, grey_now):
+    def find_and_match_points(self, grey_now):
         
         # Detect points
-        pts1 = self.pts1
         pts2 = self.fd.detect(grey_now)
         self.pts2 = pts2
 
@@ -153,13 +159,24 @@ class FeatureTracker:
         
         # Bottom out if failed to get features
         if desc1 == None or desc2 == None or len(desc1) == 0 or len(desc2) == 0:
-            self.update_previous(img)
             self.grey_previous = grey_now
-            self.pts1 = pts2
             self.kp1, self.desc1 = kp2, desc2
             print "No Features Found"
             return False, None, None
         
+        # Match points
+        i1_pts, i2_pts = self.match_points(kp1, kp2, desc1, desc2)
+        
+        # Bottom out if failed to get enough matches
+        if len(i1_pts) < 8:
+            self.grey_previous = grey_now
+            self.kp1, self.desc1 = kp2, desc2
+            print "Insufficient matches"
+            return False, None, None
+        
+        return True, i1_pts, i2_pts
+        
+    def match_points(self, kp1, kp2, desc1, desc2):
         # Match features        
         matches = self.dm.match(desc1, desc2)
 
@@ -171,16 +188,7 @@ class FeatureTracker:
         i1_pts = kp1_array[i1_indices,:]
         i2_pts = kp2_array[i2_indices,:]
         
-        # Bottom out if failed to get enough matches
-        if len(i1_pts) < 8:
-            self.update_previous(img)
-            self.grey_previous = grey_now
-            self.pts1 = pts2
-            self.kp1, self.desc1 = kp2, desc2
-            print "Insufficient matches"
-            return False, None, None
-        
-        return True, i1_pts, i2_pts
+        return i1_pts, i2_pts
         
     def extract_fundamental(self, i1_pts_undistorted, i2_pts_undistorted):
         """
@@ -352,12 +360,12 @@ class FeatureTracker:
         points"""
         
         DEF_SET_DATA = False # Switches in fixed data
+        DEF_TEMPLATE_MATCH = True # Switches template match - should be ROS param
         
         
         # Initialise previous image buffer
-        if self.previous == None:
-            self.update_previous(img)
-            self.grey_previous = cv2.cvtColor(self.previous, cv2.COLOR_BGR2GRAY)
+        if self.grey_previous == None:
+            self.grey_previous = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             
 
         # Skip frames. Need to add ROS parameter to allow setting        
@@ -372,9 +380,9 @@ class FeatureTracker:
         grey_now = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         
         # Initialise features and descriptor
-        if self.pts1 == None:
-            self.pts1 = self.fd.detect(grey_now)
-            self.kp1, self.desc1 = self.de.compute(grey_now, self.pts1)
+        if self.kp1 == None:
+            pts1 = self.fd.detect(grey_now)
+            self.kp1, self.desc1 = self.de.compute(grey_now, pts1)
             return
 
         # Swap in artificial data is necessary
@@ -383,17 +391,20 @@ class FeatureTracker:
             img2 = cv2.imread("/home/alex/testData/4.jpg")
             grey_now = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
             grey_previous = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
-            self.pts1 = self.fd.detect(grey_previous)
-            self.kp1, self.desc1 = self.de.compute(grey_previous, self.pts1)
+            pts1 = self.fd.detect(grey_previous)
+            self.kp1, self.desc1 = self.de.compute(grey_previous, pts1)
 
         """====================================================================
         Find matched points in both images
         ===================================================================="""
-        success, i1_pts, i2_pts = self.find_and_match_points(img, grey_now)
+        success, i1_pts, i2_pts = self.find_and_match_points(grey_now)
         if not success:
             return
         
-        
+        """====================================================================
+        Match points with template
+        ===================================================================="""
+        #template_i1_pts, template_i2_pts = self.match_points(self.template.pts, pts2, self.template.kp1, 
         
         if self.calibrated:
             # Undistort points using calibration data
@@ -410,7 +421,11 @@ class FeatureTracker:
         Extract F and filter outliers
         ============================================================"""
         F, i1_pts_corr, i2_pts_corr = self.extract_fundamental(i1_pts_undistorted, i2_pts_undistorted)
-
+        if (i1_pts_corr == None or len(i1_pts_corr) < 1):
+            print "No inliers consistent with F"
+            self.grey_previous = grey_now
+            self.kp1, self.desc1 = self.kp2, self.desc2
+            return
                      
 
         """============================================================
@@ -423,9 +438,7 @@ class FeatureTracker:
             print "===================="
             print "F Error too high"
             print "===================="
-            self.update_previous(img)
             self.grey_previous = grey_now
-            self.pts1 = pts2
             self.kp1, self.desc1 = self.kp2, self.desc2
             return
         
@@ -436,9 +449,7 @@ class FeatureTracker:
         ============================================================"""
         success, P1, P2, i1_pts_corr, i2_pts_corr = self.extract_projections(F, i1_pts_corr, i2_pts_corr)
         if not success: # Bottom out on fail
-            self.update_previous(img)
             self.grey_previous = grey_now
-            self.pts1 = self.pts2
             self.kp1, self.desc1 = self.kp2, self.desc2
             return
         
@@ -500,7 +511,6 @@ class FeatureTracker:
         """====================================================================
         # Update previous image buffer
         ===================================================================="""
-        self.update_previous(img)
         self.grey_previous = grey_now
         self.pts1 = self.pts2
         self.kp1, self.desc1 = self.kp2, self.desc2
