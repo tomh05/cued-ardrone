@@ -447,7 +447,7 @@ class FeatureTracker:
         """============================================================
         # Extract P1 and P2 via E
         ============================================================"""
-        success, P1, P2, i1_pts_corr, i2_pts_corr = self.extract_projections(F, i1_pts_corr, i2_pts_corr)
+        success, P1, P2, i1_pts_final, i2_pts_final = self.extract_projections(F, i1_pts_corr, i2_pts_corr)
         if not success: # Bottom out on fail
             self.grey_previous = grey_now
             self.kp1, self.desc1 = self.kp2, self.desc2
@@ -467,7 +467,7 @@ class FeatureTracker:
         """====================================================================
         # Calculate 3D points
         ===================================================================="""
-        points4D = cv2.triangulatePoints(P1, P2, i1_pts_corr.transpose(), i2_pts_corr.transpose())
+        points4D = cv2.triangulatePoints(P1, P2, i1_pts_final.transpose(), i2_pts_final.transpose())
         # normalise homogenous coords
         points4D /= points4D[3]
         
@@ -497,7 +497,7 @@ class FeatureTracker:
         imh = grey_previous.shape[0]
         county = 0
         l = 35
-        for p1, p2 in zip(i1_pts_corr, i2_pts_corr):
+        for p1, p2 in zip(i1_pts_final, i2_pts_final):
             county += 1
             cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
         cv2.line(img2, (320, 160), (int(320+l*math.cos(angles[2])), int(160+l*math.sin(angles[2]))), (255, 255, 255), 1)
