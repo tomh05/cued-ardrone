@@ -112,7 +112,7 @@ class DeadReckoning:
         self.z = 0 
         #self.z = d.altd / 1000
 
-        '''
+       '''
         # Publish tf
         '''
         br = tf.TransformBroadcaster() #create broadcaster
@@ -124,11 +124,13 @@ class DeadReckoning:
                          "world")
 
         '''
-        # Publish Path
+        # Publish path visualisation data
         '''
 
         self.trackPath.header        = d.header
 
+        # copy headers over from Navdata
+        self.trackPath.header        = d.header
         newPose = PoseStamped()
         newPose.header               = d.header
         newPose.header.frame_id      = 'world'
@@ -137,10 +139,14 @@ class DeadReckoning:
         newPose.pose.position.y      = self.y
         newPose.pose.position.z      = self.z
         newPose.pose.orientation.x   = self.alpha  
+        newPose.pose.orientation.y   = self.beta  
+        newPose.pose.orientation.z   = self.gamma
+        
         self.trackPath.poses.append(newPose)
-        #print newPose
+
         pathPub = rospy.Publisher('deadreckon_path',Path)
         pathPub.publish(self.trackPath)
+
 
 if __name__ == '__main__':
     dead_reckon = DeadReckoning() # Initialise class to preserve vars
