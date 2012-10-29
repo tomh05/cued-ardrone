@@ -17,6 +17,10 @@ class DeadReckoning:
         self.z = 0.0 # z location in world
         self.prevtime = None # time (float secs) of prev frame
         self.v_buffer = [] # buffer of last 10 frames [d.vx, d.vy]
+        self.prev_vx_rot = 0. # previous x vel for trapezium rule
+        self.prev_vy_rot = 0. # previous y vel for trapezium rule
+        self.init_vx_rot = None # initial x vel for trapezium rule
+        self.init_vy_rot = None # initial y vel for trapezium rule
         self.rotZoffset = 0 # initial value of yaw to allow for offsets
         self.trackPath = Path()
 
@@ -25,6 +29,10 @@ class DeadReckoning:
         self.x = 0.0 # x location in world
         self.y = 0.0 # y location in world
         self.z = 0.0 # z location in world
+        self.prev_vx_rot = 0. # previous x vel for trapezium rule
+        self.prev_vy_rot = 0. # previous y vel for trapezium rule
+        self.init_vx_rot = None # initial x vel for trapezium rule
+        self.init_vy_rot = None # initial y vel for trapezium rule
         self.rotZoffset = self.gamma 
         self.trackPath = Path()
 
@@ -75,10 +83,10 @@ class DeadReckoning:
         if self.prevtime == None:
             self.reset(self)
             self.prevtime = time
-        deltat = time - self.prevtime
+        deltat = (time - self.prevtime).to_sec()
         self.prevtime = time
         # if playing rosbags and time jumps backwards, we want to reset
-        if (deltat.to_sec() < -1.0): 
+        if (deltat < -1.0): 
             self.reset(self)
  
         
@@ -105,14 +113,38 @@ class DeadReckoning:
         corr_angle = self.gamma - self.rotZoffset 
         vx_rot = math.cos(corr_angle)*vx - math.sin(corr_angle)*vy
         vy_rot = math.sin(corr_angle)*vx + math.cos(corr_angle)*vy
-        self.x += vx_rot*deltat.to_sec() / 1000
-        self.y += vy_rot*deltat.to_sec() / 1000
+        
+        
+        '''
+        # Trapezium rule iterative implementation
+        # I(n+1) = I(n) + (h/2)(y(n)+y(n+1))
+        #
+        # This is going to make ~no difference to overall
+        # Do not bother using
+        '''
+        if (self.init_vx_rot == None):
+            init_vx_rot = vx_rot
+            init_vy_rot = vy_rot
+            self.x += vx_rot*deltat / 1000
+            self.y += vy_rot*deltat / 1000
+        else:
+            self.x = (deltat/2000)(self.x+self.prev_vx_rot+vx_rot) 
+            self.y = (deltat/2000)(self.y+self.prev_vy_rot+vy_rot)
+            self.prev_vx_rot = vx_rot
+            self.prev_vy_rot = vy_rot
+        
+        
+        '''
+        # Summation
+        '''
+        #self.x += vx_rot*deltat / 1000
+        #self.y += vy_rot*deltat / 1000
 
         # doesn't set altitude nicely at moment, so leave at zero
         self.z = 0 
         #self.z = d.altd / 1000
 
-       '''
+        '''
         # Publish tf
         '''
         br = tf.TransformBroadcaster() #create broadcaster
