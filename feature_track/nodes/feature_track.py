@@ -71,7 +71,7 @@ class FeatureTracker:
         self.frameskip = 0
         self.calibrated = False
         self.fd = cv2.FeatureDetector_create('ORB')
-        self.de = cv2.DescriptorExtractor_create('FREAK')
+        self.de = cv2.DescriptorExtractor_create('ORB')
         self.dm = cv2.DescriptorMatcher_create('BruteForce')
         self.desc1 = None
         self.kp1 = None
@@ -418,7 +418,7 @@ class FeatureTracker:
         points"""
         
         DEF_SET_DATA = False # Switches in fixed data
-        DEF_TEMPLATE_MATCH = True # Switches template match - should be ROS param
+        DEF_TEMPLATE_MATCH = False # Switches template match - should be ROS param
         
         
         # Initialise previous image buffer
@@ -460,9 +460,10 @@ class FeatureTracker:
         success, i1_pts, i2_pts = self.find_and_match_points(grey_now)
         if not success:
             return
-            
-        # Carry out template match - Note this is the full procedure call and should really be threaded
-        self.templateTrack(grey_now)
+        
+        if DEF_TEMPLATE_MATCH:    
+            # Carry out template match - Note this is the full procedure call and should really be threaded
+            self.templateTrack(grey_now)
         
         """====================================================================
         Undistort points using known camera calibration
