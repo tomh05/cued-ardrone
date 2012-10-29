@@ -56,8 +56,8 @@ class DeadReckoning:
             self.v_buffer.append([d.vx, d.vy])
             vx = np.median(zip(*self.v_buffer)[0])
             vy = np.median(zip(*self.v_buffer)[1])
-        vx = d.vx 
-        vy = d.vy 
+        #vx = d.vx 
+        #vy = d.vy 
         #print str(d.vx) + "," + str(d.vy) + "," + str(d.vz)
         
         
@@ -114,7 +114,7 @@ class DeadReckoning:
         vx_rot = math.cos(corr_angle)*vx - math.sin(corr_angle)*vy
         vy_rot = math.sin(corr_angle)*vx + math.cos(corr_angle)*vy
         
-        
+        """
         '''
         # Trapezium rule iterative implementation
         # I(n+1) = I(n) + (h/2)(y(n)+y(n+1))
@@ -132,13 +132,13 @@ class DeadReckoning:
             self.y = (deltat/2000)(self.y+self.prev_vy_rot+vy_rot)
             self.prev_vx_rot = vx_rot
             self.prev_vy_rot = vy_rot
-        
+        """
         
         '''
         # Summation
         '''
-        #self.x += vx_rot*deltat / 1000
-        #self.y += vy_rot*deltat / 1000
+        self.x += vx_rot*deltat / 1000
+        self.y += vy_rot*deltat / 1000
 
         # doesn't set altitude nicely at moment, so leave at zero
         self.z = 0 
