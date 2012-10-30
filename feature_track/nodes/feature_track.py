@@ -9,9 +9,6 @@
 # The various checks and filters carried out here should allow us to provide
 # a quantified measure of confidence in the result
 #
-# At present template is recalc'ed at every frame. It should really be pre-
-# -calculated once and handled in parallel.
-#
 # Only need to store the keypoints and descriptors (kp# and desc#)
 #==============================================================================
 
@@ -176,18 +173,23 @@ class FeatureTracker:
         
         return i1_pts, i2_pts
         
+    def make_homo(self, pts):
+        pts = np.append(pts,np.array([np.ones(pts.shape[0])]).T, 1)
+        return pts
+        
+        
     def extract_fundamental(self, i1_pts_undistorted, i2_pts_undistorted):
         """
         Extract fundamental matrix and then remove outliers
         FM_RANSAC should be good with lowish outliers
         FM_LMEDS may be more robust in some cases
         """
-        F, mask = cv2.findFundamentalMat(i1_pts_undistorted, i2_pts_undistorted, cv2.FM_RANSAC, param1 = 1., param2 = 0.99)
+        F, mask = cv2.findFundamentalMat(i1_pts_undistorted, i2_pts_undistorted, cv2.FM_RANSAC, param1 = 1, param2 = 0.99)
         # Expand mask for easy filtering
         mask_prepped = np.append(mask, mask, 1.)
         # Efficient np-style filtering, then reform
-        i1_pts_masked = np.reshape(i1_pts_undistorted[0][mask_prepped==1], (-1, 2))
-        i2_pts_masked = np.reshape(i2_pts_undistorted[0][mask_prepped==1], (-1, 2))
+        i1_pts_masked = np.reshape(i1_pts_undistorted[mask_prepped==1], (-1, 2))
+        i2_pts_masked = np.reshape(i2_pts_undistorted[mask_prepped==1], (-1, 2))
         i1_pts_undistorted = np.array([i1_pts_masked])
         i2_pts_undistorted = np.array([i2_pts_masked])
         
@@ -240,9 +242,11 @@ class FeatureTracker:
         Isolates best P2 by projecting data points
         Filters out conflicting points
         """
+        
         # Camera Matrices to extract essential matrix and then normalise
         E = self.cameraMatrix.transpose().dot(F.dot(self.cameraMatrix))
         E /= E[2,2]
+        #print "E", E
         
         W = np.array([[0, -1, 0],[1, 0, 0], [0, 0, 1]])
         Z = np.array([[0, 1, 0],[-1, 0, 0], [0, 0, 0]])
@@ -299,7 +303,7 @@ class FeatureTracker:
             PI = sum((d1>0) & (d2>0))
             print "Performance index ", i, " : ", PI
             if PI > maxfit:
-                maxfit = sum((d1>0) & (d2>0))
+                maxfit = PI
                 ind = i
                 infront = (d1>0) & (d2>0)
         if (maxfit == 0):
@@ -307,6 +311,9 @@ class FeatureTracker:
             print "P2 not extracted"
             print "==================================================="
             return False, None, None, None, None
+        
+        
+        print projections[ind]
         
         # Filter points
         infront = np.array([infront]).transpose()
@@ -364,6 +371,39 @@ class FeatureTracker:
             cloud.points[i].z = p[2]
         
         self.cloud_pub.publish(cloud)
+    
+    def cube_points(self,c,wid):
+        """ Creates a list of points for plotting
+        a cube with plot. (the first 5 points are
+        the bottom square, some sides repeated). """
+        p = []
+        #bottom
+        p.append([c[0]-wid,c[1]-wid,c[2]-wid])
+        p.append([c[0]-wid,c[1]+wid,c[2]-wid])
+        p.append([c[0]+wid,c[1]+wid,c[2]-wid])
+        p.append([c[0]+wid,c[1]-wid,c[2]-wid])
+        p.append([c[0]-wid,c[1]-wid,c[2]-wid]) #same as first to close plot
+        #top
+        p.append([c[0]-wid,c[1]-wid,c[2]+wid])
+        p.append([c[0]-wid,c[1]+wid,c[2]+wid])
+        p.append([c[0]+wid,c[1]+wid,c[2]+wid])
+        p.append([c[0]+wid,c[1]-wid,c[2]+wid])
+        p.append([c[0]-wid,c[1]-wid,c[2]+wid]) #same as first to close plot
+        #vertical sides
+        p.append([c[0]-wid,c[1]-wid,c[2]+wid])
+        p.append([c[0]-wid,c[1]+wid,c[2]+wid])
+        p.append([c[0]-wid,c[1]+wid,c[2]-wid])
+        p.append([c[0]+wid,c[1]+wid,c[2]-wid])
+        p.append([c[0]+wid,c[1]+wid,c[2]+wid])
+        p.append([c[0]+wid,c[1]-wid,c[2]+wid])
+        p.append([c[0]+wid,c[1]-wid,c[2]-wid])
+        return np.array(p).T
+
+    def make_homog(self, points):
+        """ Convert a set of points (dim*n array) to
+        homogeneous coordinates. """
+        return np.vstack((points,np.ones((1,points.shape[1]))))
+
         
     def templateTrack(self, grey_now):
         """====================================================================
@@ -395,6 +435,33 @@ class FeatureTracker:
             print "Failed to extract homography"
             return        
         
+        
+        
+        
+        
+        # Get the corners from the image_1 ( the object to be "detected" )
+        
+             
+        corners = np.array([[[0,0],
+                           [self.grey_template.shape[1], 0],
+                           [self.grey_template.shape[1], self.grey_template.shape[0]],
+                           [0, self.grey_template.shape[0]]]], dtype=np.float32)
+                           
+        print corners
+        c = cv2.perspectiveTransform(corners, H)[0]
+                           
+        print c
+        img3 = grey_now.copy()
+        cv2.line(img3,(int(c[0,0]), int(c[0,1])), (int(c[1,0]), int(c[1,1])), (0, 255 , 255), 2)
+        cv2.line(img3,(int(c[1,0]), int(c[1,1])), (int(c[2,0]), int(c[2,1])), (0, 255 , 255), 2)
+        cv2.line(img3,(int(c[2,0]), int(c[2,1])), (int(c[3,0]), int(c[3,1])), (0, 255 , 255), 2)
+        cv2.line(img3,(int(c[3,0]), int(c[3,1])), (int(c[0,0]), int(c[0,1])), (0, 255 , 255), 2)
+        cv2.imshow("warp", img3)
+        
+        
+        
+        
+        
         img2 = stackImagesVertically(self.grey_template, grey_now)
         imh = self.grey_template.shape[0]
         county = 0
@@ -404,8 +471,68 @@ class FeatureTracker:
             county += 1
             #cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
             cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
+            cv2.imshow("template", img2)
         #print "No of drawn points : ", county
+        
+        
+        
+        '''
+        # 3D points at plane z=0 with sides of length 0.2
+        box = self.cube_points([0,0,0.1],0.1)
+        # project bottom square in first image
+        P = np.append(self.cameraMatrix, self.cameraMatrix.dot(np.array([[0],[0],[-1]])), 1)
+        # first points are the bottom square
+        print P.shape
+        print self.make_homog(box[:, :5]).shape
+        box_cam1 = P.dot(self.make_homog(box[:, :5]))
+        for i in range(3):
+            box_cam1[i] /= box_cam1[2]
+        # use H to transfer points to the second image
+        #box_trans = homography.normalize(dot(H,box_cam1))
+        box_trans = H.dot(box_cam1)
+        # compute second camera matrix from cam1 and H
+        P2 = H.dot(P)
+        A = np.linalg.inv(self.cameraMatrix).dot(P2[:,:3])
+        A = np.array([A[:,0],A[:,1],np.cross(A[:,0],A[:,1])]).T
+        P2[:,:3] = self.cameraMatrix.dot(A)
+        # project with the second camera
+        box_cam2 = P2.dot(self.make_homog(box))
+        for i in range(3):
+            box_cam2[i] /= box_cam2[2]
+        # test: projecting point on z=0 should give the same
+        point = np.array([1,1,0,1]).T
+        #print homography.normalize(dot(dot(H,cam1.P),point))
+        #print cam2.project(point)
+
+        c1 = box_cam2
+        
+        print c1[1,0]
+        #county += 1
+        imw = grey_now.shape[1]
+        cv2.line(img2,(int(c1[0,0]-imw/4), int(c1[1,0])+imh), (int(c1[0,1]-imw/4), int(c1[1,1])+imh), (255, 255 , 255), 3)
+        cv2.line(img2,(int(c1[0,1]-imw/4), int(c1[1,1])+imh), (int(c1[0,2]-imw/4), int(c1[1,2])+imh), (255, 255 , 255), 3)
+        cv2.line(img2,(int(c1[0,2]-imw/4), int(c1[1,2])+imh), (int(c1[0,3]-imw/4), int(c1[1,3])+imh), (255, 255 , 255), 3)
+        cv2.line(img2,(int(c1[0,3]-imw/4), int(c1[1,3])+imh), (int(c1[0,4]-imw/4), int(c1[1,4])+imh), (255, 255 , 255), 3)
         cv2.imshow("template", img2)
+        
+        print box_cam1
+        
+        # 2D projection of bottom square
+        figure()
+        imshow(im0)
+        plot(box_cam1[0,:],box_cam1[1,:],linewidth=3)
+        # 2D projection transferred with H
+        figure()
+        imshow(im1)
+        plot(box_trans[0,:],box_trans[1,:],linewidth=3)
+        # 3D cube
+        figure()
+        imshow(im1)
+        plot(box_cam2[0,:],box_cam2[1,:],linewidth=3)
+        show()
+        '''
+
+
         
         
     def featureTrack(self, img):
@@ -417,7 +544,7 @@ class FeatureTracker:
         points"""
         
         DEF_SET_DATA = False # Switches in fixed data
-        DEF_TEMPLATE_MATCH = False # Switches template match - should be ROS param
+        DEF_TEMPLATE_MATCH = True # Switches template match - should be ROS param
         
         # Initialise previous image buffer
         if self.grey_previous == None:
@@ -426,7 +553,7 @@ class FeatureTracker:
 
         # Skip frames. Need to add ROS parameter to allow setting        
         self.frameskip += 1
-        if self.frameskip < 5:
+        if self.frameskip < 3:
             return            
         self.frameskip = 0
         
@@ -463,6 +590,7 @@ class FeatureTracker:
         success, i1_pts, i2_pts = self.find_and_match_points(grey_now)
         if not success:
             return
+        print "No of matched points : ", len(i1_pts)
         
         if DEF_TEMPLATE_MATCH:    
             # Carry out template match - Note this is the full procedure call and should really be threaded
@@ -473,28 +601,42 @@ class FeatureTracker:
         ==================================================================="""
         if self.calibrated:
             # Undistort points using calibration data    
-            i1_pts_undistorted = cv2.undistortPoints(np.array([i1_pts]), self.cameraMatrix, self.distCoeffs, P=self.P) #Do not pass camera P here if working in normalised
-            i2_pts_undistorted = cv2.undistortPoints(np.array([i2_pts]), self.cameraMatrix, self.distCoeffs, P=self.P)
+            i1_pts_undistorted = cv2.undistortPoints(np.array([i1_pts]), self.cameraMatrix, self.distCoeffs, P=self.P)[0]
+            i2_pts_undistorted = cv2.undistortPoints(np.array([i2_pts]), self.cameraMatrix, self.distCoeffs, P=self.P)[0]
         else:
             print "WARNING: No calibration info. Cannot Continue"
             return
+            
+        '''
+        """====================================================================
+        Normalise with inverse K, this means computing F gives E
+        This should avoid numerical problems in determining F
+        ===================================================================="""
+        i1_pts_norm = self.make_homo(i1_pts_undistorted[0])
+        i2_pts_norm = self.make_homo(i2_pts_undistorted[0])
+        i1_pts_norm = self.inverseCameraMatrix.dot(i1_pts_norm.T)[:2].T
+        i2_pts_norm = self.inverseCameraMatrix.dot(i2_pts_norm.T)[:2].T
+        print "No of undistorted points : ", len(i1_pts_norm)
+        #print self.cameraMatrix.dot(i1_pts_norm)[:2].T
+        '''
         
         """============================================================
         Extract F and filter outliers
         ============================================================"""
-        F, i1_pts_corr, i2_pts_corr = self.extract_fundamental(i1_pts_undistorted, i2_pts_undistorted)
+        E, i1_pts_corr, i2_pts_corr = self.extract_fundamental(i1_pts_undistorted, i2_pts_undistorted)
         if (i1_pts_corr == None or len(i1_pts_corr) < 1):
             print "No inliers consistent with F"
             self.grey_previous = grey_now
             self.kp1, self.desc1 = self.kp2, self.desc2
             return
+        print "No of corrected points : ", len(i1_pts_corr)
                      
 
         """============================================================
         # Examine quality of F
         # Reject if error is too high and go to next frame
         ============================================================"""   
-        avg_error = self.compute_F_error(F, i1_pts_corr.transpose(), i2_pts_corr.transpose())
+        avg_error = self.compute_F_error(E, i1_pts_corr.transpose(), i2_pts_corr.transpose())        
         print "Avg F error : ", avg_error
         if (abs(avg_error)>1): # Bottom out on high error
             print "===================="
@@ -509,11 +651,12 @@ class FeatureTracker:
         """============================================================
         # Extract P1 and P2 via E
         ============================================================"""
-        success, P1, P2, i1_pts_final, i2_pts_final = self.extract_projections(F, i1_pts_corr, i2_pts_corr)
+        success, P1, P2, i1_pts_final, i2_pts_final = self.extract_projections(E, i1_pts_corr, i2_pts_corr)
         if not success: # Bottom out on fail
             self.grey_previous = grey_now
             self.kp1, self.desc1 = self.kp2, self.desc2
             return
+        #print "No of projected points : ", len(i1_pts_final)
         
         R = P2[:,:3]
         #print "Rotation Matrix : ", R
@@ -536,9 +679,19 @@ class FeatureTracker:
         
         # From camera one frame of ref
         X1 = P1.dot(points4D)
-        
+        med1 = 4*np.median(X1[2])
         # From camera two frame of ref
         X2 = P2.dot(points4D)
+        med2 = 4*np.median(X2[2])
+        
+        # Remove unrealistically far back points
+        reasonable = (X1[2]<med1) & (X2[2]<med2)
+        reasonable = np.array([reasonable]).transpose()
+        reasonable = np.append(reasonable, reasonable, 1)
+        i1_pts_final = np.reshape(i1_pts_corr[reasonable==True], (-1, 2))
+        i2_pts_final = np.reshape(i2_pts_corr[reasonable==True], (-1, 2))
+        
+        
         
         # Reform
         points3D1 = zip(*X1)
@@ -548,11 +701,22 @@ class FeatureTracker:
         """============================================================
         # Publish point cloud
         ============================================================"""
-        self.cloud_from_navdata(i1_pts_final, i2_pts_final)
-        #self.publish_cloud(points3D1)
+        #self.cloud_from_navdata(i1_pts_final, i2_pts_final)
+        self.publish_cloud(points3D1)
         
 
         #print "final : ", i1_pts_final
+        
+        '''
+        """====================================================================
+        # Convert back to pixel co-ords
+        ===================================================================="""
+        i1_pts_pixel = self.make_homo(i1_pts_final)
+        i2_pts_pixel = self.make_homo(i2_pts_final)
+        i1_pts_pixel = self.cameraMatrix.dot(i1_pts_pixel.T)[:2].transpose()
+        i2_pts_pixel = self.cameraMatrix.dot(i2_pts_pixel.T)[:2].transpose()
+        '''
+        
         """====================================================================
         # Plot fully tracked points
         # Only that fit with the calculated geometry are plotted
@@ -618,7 +782,8 @@ class FeatureTracker:
             self.relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.prev_quat), self.world_to_drone_quaternion)
         self.prev_position = position
         self.prev_quat = self.world_to_drone_quaternion
-        
+    
+    '''    
     def cloud_from_navdata(self, i1_pts_final, i2_pts_final):
         """Produces P1 and P2 from deadreckon data"""
         # Use camera1 as origin viewpoint
@@ -649,6 +814,7 @@ class FeatureTracker:
         # Publish point cloud
         ============================================================"""
         self.publish_cloud(points3D1)
+    '''
         
         
         
@@ -673,6 +839,7 @@ class FeatureTracker:
             if len(ci.D) == 0:
                 return
             self.cameraMatrix =  np.array([[ci.K[0], ci.K[1], ci.K[2]], [ci.K[3], ci.K[4], ci.K[5]], [ci.K[6], ci.K[7], ci.K[8]]], dtype=np.float32)
+            self.inverseCameraMatrix = np.linalg.inv(self.cameraMatrix)
             self.distCoeffs = np.array([ci.D], dtype=np.float32)
             self.P = np.array([ci.P[:4],ci.P[4:8],ci.P[8:12]])
             self.calibrated = True    
