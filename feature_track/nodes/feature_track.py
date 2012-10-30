@@ -160,12 +160,27 @@ class FeatureTracker:
         return True, i1_pts, i2_pts
         
     def match_points(self, kp1, kp2, desc1, desc2):
+        """Matches the two points. There appears to be no wat to specify match
+        paramaters from python, so crossCheck is implemented manually"""
         # Match features        
         matches = self.dm.match(desc1, desc2)
+        matches2 = self.dm.match(desc2, desc1)
 
         # Produce ordered arrays of paired points
         i1_indices = list(x.queryIdx for x in matches)
         i2_indices = list(x.trainIdx for x in matches)
+        
+        '''
+        i2_indices2 = list(x.queryIdx for x in matches2) 
+        i1_indices2 = list(x.trainIdx for x in matches2)
+        
+        
+        # Find pairing that are consistent in both dirs
+        comb1 = set(zip(i1_indices, i2_indices))
+        comb2 = set(zip(i1_indices2, i2_indices2))
+        comb = comb1.intersection(comb2)
+        '''
+        
         kp1_array = np.array(list(x.pt for x in kp1))
         kp2_array = np.array(list(x.pt for x in kp2))
         i1_pts = kp1_array[i1_indices,:]
@@ -371,38 +386,6 @@ class FeatureTracker:
             cloud.points[i].z = p[2]
         
         self.cloud_pub.publish(cloud)
-    
-    def cube_points(self,c,wid):
-        """ Creates a list of points for plotting
-        a cube with plot. (the first 5 points are
-        the bottom square, some sides repeated). """
-        p = []
-        #bottom
-        p.append([c[0]-wid,c[1]-wid,c[2]-wid])
-        p.append([c[0]-wid,c[1]+wid,c[2]-wid])
-        p.append([c[0]+wid,c[1]+wid,c[2]-wid])
-        p.append([c[0]+wid,c[1]-wid,c[2]-wid])
-        p.append([c[0]-wid,c[1]-wid,c[2]-wid]) #same as first to close plot
-        #top
-        p.append([c[0]-wid,c[1]-wid,c[2]+wid])
-        p.append([c[0]-wid,c[1]+wid,c[2]+wid])
-        p.append([c[0]+wid,c[1]+wid,c[2]+wid])
-        p.append([c[0]+wid,c[1]-wid,c[2]+wid])
-        p.append([c[0]-wid,c[1]-wid,c[2]+wid]) #same as first to close plot
-        #vertical sides
-        p.append([c[0]-wid,c[1]-wid,c[2]+wid])
-        p.append([c[0]-wid,c[1]+wid,c[2]+wid])
-        p.append([c[0]-wid,c[1]+wid,c[2]-wid])
-        p.append([c[0]+wid,c[1]+wid,c[2]-wid])
-        p.append([c[0]+wid,c[1]+wid,c[2]+wid])
-        p.append([c[0]+wid,c[1]-wid,c[2]+wid])
-        p.append([c[0]+wid,c[1]-wid,c[2]-wid])
-        return np.array(p).T
-
-    def make_homog(self, points):
-        """ Convert a set of points (dim*n array) to
-        homogeneous coordinates. """
-        return np.vstack((points,np.ones((1,points.shape[1]))))
 
         
     def templateTrack(self, grey_now):
@@ -439,31 +422,64 @@ class FeatureTracker:
         
         
         
-        # Get the corners from the image_1 ( the object to be "detected" )
+        """====================================================================
+        Plot extracted perspective projection
+        ===================================================================="""
         
-             
+        # The corners of the template
         corners = np.array([[[0,0],
                            [self.grey_template.shape[1], 0],
                            [self.grey_template.shape[1], self.grey_template.shape[0]],
                            [0, self.grey_template.shape[0]]]], dtype=np.float32)
                            
-        print corners
+        
+        # Transform to actual view
         c = cv2.perspectiveTransform(corners, H)[0]
                            
-        print c
-        img3 = grey_now.copy()
-        cv2.line(img3,(int(c[0,0]), int(c[0,1])), (int(c[1,0]), int(c[1,1])), (0, 255 , 255), 2)
-        cv2.line(img3,(int(c[1,0]), int(c[1,1])), (int(c[2,0]), int(c[2,1])), (0, 255 , 255), 2)
-        cv2.line(img3,(int(c[2,0]), int(c[2,1])), (int(c[3,0]), int(c[3,1])), (0, 255 , 255), 2)
-        cv2.line(img3,(int(c[3,0]), int(c[3,1])), (int(c[0,0]), int(c[0,1])), (0, 255 , 255), 2)
-        cv2.imshow("warp", img3)
-        
-        
-        
-        
-        
+        # Draw perspective projection
         img2 = stackImagesVertically(self.grey_template, grey_now)
         imh = self.grey_template.shape[0]
+        cv2.line(img2,(int(c[0,0]), int(c[0,1])+imh), (int(c[1,0]), int(c[1,1])+imh), (0, 255 , 255), 2)
+        cv2.line(img2,(int(c[1,0]), int(c[1,1])+imh), (int(c[2,0]), int(c[2,1])+imh), (0, 255 , 255), 2)
+        cv2.line(img2,(int(c[2,0]), int(c[2,1])+imh), (int(c[3,0]), int(c[3,1])+imh), (0, 255 , 255), 2)
+        cv2.line(img2,(int(c[3,0]), int(c[3,1])+imh), (int(c[0,0]), int(c[0,1])+imh), (0, 255 , 255), 2)
+        
+        
+        fx = self.cameraMatrix[0,0]/grey_now.shape[1]
+        fy = self.cameraMatrix[1,1]/grey_now.shape[0]
+        print fx, fy
+        
+        
+        w1 = (c[1]+c[2])/2
+        w2 = (c[3]+c[0])/2
+        wx,wy = w1-w2
+        wdx = fx/wx
+        wdy = fy/wy
+        wd = 0.57*np.sqrt(wdx**2 + wdy**2)
+        
+        h1 = (c[0]+c[1])/2
+        h2 = (c[2]+c[3])/2
+        hx,hy = h1-h2
+        hdx = fx/hx
+        hdy = fy/hy
+        hd = 0.57*np.sqrt(hdx**2 + hdy**2)
+        print "dists : ", hd, ", ", wd
+        
+        distance = (hd+wd)/2
+        
+        cv2.putText(img2, str(distance), (25,imh+25), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255))
+        
+        
+        
+        
+        
+        
+        
+        """====================================================================
+        Draw Matches
+        ===================================================================="""
+        
+        
         county = 0
         l = 35
         for p1, p2 in zip(t_i1_pts_corr, t_i2_pts_corr):
@@ -473,64 +489,6 @@ class FeatureTracker:
             cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
             cv2.imshow("template", img2)
         #print "No of drawn points : ", county
-        
-        
-        
-        '''
-        # 3D points at plane z=0 with sides of length 0.2
-        box = self.cube_points([0,0,0.1],0.1)
-        # project bottom square in first image
-        P = np.append(self.cameraMatrix, self.cameraMatrix.dot(np.array([[0],[0],[-1]])), 1)
-        # first points are the bottom square
-        print P.shape
-        print self.make_homog(box[:, :5]).shape
-        box_cam1 = P.dot(self.make_homog(box[:, :5]))
-        for i in range(3):
-            box_cam1[i] /= box_cam1[2]
-        # use H to transfer points to the second image
-        #box_trans = homography.normalize(dot(H,box_cam1))
-        box_trans = H.dot(box_cam1)
-        # compute second camera matrix from cam1 and H
-        P2 = H.dot(P)
-        A = np.linalg.inv(self.cameraMatrix).dot(P2[:,:3])
-        A = np.array([A[:,0],A[:,1],np.cross(A[:,0],A[:,1])]).T
-        P2[:,:3] = self.cameraMatrix.dot(A)
-        # project with the second camera
-        box_cam2 = P2.dot(self.make_homog(box))
-        for i in range(3):
-            box_cam2[i] /= box_cam2[2]
-        # test: projecting point on z=0 should give the same
-        point = np.array([1,1,0,1]).T
-        #print homography.normalize(dot(dot(H,cam1.P),point))
-        #print cam2.project(point)
-
-        c1 = box_cam2
-        
-        print c1[1,0]
-        #county += 1
-        imw = grey_now.shape[1]
-        cv2.line(img2,(int(c1[0,0]-imw/4), int(c1[1,0])+imh), (int(c1[0,1]-imw/4), int(c1[1,1])+imh), (255, 255 , 255), 3)
-        cv2.line(img2,(int(c1[0,1]-imw/4), int(c1[1,1])+imh), (int(c1[0,2]-imw/4), int(c1[1,2])+imh), (255, 255 , 255), 3)
-        cv2.line(img2,(int(c1[0,2]-imw/4), int(c1[1,2])+imh), (int(c1[0,3]-imw/4), int(c1[1,3])+imh), (255, 255 , 255), 3)
-        cv2.line(img2,(int(c1[0,3]-imw/4), int(c1[1,3])+imh), (int(c1[0,4]-imw/4), int(c1[1,4])+imh), (255, 255 , 255), 3)
-        cv2.imshow("template", img2)
-        
-        print box_cam1
-        
-        # 2D projection of bottom square
-        figure()
-        imshow(im0)
-        plot(box_cam1[0,:],box_cam1[1,:],linewidth=3)
-        # 2D projection transferred with H
-        figure()
-        imshow(im1)
-        plot(box_trans[0,:],box_trans[1,:],linewidth=3)
-        # 3D cube
-        figure()
-        imshow(im1)
-        plot(box_cam2[0,:],box_cam2[1,:],linewidth=3)
-        show()
-        '''
 
 
         
@@ -590,7 +548,7 @@ class FeatureTracker:
         success, i1_pts, i2_pts = self.find_and_match_points(grey_now)
         if not success:
             return
-        print "No of matched points : ", len(i1_pts)
+        #print "No of matched points : ", len(i1_pts)
         
         if DEF_TEMPLATE_MATCH:    
             # Carry out template match - Note this is the full procedure call and should really be threaded
