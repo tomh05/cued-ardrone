@@ -411,6 +411,10 @@ class FeatureTracker:
             print "WARNING: No calibration info. Cannot Continue"
             return
             
+        t_i1_pts_undistorted = np.array([t_i1_pts,])
+        t_i2_pts_undistorted = np.array([t_i2_pts,])
+        
+            
         """====================================================================
         Compute Planar Homography
         ===================================================================="""
@@ -440,39 +444,23 @@ class FeatureTracker:
         # Draw perspective projection
         img2 = stackImagesVertically(self.grey_template, grey_now)
         imh = self.grey_template.shape[0]
-        cv2.line(img2,(int(c[0,0]), int(c[0,1])+imh), (int(c[1,0]), int(c[1,1])+imh), (0, 255 , 255), 2)
-        cv2.line(img2,(int(c[1,0]), int(c[1,1])+imh), (int(c[2,0]), int(c[2,1])+imh), (0, 255 , 255), 2)
-        cv2.line(img2,(int(c[2,0]), int(c[2,1])+imh), (int(c[3,0]), int(c[3,1])+imh), (0, 255 , 255), 2)
-        cv2.line(img2,(int(c[3,0]), int(c[3,1])+imh), (int(c[0,0]), int(c[0,1])+imh), (0, 255 , 255), 2)
+        cv2.line(img2,(int(c[0,0]), int(c[0,1])+imh), (int(c[1,0]), int(c[1,1])+imh), (255, 255 , 255), 2)
+        cv2.line(img2,(int(c[1,0]), int(c[1,1])+imh), (int(c[2,0]), int(c[2,1])+imh), (255, 255 , 255), 2)
+        cv2.line(img2,(int(c[2,0]), int(c[2,1])+imh), (int(c[3,0]), int(c[3,1])+imh), (255, 255 , 255), 2)
+        cv2.line(img2,(int(c[3,0]), int(c[3,1])+imh), (int(c[0,0]), int(c[0,1])+imh), (255, 255 , 255), 2)
         
+        t_x = 0.57*((t_i1_pts_undistorted.T[0]/self.grey_template.shape[1])-0.5)
+        t_y = 0.57*((t_i1_pts_undistorted.T[1]/self.grey_template.shape[0])-0.5)
+        t_z = np.zeros(t_x.shape)
+        t_i1_pts_scaled = np.array(np.hstack((t_x, t_y, t_z)), dtype=np.float32)
+
         
-        fx = self.cameraMatrix[0,0]/grey_now.shape[1]
-        fy = self.cameraMatrix[1,1]/grey_now.shape[0]
-        print fx, fy
+        R, t, inliers = cv2.solvePnPRansac(t_i1_pts_scaled, np.array(t_i2_pts, dtype=np.float32), self.cameraMatrix, self.distCoeffs)
+        print R, t
         
+        mag_dist_text = str(np.sqrt(t.T.dot(t)))
         
-        w1 = (c[1]+c[2])/2
-        w2 = (c[3]+c[0])/2
-        wx,wy = w1-w2
-        wdx = fx/wx
-        wdy = fy/wy
-        wd = 0.57*np.sqrt(wdx**2 + wdy**2)
-        
-        h1 = (c[0]+c[1])/2
-        h2 = (c[2]+c[3])/2
-        hx,hy = h1-h2
-        hdx = fx/hx
-        hdy = fy/hy
-        hd = 0.57*np.sqrt(hdx**2 + hdy**2)
-        print "dists : ", hd, ", ", wd
-        
-        distance = (hd+wd)/2
-        
-        cv2.putText(img2, str(distance), (25,imh+25), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255))
-        
-        
-        
-        
+        cv2.putText(img2, mag_dist_text, (25,imh+25), cv2.FONT_HERSHEY_PLAIN, 1, (0, 255, 255))
         
         
         
@@ -690,10 +678,10 @@ class FeatureTracker:
             cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
             
             
-        # Draw artificial horizon - drawn between but for lower image
+        # Draw artificial horizon for lower image
         h0 = grey_now.shape[0]
         w0 = grey_now.shape[1]
-        h = int(h0*(1-math.sin(angles[1])))
+        h = int((3*h0/2)*(1-math.sin(angles[1])))
         cv2.line(img2, (w0/2, h), (int(w0/2+l*math.cos(angles[0])), int(h+l*math.sin(angles[0]))), (255, 255, 255), 1)
         cv2.line(img2, (w0/2, h), (int(w0/2-l*math.cos(angles[0])), int(h-l*math.sin(angles[0]))), (255, 255, 255), 1)
         
