@@ -169,8 +169,6 @@ class FeatureTracker:
         # Produce ordered arrays of paired points
         i1_indices = list(x.queryIdx for x in matches)
         i2_indices = list(x.trainIdx for x in matches)
-        
-        '''
         i2_indices2 = list(x.queryIdx for x in matches2) 
         i1_indices2 = list(x.trainIdx for x in matches2)
         
@@ -178,9 +176,12 @@ class FeatureTracker:
         # Find pairing that are consistent in both dirs
         comb1 = set(zip(i1_indices, i2_indices))
         comb2 = set(zip(i1_indices2, i2_indices2))
-        comb = comb1.intersection(comb2)
-        '''
+        comb = list(comb1.intersection(comb2))
+        comb = zip(*list(comb))
+        i1_indices = comb[0]
+        i2_indices = comb[1]
         
+        # Order pairs
         kp1_array = np.array(list(x.pt for x in kp1))
         kp2_array = np.array(list(x.pt for x in kp2))
         i1_pts = kp1_array[i1_indices,:]
