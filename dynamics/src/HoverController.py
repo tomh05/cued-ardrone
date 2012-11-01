@@ -62,20 +62,33 @@ class HoverController:
 	def hover_timer_callback(self,event):
 		
 		if (time() > self.cmdstart + 1.0):	
-			try:
-				if (self.tl.frameExists('/4x4_100') and self.tl.canTransform('/4x4_100','/ardrone_base_link', rospy.Time(0))):
-					(currposw, curroriw) = self.tl.lookupTransform('/4x4_100','/ardrone_base_link', rospy.Time(0))
-					self.gottf = True
+			if (self.tl.canTransform('/4x4_100','/ardrone_base_link', rospy.Time(0))):
+				tnow=rospy.Time.now()
+				tpast=self.tl.getLatestCommonTime('/4x4_100','/ardrone_base_link')
+				tdiff=rospy.Time.to_sec(tnow)-rospy.Time.to_sec(tpast)
+				if (tdiff<0.1):
+					try:
+						(pos, ori) = self.tl.lookupTransform('/4x4_100','/ardrone_base_link', rospy.Time(0))
+						self.gottf = True
+					except:
+						self.gottf = False
+						print 'error: transform exception'
 				else:
 					self.gottf = False
-					print 'cannot transform'
-			except:
+					print 'error: latest tf common time > 0.1 seconds ago'
+			else:
 				self.gottf = False
-				print 'transform exception'
+				print 'error: cantransform = False'
 			
 			if self.gottf:
-				print tf.transformations.euler_from_quaternion(curroriw)
-		
+				currposw = pos
+				ori2e = tf.transformations.euler_from_quaternion(ori)
+				curroriw = (ori2e[0], ori2e[1], ori2e[2]+pi)	#curroriw is in euler form!
+				print currposw
+				print curroriw
+			else:
+				pass
+				
 			'''
 			file1 = open('ssm-r-0-05','w')
 			pickle.dump([self.nd_log, self.cmd_log],file1)
