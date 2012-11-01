@@ -37,7 +37,7 @@ class HoverController:
 		self.tl = tf.TransformListener()
 		self.gottf = False
 		
-	
+		
 	def cleartwist(self):
 		self.twist.linear.x= 0.0; self.twist.linear.y= 0.0; self.twist.linear.z= 0.0
 		self.twist.angular.x= 0.0; self.twist.angular.y= 0.0; self.twist.angular.z= 0.0; 
@@ -45,18 +45,21 @@ class HoverController:
 
 	def hover_procedure(self):
 		sleep(1)	#nb: sleep 0.3 is min necessary wait before you can publish. perhaps bc ros master takes time to setup publisher.
-		#self.pc = PositionController()		
 		self.cleartwist()
 		self.cmdpub.publish(self.twist);
 		self.camselectclient(1);
 		
-		#self.takeoffpub.publish(Empty()); print 'takeoff'
+		self.pc = PositionController()		
+		
+		self.takeoffpub.publish(Empty()); print 'takeoff'
 		while (time() < (self.cmdstart)):
 			pass
 
-		self.desiposw=(0.0, 0.6, 1.7)
+		self.desiposw=(0.0, 0.0, 0.0)
 		print '*********** start control ***********'
-		self.hover_timer = rospy.Timer(rospy.Duration(1.0/15.0), self.hover_timer_callback)
+		self.hover_timer = rospy.Timer(rospy.Duration(1.0/5.0), self.hover_timer_callback)
+		sleep(1)
+		self.pc.pc_timer_init()
 	
 
 	def hover_timer_callback(self,event):
@@ -72,20 +75,22 @@ class HoverController:
 						self.gottf = True
 					except:
 						self.gottf = False
-						print 'error: transform exception'
+						#print 'error: transform exception'
 				else:
 					self.gottf = False
-					print 'error: latest tf common time > 0.1 seconds ago'
+					#print 'error: latest tf common time > 0.1 seconds ago'
 			else:
 				self.gottf = False
-				print 'error: cantransform = False'
+				#print 'error: cantransform = False'
 			
 			if self.gottf:
-				currposw = pos
 				ori2e = tf.transformations.euler_from_quaternion(ori)
-				curroriw = (ori2e[0], ori2e[1], ori2e[2]+pi)	#curroriw is in euler form!
-				print currposw
-				print curroriw
+				curroriw = (ori2e[0], ori2e[1], ori2e[2]+pi)	#curroriw is in euler form! And +pi to align base_link frame with marker frame
+				currposw = pos
+				self.pc.pose_handler(currposw, curroriw, self.desiposw)
+				#print currposw
+				#print curroriw
+				
 			else:
 				pass
 				

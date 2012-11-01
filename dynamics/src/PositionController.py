@@ -23,10 +23,8 @@ class PositionController:
 	
 	def __init__(self):
 		self.reftm = time()
-		self.logstart = self.reftm + 6.0
-		self.cmdstart = self.reftm + 8.0
 		self.cmd_log = {'tm':[], 'tw':[]}
-		self.nd_log = {'tm':[], 'nd':[], 'ph':[], 'th':[], 'ps':[], 'vx':[], 'vy':[], 'vz':[], 'al':[], 'cur':[]}
+		self.nd_log = {'tm':[], 'nd':[], 'ph':[], 'th':[], 'ps':[], 'vx':[], 'vy':[], 'vz':[], 'al':[], 'cpw':[], 'psiw':[]}
 		
 		self.ref = {'al':1500, 'ps':0.0}
 		self.error = {'al':[], 'ps':[]}
@@ -38,9 +36,41 @@ class PositionController:
 		self.takeoffpub = rospy.Publisher('/ardrone/takeoff', Empty)
 		self.navdatasub = rospy.Subscriber('/ardrone/navdata', Navdata, self.navdataCallback)
 		self.camselectclient = rospy.ServiceProxy('/ardrone/setcamchannel', CamSelect)
-		self.tl = tf.TransformListener()
+		
+		self.d0=1.0/2000
+		self.d1=-0.010
+		self.d2=-0.0002
+		self.dpw=(0.0, 0.0, 0.0)
+		self.cpw=(0.0, 0.0, 0.0)
+				
+		self.posecmd = {'tm': [], 'cpw':[], 'cow':[], 'dpw':[]}
+		self.justgotpose = False
+		self.drone_pos_valid = False
 
+
+	def pc_timer_init(self):
+		try:
+			self.pc_timer = rospy.Timer(rospy.Duration(1.0/15.0), self.pc_timer_callback)
+		except:
+			pass
+			print 'pc_timer_init error'
 	
+	
+	def pc_timer_shutdown(self):
+		try:
+			self.pc_timer.shutdown()
+		except:
+			pass
+			print 'pc_timer_shutdown error'
+		
+		
+	def posecmd_logger(self, cpw, cow, dpw):
+		self.posecmd['tm'].append(time()-self.reftm)
+		self.posecmd['cpw'].append(cpw)
+		self.posecmd['cow'].append(cow)
+		self.posecmd['dpw'].append(dpw)
+		
+			
 	def cleartwist(self):
 		self.twist.linear.x= 0.0; self.twist.linear.y= 0.0; self.twist.linear.z= 0.0
 		self.twist.angular.x= 0.0; self.twist.angular.y= 0.0; self.twist.angular.z= 0.0; 
@@ -49,85 +79,92 @@ class PositionController:
 	def navdataCallback(self, msg):
 		self.nd_logger(msg)
 		try:
-			dt=(msg.header.stamp - self.nd_log['nd'][-2].header.stamp).to_sec()
-			dx=(msg.vx+self.nd_log['vx'][-2])*dt/2.0
-			dy=(msg.vy+self.nd_log['vy'][-2])*dt/2.0
-			yaw=(msg.rotZ+self.nd_log['ps'][-2])/2.0
-			yawr=radians(yaw)
-			du=dx*cos(yawr)-dy*sin(yawr)
-			dv=dx*sin(yawr)+dy*cos(yawr)
-			self.curcoord = (self.curcoord[0]+du, self.curcoord[1]+dv)
-			self.nd_log['cur'].append(self.curcoord)
-			#print yaw
-			#print self.curcoord
+			if self.justgotpose:
+				self.justgotpose = False
+			else:
+				dt=(msg.header.stamp - self.nd_log['nd'][-2].header.stamp).to_sec()
+				dx=(msg.vx+self.nd_log['vx'][-2])*dt/2.0/1000
+				dy=(msg.vy+self.nd_log['vy'][-2])*dt/2.0/1000
+				#print msg.rotZ
+				drotZ=msg.rotZ - self.nd_log['ps'][-2]
+				if drotZ > 300:										#to account for discontinuity in yaw around 0
+					drotZ = drotZ - 360
+				elif drotZ<-300:
+					drotZ = drotZ + 360
+				psiwnew = self.nd_log['psiw'][-1] + radians(drotZ)
+				yaw=(psiwnew+self.nd_log['psiw'][-1])/2.0			#yaw refers to yaw wrt to world frame
+				du=dx*cos(yaw)-dy*sin(yaw)
+				dv=dx*sin(yaw)+dy*cos(yaw)
+				self.nd_log['cpw'].append((self.nd_log['cpw'][-1][0]+du, self.nd_log['cpw'][-1][1]+dv, 0.0))
+				self.nd_log['psiw'].append(psiwnew)
+				#print yaw
+				#print self.nd_log['cpw'][-1]
 		except:
-			pass
+			self.drone_pos_valid = False
+			#print 'navdata callback error'
 			
 
 	def nd_logger(self,msg):
-		if (time() > self.logstart):
-			self.nd_log['tm'].append(time()-self.reftm)
-			self.nd_log['nd'].append(msg)
-			
-			self.nd_log['th'].append(msg.rotY)		# forw+ backw-
-			self.nd_log['ph'].append(msg.rotX)		# left- right+
-			self.nd_log['ps'].append(msg.rotZ)		# ccw+  cw-
-			self.nd_log['vx'].append(msg.vx)
-			self.nd_log['vy'].append(msg.vy)
-			self.nd_log['al'].append(msg.altd)
-			
-			self.error['al'].append(self.ref['al']-msg.altd)
-			self.error['ps'].append(self.ref['ps']-msg.rotZ)
-		else:
-			pass
+		self.nd_log['tm'].append(time()-self.reftm)
+		self.nd_log['nd'].append(msg)
 	
+		self.nd_log['th'].append(msg.rotY)		# forw+ backw-
+		self.nd_log['ph'].append(msg.rotX)		# left- right+
+		self.nd_log['ps'].append(msg.rotZ)		# ccw+  cw-
+		self.nd_log['vx'].append(msg.vx)
+		self.nd_log['vy'].append(msg.vy)
+		self.nd_log['al'].append(msg.altd)
+		
+		self.error['al'].append(self.ref['al']-msg.altd)
+		self.error['ps'].append(self.ref['ps']-msg.rotZ)
+
 
 	def cmd_logger(self,twcmd):
 		self.cmd_log['tm'].append(time()-self.reftm)
 		self.cmd_log['tw'].append(twcmd)
 	
 
-	def main_procedure(self):
-		sleep(1)	#nb: sleep 0.3 is min necessary wait before you can publish. perhaps bc ros master takes time to setup publisher.
-		self.cleartwist()
-		self.cmdpub.publish(self.twist);
-		self.camselectclient(1);
-		
-		self.takeoffpub.publish(Empty()); print 'takeoff'
-		while (time() < (self.cmdstart)):
-			pass
-		
-		self.d0=1.0/3000
-		self.d1=-0.010
-		self.d2=-0.0002
-		self.curcoord=(0.0, 0.0)
-		self.tarcoord=(0.0, 1000.0)
-		
-		print '*********** start control ***********'
-		self.main_timer = rospy.Timer(rospy.Duration(1.0/15.0), self.main_timer_callback)
+	def pose_handler(self, cpw, cow, dpw):
+		self.posecmd_logger(cpw, cow, dpw)
+		self.nd_log['psiw'].append(cow[2])
+		self.nd_log['cpw'].append(cpw)
+		self.dpw = dpw		
+		self.justgotpose = True
 	
 
-	def main_timer_callback(self,event):
+	def pc_timer_callback(self,event):
 		if (self.nd_log['al'][-1]>(self.ref['al']+500)):
 			self.landpub.publish(Empty())	#height switch
 		
 		self.twist.linear.z = max(min(0.0013*self.error['al'][-1], 1.0), -1.0)
-		self.twist.angular.z = max(min(self.error['ps'][-1]/150, 1.0), -1.0)
+		#self.twist.angular.z = max(min(self.error['ps'][-1]/150, 1.0), -1.0)
 		#print self.nd_log['al'][-1]
 
 		#endif height and yaw control are activated
 		
-		if (time() > self.cmdstart + 3):
-			ex=self.tarcoord[0]-self.curcoord[0]
-			ey=self.tarcoord[1]-self.curcoord[1]
+		try:
+			(xcw, ycw, zcw) = self.nd_log['cpw'][-1]
+			(xdw, ydw, zdw) = self.dpw
+			xrw = xdw - xcw
+			yrw = ydw - ycw
+			zrw = zdw - zcw
+			psw = self.nd_log['psiw'][-1]				#psi world
+			
+			#print xrw, yrw
+			#print psw
+			
+			xrc =  xrw*cos(psw) + yrw*sin(psw)
+			yrc = -xrw*sin(psw) + yrw*cos(psw)
+			
 			oldph=-self.nd_log['ph'][-1]
 			oldth= self.nd_log['th'][-1]
 			oldvy= self.nd_log['vy'][-1]
 			oldvx= self.nd_log['vx'][-1]
-			rx=ex*self.d0+oldth*self.d1+oldvx*self.d2
-			ry=ey*self.d0+oldph*self.d1+oldvy*self.d2
+			rx=1000.0*xrc*self.d0+oldth*self.d1+oldvx*self.d2
+			ry=1000.0*yrc*self.d0+oldph*self.d1+oldvy*self.d2
 			
-			print self.curcoord, ry
+			print rx, ry
+			print psw
 			self.twist.linear.x=max(min(rx,0.5),-0.5)
 			self.twist.linear.y=max(min(ry,0.5),-0.5)
 			
@@ -137,6 +174,13 @@ class PositionController:
 			file1.close()
 			self.main_timer.shutdown()
 			'''
+		
+		except:
+			pass
+			#print 'calculate command error'
+		
+		if self.drone_pos_valid == False:
+			self.twist.linear.x = 0; self.twist.linear.y=0
 
 		self.cmdpub.publish(self.twist)
 		self.cmd_logger(self.twist)
