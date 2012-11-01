@@ -59,6 +59,31 @@ CMakeFiles/ROSBUILD_gensrv_cpp: ../srv_gen/cpp/include/dynamics/LedAnim.h
 ../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/stacks/vision_opencv/cv_bridge/manifest.xml
 ../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/share/rospy/manifest.xml
 ../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/share/std_msgs/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/share/ros/core/rosbuild/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/share/roslib/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/share/rosconsole/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/stacks/pluginlib/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/share/message_filters/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/stacks/image_common/image_transport/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/share/std_srvs/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/stacks/bullet/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/stacks/geometry/angles/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/share/rostest/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/share/roswtf/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/stacks/geometry/tf/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/stacks/common_rosdeps/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/stacks/image_common/camera_calibration_parsers/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/stacks/image_common/camera_info_manager/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /home/rujian/fuerte_workspace/ccny_vision/artoolkit/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/share/visualization_msgs/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/stacks/robot_model/resource_retriever/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/manifest.xml
+../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/stacks/geometry/tf/msg_gen/generated
+../srv_gen/cpp/include/dynamics/CamSelect.h: /opt/ros/fuerte/stacks/geometry/tf/srv_gen/generated
+../srv_gen/cpp/include/dynamics/CamSelect.h: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/msg_gen/generated
+../srv_gen/cpp/include/dynamics/CamSelect.h: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/srv_gen/generated
+../srv_gen/cpp/include/dynamics/CamSelect.h: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/msg_gen/generated
 	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_1)
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Generating ../srv_gen/cpp/include/dynamics/CamSelect.h"
 	/opt/ros/fuerte/share/roscpp/rosbuild/scripts/gensrv_cpp.py /home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv/CamSelect.srv
@@ -76,6 +101,31 @@ CMakeFiles/ROSBUILD_gensrv_cpp: ../srv_gen/cpp/include/dynamics/LedAnim.h
 ../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/stacks/vision_opencv/cv_bridge/manifest.xml
 ../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/share/rospy/manifest.xml
 ../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/share/std_msgs/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/share/ros/core/rosbuild/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/share/roslib/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/share/rosconsole/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/stacks/pluginlib/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/share/message_filters/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/stacks/image_common/image_transport/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/share/std_srvs/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/stacks/bullet/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/stacks/geometry/angles/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/share/rostest/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/share/roswtf/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/stacks/geometry/tf/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/stacks/common_rosdeps/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/stacks/image_common/camera_calibration_parsers/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/stacks/image_common/camera_info_manager/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /home/rujian/fuerte_workspace/ccny_vision/artoolkit/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/share/visualization_msgs/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/stacks/robot_model/resource_retriever/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/manifest.xml
+../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/stacks/geometry/tf/msg_gen/generated
+../srv_gen/cpp/include/dynamics/HullSelect.h: /opt/ros/fuerte/stacks/geometry/tf/srv_gen/generated
+../srv_gen/cpp/include/dynamics/HullSelect.h: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/msg_gen/generated
+../srv_gen/cpp/include/dynamics/HullSelect.h: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/srv_gen/generated
+../srv_gen/cpp/include/dynamics/HullSelect.h: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/msg_gen/generated
 	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_2)
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Generating ../srv_gen/cpp/include/dynamics/HullSelect.h"
 	/opt/ros/fuerte/share/roscpp/rosbuild/scripts/gensrv_cpp.py /home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv/HullSelect.srv
@@ -93,6 +143,31 @@ CMakeFiles/ROSBUILD_gensrv_cpp: ../srv_gen/cpp/include/dynamics/LedAnim.h
 ../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/stacks/vision_opencv/cv_bridge/manifest.xml
 ../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/share/rospy/manifest.xml
 ../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/share/std_msgs/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/share/ros/core/rosbuild/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/share/roslib/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/share/rosconsole/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/stacks/pluginlib/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/share/message_filters/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/stacks/image_common/image_transport/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/share/std_srvs/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/stacks/bullet/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/stacks/geometry/angles/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/share/rostest/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/share/roswtf/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/stacks/geometry/tf/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/stacks/common_rosdeps/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/stacks/image_common/camera_calibration_parsers/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/stacks/image_common/camera_info_manager/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /home/rujian/fuerte_workspace/ccny_vision/artoolkit/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/share/visualization_msgs/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/stacks/robot_model/resource_retriever/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/manifest.xml
+../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/stacks/geometry/tf/msg_gen/generated
+../srv_gen/cpp/include/dynamics/LedAnim.h: /opt/ros/fuerte/stacks/geometry/tf/srv_gen/generated
+../srv_gen/cpp/include/dynamics/LedAnim.h: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/msg_gen/generated
+../srv_gen/cpp/include/dynamics/LedAnim.h: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/srv_gen/generated
+../srv_gen/cpp/include/dynamics/LedAnim.h: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/msg_gen/generated
 	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_3)
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Generating ../srv_gen/cpp/include/dynamics/LedAnim.h"
 	/opt/ros/fuerte/share/roscpp/rosbuild/scripts/gensrv_cpp.py /home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv/LedAnim.srv

@@ -44,10 +44,58 @@ include CMakeFiles/ROSBUILD_genmsg_py.dir/progress.make
 
 CMakeFiles/ROSBUILD_genmsg_py: ../src/dynamics/msg/__init__.py
 
+../src/dynamics/msg/__init__.py: ../src/dynamics/msg/_ARMarker.py
 ../src/dynamics/msg/__init__.py: ../src/dynamics/msg/_Navdata.py
+../src/dynamics/msg/__init__.py: ../src/dynamics/msg/_ARMarkers.py
 	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_1)
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Generating ../src/dynamics/msg/__init__.py"
-	/opt/ros/fuerte/share/rospy/rosbuild/scripts/genmsg_py.py --initpy /home/rujian/fuerte_workspace/cued-ardrone/dynamics/msg/Navdata.msg
+	/opt/ros/fuerte/share/rospy/rosbuild/scripts/genmsg_py.py --initpy /home/rujian/fuerte_workspace/cued-ardrone/dynamics/msg/ARMarker.msg /home/rujian/fuerte_workspace/cued-ardrone/dynamics/msg/Navdata.msg /home/rujian/fuerte_workspace/cued-ardrone/dynamics/msg/ARMarkers.msg
+
+../src/dynamics/msg/_ARMarker.py: ../msg/ARMarker.msg
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/rospy/rosbuild/scripts/genmsg_py.py
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/roslib/bin/gendeps
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/geometry_msgs/msg/PoseWithCovariance.msg
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/geometry_msgs/msg/Pose.msg
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/std_msgs/msg/Header.msg
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/geometry_msgs/msg/Quaternion.msg
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/geometry_msgs/msg/Point.msg
+../src/dynamics/msg/_ARMarker.py: ../manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/geometry_msgs/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/sensor_msgs/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/stacks/vision_opencv/opencv2/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/roslang/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/roscpp/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/stacks/vision_opencv/cv_bridge/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/rospy/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/std_msgs/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/ros/core/rosbuild/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/roslib/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/rosconsole/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/stacks/pluginlib/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/message_filters/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/stacks/image_common/image_transport/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/std_srvs/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/stacks/bullet/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/stacks/geometry/angles/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/rostest/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/roswtf/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/stacks/geometry/tf/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/stacks/common_rosdeps/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/stacks/image_common/camera_calibration_parsers/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/stacks/image_common/camera_info_manager/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /home/rujian/fuerte_workspace/ccny_vision/artoolkit/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/share/visualization_msgs/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/stacks/robot_model/resource_retriever/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/manifest.xml
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/stacks/geometry/tf/msg_gen/generated
+../src/dynamics/msg/_ARMarker.py: /opt/ros/fuerte/stacks/geometry/tf/srv_gen/generated
+../src/dynamics/msg/_ARMarker.py: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/msg_gen/generated
+../src/dynamics/msg/_ARMarker.py: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/srv_gen/generated
+../src/dynamics/msg/_ARMarker.py: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/msg_gen/generated
+	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_2)
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Generating ../src/dynamics/msg/_ARMarker.py"
+	/opt/ros/fuerte/share/rospy/rosbuild/scripts/genmsg_py.py --noinitpy /home/rujian/fuerte_workspace/cued-ardrone/dynamics/msg/ARMarker.msg
 
 ../src/dynamics/msg/_Navdata.py: ../msg/Navdata.msg
 ../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/share/rospy/rosbuild/scripts/genmsg_py.py
@@ -62,13 +110,87 @@ CMakeFiles/ROSBUILD_genmsg_py: ../src/dynamics/msg/__init__.py
 ../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/stacks/vision_opencv/cv_bridge/manifest.xml
 ../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/share/rospy/manifest.xml
 ../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/share/std_msgs/manifest.xml
-	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_2)
+../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/share/ros/core/rosbuild/manifest.xml
+../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/share/roslib/manifest.xml
+../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/share/rosconsole/manifest.xml
+../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/stacks/pluginlib/manifest.xml
+../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/share/message_filters/manifest.xml
+../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/stacks/image_common/image_transport/manifest.xml
+../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/share/std_srvs/manifest.xml
+../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/stacks/bullet/manifest.xml
+../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/stacks/geometry/angles/manifest.xml
+../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/share/rostest/manifest.xml
+../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/share/roswtf/manifest.xml
+../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/stacks/geometry/tf/manifest.xml
+../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/stacks/common_rosdeps/manifest.xml
+../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/stacks/image_common/camera_calibration_parsers/manifest.xml
+../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/stacks/image_common/camera_info_manager/manifest.xml
+../src/dynamics/msg/_Navdata.py: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/manifest.xml
+../src/dynamics/msg/_Navdata.py: /home/rujian/fuerte_workspace/ccny_vision/artoolkit/manifest.xml
+../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/share/visualization_msgs/manifest.xml
+../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/stacks/robot_model/resource_retriever/manifest.xml
+../src/dynamics/msg/_Navdata.py: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/manifest.xml
+../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/stacks/geometry/tf/msg_gen/generated
+../src/dynamics/msg/_Navdata.py: /opt/ros/fuerte/stacks/geometry/tf/srv_gen/generated
+../src/dynamics/msg/_Navdata.py: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/msg_gen/generated
+../src/dynamics/msg/_Navdata.py: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/srv_gen/generated
+../src/dynamics/msg/_Navdata.py: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/msg_gen/generated
+	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_3)
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Generating ../src/dynamics/msg/_Navdata.py"
 	/opt/ros/fuerte/share/rospy/rosbuild/scripts/genmsg_py.py --noinitpy /home/rujian/fuerte_workspace/cued-ardrone/dynamics/msg/Navdata.msg
 
+../src/dynamics/msg/_ARMarkers.py: ../msg/ARMarkers.msg
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/rospy/rosbuild/scripts/genmsg_py.py
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/roslib/bin/gendeps
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/geometry_msgs/msg/PoseWithCovariance.msg
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/std_msgs/msg/Header.msg
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/geometry_msgs/msg/Quaternion.msg
+../src/dynamics/msg/_ARMarkers.py: ../msg/ARMarker.msg
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/geometry_msgs/msg/Pose.msg
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/geometry_msgs/msg/Point.msg
+../src/dynamics/msg/_ARMarkers.py: ../manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/geometry_msgs/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/sensor_msgs/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/stacks/vision_opencv/opencv2/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/roslang/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/roscpp/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/stacks/vision_opencv/cv_bridge/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/rospy/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/std_msgs/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/ros/core/rosbuild/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/roslib/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/rosconsole/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/stacks/pluginlib/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/message_filters/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/stacks/image_common/image_transport/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/std_srvs/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/stacks/bullet/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/stacks/geometry/angles/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/rostest/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/roswtf/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/stacks/geometry/tf/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/stacks/common_rosdeps/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/stacks/image_common/camera_calibration_parsers/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/stacks/image_common/camera_info_manager/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /home/rujian/fuerte_workspace/ccny_vision/artoolkit/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/share/visualization_msgs/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/stacks/robot_model/resource_retriever/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/manifest.xml
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/stacks/geometry/tf/msg_gen/generated
+../src/dynamics/msg/_ARMarkers.py: /opt/ros/fuerte/stacks/geometry/tf/srv_gen/generated
+../src/dynamics/msg/_ARMarkers.py: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/msg_gen/generated
+../src/dynamics/msg/_ARMarkers.py: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/srv_gen/generated
+../src/dynamics/msg/_ARMarkers.py: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/msg_gen/generated
+	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_4)
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Generating ../src/dynamics/msg/_ARMarkers.py"
+	/opt/ros/fuerte/share/rospy/rosbuild/scripts/genmsg_py.py --noinitpy /home/rujian/fuerte_workspace/cued-ardrone/dynamics/msg/ARMarkers.msg
+
 ROSBUILD_genmsg_py: CMakeFiles/ROSBUILD_genmsg_py
 ROSBUILD_genmsg_py: ../src/dynamics/msg/__init__.py
+ROSBUILD_genmsg_py: ../src/dynamics/msg/_ARMarker.py
 ROSBUILD_genmsg_py: ../src/dynamics/msg/_Navdata.py
+ROSBUILD_genmsg_py: ../src/dynamics/msg/_ARMarkers.py
 ROSBUILD_genmsg_py: CMakeFiles/ROSBUILD_genmsg_py.dir/build.make
 .PHONY : ROSBUILD_genmsg_py
 

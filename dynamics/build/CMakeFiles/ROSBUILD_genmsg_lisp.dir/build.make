@@ -42,9 +42,65 @@ CMAKE_BINARY_DIR = /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build
 # Include the progress variables for this target.
 include CMakeFiles/ROSBUILD_genmsg_lisp.dir/progress.make
 
+CMakeFiles/ROSBUILD_genmsg_lisp: ../msg_gen/lisp/ARMarker.lisp
+CMakeFiles/ROSBUILD_genmsg_lisp: ../msg_gen/lisp/_package.lisp
+CMakeFiles/ROSBUILD_genmsg_lisp: ../msg_gen/lisp/_package_ARMarker.lisp
 CMakeFiles/ROSBUILD_genmsg_lisp: ../msg_gen/lisp/Navdata.lisp
 CMakeFiles/ROSBUILD_genmsg_lisp: ../msg_gen/lisp/_package.lisp
 CMakeFiles/ROSBUILD_genmsg_lisp: ../msg_gen/lisp/_package_Navdata.lisp
+CMakeFiles/ROSBUILD_genmsg_lisp: ../msg_gen/lisp/ARMarkers.lisp
+CMakeFiles/ROSBUILD_genmsg_lisp: ../msg_gen/lisp/_package.lisp
+CMakeFiles/ROSBUILD_genmsg_lisp: ../msg_gen/lisp/_package_ARMarkers.lisp
+
+../msg_gen/lisp/ARMarker.lisp: ../msg/ARMarker.msg
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/roslisp/rosbuild/scripts/genmsg_lisp.py
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/roslib/bin/gendeps
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/geometry_msgs/msg/PoseWithCovariance.msg
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/geometry_msgs/msg/Pose.msg
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/std_msgs/msg/Header.msg
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/geometry_msgs/msg/Quaternion.msg
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/geometry_msgs/msg/Point.msg
+../msg_gen/lisp/ARMarker.lisp: ../manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/geometry_msgs/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/sensor_msgs/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/stacks/vision_opencv/opencv2/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/roslang/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/roscpp/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/stacks/vision_opencv/cv_bridge/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/rospy/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/std_msgs/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/ros/core/rosbuild/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/roslib/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/rosconsole/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/stacks/pluginlib/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/message_filters/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/stacks/image_common/image_transport/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/std_srvs/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/stacks/bullet/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/stacks/geometry/angles/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/rostest/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/roswtf/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/stacks/geometry/tf/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/stacks/common_rosdeps/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/stacks/image_common/camera_calibration_parsers/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/stacks/image_common/camera_info_manager/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /home/rujian/fuerte_workspace/ccny_vision/artoolkit/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/share/visualization_msgs/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/stacks/robot_model/resource_retriever/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/manifest.xml
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/stacks/geometry/tf/msg_gen/generated
+../msg_gen/lisp/ARMarker.lisp: /opt/ros/fuerte/stacks/geometry/tf/srv_gen/generated
+../msg_gen/lisp/ARMarker.lisp: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/msg_gen/generated
+../msg_gen/lisp/ARMarker.lisp: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/srv_gen/generated
+../msg_gen/lisp/ARMarker.lisp: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/msg_gen/generated
+	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_1)
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Generating ../msg_gen/lisp/ARMarker.lisp, ../msg_gen/lisp/_package.lisp, ../msg_gen/lisp/_package_ARMarker.lisp"
+	/opt/ros/fuerte/share/roslisp/rosbuild/scripts/genmsg_lisp.py /home/rujian/fuerte_workspace/cued-ardrone/dynamics/msg/ARMarker.msg
+
+../msg_gen/lisp/_package.lisp: ../msg_gen/lisp/ARMarker.lisp
+
+../msg_gen/lisp/_package_ARMarker.lisp: ../msg_gen/lisp/ARMarker.lisp
 
 ../msg_gen/lisp/Navdata.lisp: ../msg/Navdata.msg
 ../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/share/roslisp/rosbuild/scripts/genmsg_lisp.py
@@ -59,7 +115,32 @@ CMakeFiles/ROSBUILD_genmsg_lisp: ../msg_gen/lisp/_package_Navdata.lisp
 ../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/stacks/vision_opencv/cv_bridge/manifest.xml
 ../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/share/rospy/manifest.xml
 ../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/share/std_msgs/manifest.xml
-	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_1)
+../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/share/ros/core/rosbuild/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/share/roslib/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/share/rosconsole/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/stacks/pluginlib/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/share/message_filters/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/stacks/image_common/image_transport/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/share/std_srvs/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/stacks/bullet/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/stacks/geometry/angles/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/share/rostest/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/share/roswtf/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/stacks/geometry/tf/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/stacks/common_rosdeps/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/stacks/image_common/camera_calibration_parsers/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/stacks/image_common/camera_info_manager/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /home/rujian/fuerte_workspace/ccny_vision/artoolkit/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/share/visualization_msgs/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/stacks/robot_model/resource_retriever/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/manifest.xml
+../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/stacks/geometry/tf/msg_gen/generated
+../msg_gen/lisp/Navdata.lisp: /opt/ros/fuerte/stacks/geometry/tf/srv_gen/generated
+../msg_gen/lisp/Navdata.lisp: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/msg_gen/generated
+../msg_gen/lisp/Navdata.lisp: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/srv_gen/generated
+../msg_gen/lisp/Navdata.lisp: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/msg_gen/generated
+	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_2)
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Generating ../msg_gen/lisp/Navdata.lisp, ../msg_gen/lisp/_package.lisp, ../msg_gen/lisp/_package_Navdata.lisp"
 	/opt/ros/fuerte/share/roslisp/rosbuild/scripts/genmsg_lisp.py /home/rujian/fuerte_workspace/cued-ardrone/dynamics/msg/Navdata.msg
 
@@ -67,10 +148,67 @@ CMakeFiles/ROSBUILD_genmsg_lisp: ../msg_gen/lisp/_package_Navdata.lisp
 
 ../msg_gen/lisp/_package_Navdata.lisp: ../msg_gen/lisp/Navdata.lisp
 
+../msg_gen/lisp/ARMarkers.lisp: ../msg/ARMarkers.msg
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/roslisp/rosbuild/scripts/genmsg_lisp.py
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/roslib/bin/gendeps
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/geometry_msgs/msg/PoseWithCovariance.msg
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/std_msgs/msg/Header.msg
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/geometry_msgs/msg/Quaternion.msg
+../msg_gen/lisp/ARMarkers.lisp: ../msg/ARMarker.msg
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/geometry_msgs/msg/Pose.msg
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/geometry_msgs/msg/Point.msg
+../msg_gen/lisp/ARMarkers.lisp: ../manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/geometry_msgs/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/sensor_msgs/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/stacks/vision_opencv/opencv2/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/roslang/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/roscpp/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/stacks/vision_opencv/cv_bridge/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/rospy/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/std_msgs/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/ros/core/rosbuild/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/roslib/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/rosconsole/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/stacks/pluginlib/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/message_filters/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/stacks/image_common/image_transport/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/std_srvs/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/stacks/bullet/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/stacks/geometry/angles/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/rostest/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/roswtf/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/stacks/geometry/tf/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/stacks/common_rosdeps/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/stacks/image_common/camera_calibration_parsers/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/stacks/image_common/camera_info_manager/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /home/rujian/fuerte_workspace/ccny_vision/artoolkit/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/share/visualization_msgs/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/stacks/robot_model/resource_retriever/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/manifest.xml
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/stacks/geometry/tf/msg_gen/generated
+../msg_gen/lisp/ARMarkers.lisp: /opt/ros/fuerte/stacks/geometry/tf/srv_gen/generated
+../msg_gen/lisp/ARMarkers.lisp: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/msg_gen/generated
+../msg_gen/lisp/ARMarkers.lisp: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/srv_gen/generated
+../msg_gen/lisp/ARMarkers.lisp: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/msg_gen/generated
+	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_3)
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Generating ../msg_gen/lisp/ARMarkers.lisp, ../msg_gen/lisp/_package.lisp, ../msg_gen/lisp/_package_ARMarkers.lisp"
+	/opt/ros/fuerte/share/roslisp/rosbuild/scripts/genmsg_lisp.py /home/rujian/fuerte_workspace/cued-ardrone/dynamics/msg/ARMarkers.msg
+
+../msg_gen/lisp/_package.lisp: ../msg_gen/lisp/ARMarkers.lisp
+
+../msg_gen/lisp/_package_ARMarkers.lisp: ../msg_gen/lisp/ARMarkers.lisp
+
 ROSBUILD_genmsg_lisp: CMakeFiles/ROSBUILD_genmsg_lisp
+ROSBUILD_genmsg_lisp: ../msg_gen/lisp/ARMarker.lisp
+ROSBUILD_genmsg_lisp: ../msg_gen/lisp/_package.lisp
+ROSBUILD_genmsg_lisp: ../msg_gen/lisp/_package_ARMarker.lisp
 ROSBUILD_genmsg_lisp: ../msg_gen/lisp/Navdata.lisp
 ROSBUILD_genmsg_lisp: ../msg_gen/lisp/_package.lisp
 ROSBUILD_genmsg_lisp: ../msg_gen/lisp/_package_Navdata.lisp
+ROSBUILD_genmsg_lisp: ../msg_gen/lisp/ARMarkers.lisp
+ROSBUILD_genmsg_lisp: ../msg_gen/lisp/_package.lisp
+ROSBUILD_genmsg_lisp: ../msg_gen/lisp/_package_ARMarkers.lisp
 ROSBUILD_genmsg_lisp: CMakeFiles/ROSBUILD_genmsg_lisp.dir/build.make
 .PHONY : ROSBUILD_genmsg_lisp
 

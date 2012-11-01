@@ -6,7 +6,9 @@ FILE(REMOVE_RECURSE
   "../msg_gen"
   "../srv_gen"
   "CMakeFiles/ROSBUILD_genmsg_cpp"
+  "../msg_gen/cpp/include/dynamics/ARMarker.h"
   "../msg_gen/cpp/include/dynamics/Navdata.h"
+  "../msg_gen/cpp/include/dynamics/ARMarkers.h"
 )
 
 # Per-language clean rules from dependency scanning.

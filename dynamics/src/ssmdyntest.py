@@ -1,4 +1,11 @@
 #!/usr/bin/env python
+'''
+ssmdyntest.py
+This program implements successful full state feedback control for derived drone state-space model (ssm)
+Uses drone's 0-yaw coordinate system for position definition
+Integrates navdata for position estimation.
+'''
+
 import roslib; roslib.load_manifest('dynamics')
 import rospy
 

@@ -1,4 +1,10 @@
 #!/usr/bin/env python
+
+'''
+dronecontroller.py
+This program is used in testing dynamics of the drone, ie carrying out step response tests and collecting data for analysis.
+'''
+
 import roslib; roslib.load_manifest('dynamics')
 import rospy
 
