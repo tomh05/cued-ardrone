@@ -94,29 +94,32 @@ class FeatureTracker:
             errs.append(np.r_[p[1], 1].T.dot(F).dot(np.r_[p[0], 1]))
         return np.mean(errs)
         
-    def triangulate_point(self, x1,x2,P1,P2): # Not used
+    def triangulate_point(self, x1,x2,P1,P2): 
         """ Point pair triangulation from
         least squares solution. """
+        # Compose matrix representing simultaneous equations
         M = np.zeros((6,6))
         M[:3,:4] = P1
         M[3:,:4] = P2
         M[:3,4] = -x1
         M[3:,5] = -x2
+        # Compute SVD
         U,S,V = np.linalg.svd(M)
+        # numpy SVD is ordered from largest to smallest (for S)
+        # so least squares solution will always lie in the last column of V
+        # BUT since numpy SVD returns V transpose not V, it is the last row
         X = V[-1,:4]
         return X / X[3]
         
-    def triangulate_points(self, x1,x2,P1,P2): # Not used
+    def triangulate_points(self, x1,x2,P1,P2):
         """ Two-view triangulation of points in
-        x1,x2 (3*n coordingates)"""
+        x1,x2 (2*n coordingates)"""
         n = x1.shape[1]
-        if x2.shape[1] != n:
-            raise ValueError("Number of points don't match.")
         # Make homogenous
         x1 = np.append(x1, np.array([np.ones(x1.shape[1])]), 0)
         x2 = np.append(x2, np.array([np.ones(x2.shape[1])]), 0)
         # Triangulate for each pair
-        X = [ self.triangulate_point(x1[:,i],x2[:,i],P1,P2) for i in range(n)]
+        X = [ self.triangulate_point(x1[:,i],x2[:,i],P1,P2) for i in range(n)] # Looping here is probably unavoidable
         return np.array(X).T
 
     def quaternion_multiply(self, quat1, quat2): # Not used
@@ -830,13 +833,6 @@ class FeatureTracker:
         T = P_cam1_to_cam2
         print P_cam1_to_cam2
         
-        '''
-        P1 = self.P
-        print P1.shape
-        P2 = self.P.dot(P_cam1_to_cam2)
-        print P2.shape
-        '''
-        
         
         empty = np.array([[0],[0],[0]])
         ab = np.reshape(self.inverseCameraMatrix.dot(self.make_homo(pts1).transpose()), (3, -1))
@@ -859,19 +855,23 @@ class FeatureTracker:
         cloud.header.frame_id = "ardrone_base_link"
         
         for i, ignore in enumerate(X): # Ideally done without a loop
-            print i
+            #print i
             cloud.points.append(gm.Point32())
             cloud.points[i].x = Z[i]
             cloud.points[i].y = -X[i]
             cloud.points[i].z = -Y[i]
         
-        print "cloud : ", cloud
+        #print "cloud : ", cloud
         self.cloud_pub.publish(cloud)
         
-        '''
-        points3D = np.reshape(zip(*self.triangulate_points(pts1.transpose(), pts2.transpose(), P1, P2)), (-1, 4))[:, :3]
-        '''
-        #print "points3D : ", points3D
+        print self.cameraMatrix.shape
+        PP1 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
+        PP2 = self.cameraMatrix.dot(P_cam1_to_cam2)
+        print PP1.shape
+        print PP2.shape
+        points3D = np.reshape(zip(*self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2)), (-1, 4))[:, :3]
+        
+        print "points3D : ", points3D
         
         
         
