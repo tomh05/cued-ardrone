@@ -58,7 +58,7 @@ class FeatureTracker:
         self.kp1 = None
         cv2.namedWindow("track")
         self.cloud_pub = rospy.Publisher('pointCloud', PointCloud)
-        self.preload_template('/home/alex/cued-ardrone/feature_track/templates/board_undist.png')
+        self.preload_template('/home/alex/cued-ardrone/feature_track/templates/boxTemplate.png')
         self.tf = tf.TransformListener()
         self.prev_position = None
         
@@ -314,31 +314,39 @@ class FeatureTracker:
         # A comparison between manually triangulated and cv2 tri found
         # different results. It turns out cv2 output un-normalised homo
         # co-ords (i.e. non-unity w)
-        ============================================================"""        
+        ============================================================"""  
+        
+        # First must normalise co-ords
+        i1_pts_corr_norm = self.inverseCameraMatrix.dot(self.make_homo(i1_pts_corr).transpose()).transpose()[:,:2]
+        i2_pts_corr_norm = self.inverseCameraMatrix.dot(self.make_homo(i2_pts_corr).transpose()).transpose()[:,:2]
+                              
         ind = 0
         maxfit = 0
+        secfit = 0
         for i, P2 in enumerate(projections):
             # infront accepts only both dimensions
             # WARNING: cv2.tri produces unnormalised homo coords
-            points4D = cv2.triangulatePoints(P1, P2, i1_pts_corr.transpose(), i2_pts_corr.transpose())
+            points4D = cv2.triangulatePoints(P1, P2, i1_pts_corr_norm.transpose(), i2_pts_corr_norm.transpose())
             # normalise homogenous coords
             points4D /= points4D[3]
             #points4D = self.triangulate_points(i1_pts_corr.transpose(), i2_pts_corr.transpose(), P1, P2)
             d1 = np.dot(P1,points4D)[2]
             d2 = np.dot(P2,points4D)[2]
             PI = sum((d1>0) & (d2>0))
-            print "Performance index ", i, " : ", PI
+            print "Support for P2 ", i, " : ", PI
             if PI > maxfit:
+                secfit = maxfit
                 maxfit = PI
                 ind = i
                 infront = (d1>0) & (d2>0)
-        if (maxfit == 0):
+        #if (maxfit < 4*secfit): maxfit ~= secfit is not actually a problem where translation is small, so cannot simply filter by it
+        if maxfit < 4: # 8 Chosen as at least 8 points are needed to compute an effective fundamental matrix -> if we cannot satisfy at least 8 points we have serious issues
             print "==================================================="
             print "P2 not extracted"
             print "==================================================="
-            return False, None, None, None, None
+            return False, None, None, None, None            
         
-        
+        print "P2"
         print projections[ind]
         
         # Filter points
@@ -351,19 +359,52 @@ class FeatureTracker:
         
         return True, P1, projections[ind], i1_pts_corr, i2_pts_corr
     
+    def rotation_to_euler(self, R):
+        """Takes a 3x3 rotation matrix and return success, euler-angles.
+        Angles are constrained to be the smallest possible for given R
+        Returns success=false on gimbal lock"""
+        """Based on 'Computing Euler angles from a rotation matrix' - Gregory
+        G. Slabaugh"""
+        
+        # Check for gimbal lock (i.e. cos(theta) = 0)
+        if ((R[2,0] == 1) or (R[2,0] == -1)):
+            print "Gimbal lock. Rotation un-resolvable"
+            return False, None
+        
+        theta = np.array([[-np.arcsin(R[2,0])],
+                         [np.pi+np.arcsin(R[2,0])]])
+                         
+        psi = np.arctan2(R[2,1]/np.cos(theta),  R[2,2]/np.cos(theta))
+        
+        phi = np.arctan2(R[1,0]/np.cos(theta),  R[0,0]/np.cos(theta))
+        
+        angles = np.hstack((psi, theta, phi))
+        
+        if angles[0].T.dot(angles[0]) > angles[1].T.dot(angles[1]):
+            #print "angles : ", angles[1]
+            return True, angles[1]
+            
+        else:
+            #print "angles : ", angles[0]
+            return True, angles[0]
+            
+    def coord_image_drone_axis(self, angles):
+        drone_angles = angles
+        drone_angles[0] = -angles[2]
+        drone_angles[1] = angles[0]
+        drone_angles[2] = angles[1]
+        return drone_angles
+    
     def update_quaternion(self, R):
         """Updates the cumulative local axis stored in self.quaternion"""
+        
+        
         
         # Make homogenous rotation matrix from R
         R4 = np.diag([0., 0., 0., 1.])
         R4[:3, :3] = R
         
         
-        
-        # Update Quaternion
-        quat = tf.transformations.quaternion_from_matrix(R4)
-        #print tf.transformations.euler_from_quaternion(quat)
-        self.quaternion = tf.transformations.quaternion_multiply(quat,self.quaternion)
         
         '''
         br = tf.TransformBroadcaster() #create broadcaster
@@ -376,20 +417,36 @@ class FeatureTracker:
         
         # Output cumulative angles
         #angles = tf.transformations.euler_from_quaternion(self.quaternion, axes='sxyz')
-        angles = tf.transformations.euler_from_quaternion(quat, axes='sxyz')
-        self.image_angle_overlay = str(angles[0]*180/np.pi) + ", " + str(angles[1]*180/np.pi) + ", " + str(angles[2]*180/np.pi)
+        
+        success, angles = self.rotation_to_euler(R)
+        angles = self.coord_image_drone_axis(angles)
+        self.image_angle_overlay = "Image " + str(angles[0]*180/np.pi) + ", " + str(angles[1]*180/np.pi) + ", " + str(angles[2]*180/np.pi)
+        print self.image_angle_overlay
+        
+        
         
         # [0]=roll, [1]=pitch, [2]=yaw
         angles = tf.transformations.euler_from_quaternion(self.relative_quat, axes='sxyz')
-        self.angle_overlay = str(angles[0]*180/np.pi) + ", " + str(angles[1]*180/np.pi) + ", " + str(angles[2]*180/np.pi)
+        self.angle_overlay = "Dead " + str(angles[0]*180/np.pi) + ", " + str(angles[1]*180/np.pi) + ", " + str(angles[2]*180/np.pi)
+        print self.angle_overlay
         
-        angles = tf.transformations.euler_from_quaternion(self.world_to_drone_quaternion, axes='sxyz')
+        # Update Quaternion
+        if abs(angles[0]) < np.pi/2 and abs(angles[1]) < np.pi/2 and abs(angles[2]) < np.pi/2:
+            quat = tf.transformations.quaternion_from_euler(angles[0], angles[1], angles[2])
+            #print tf.transformations.euler_from_quaternion(quat)
+            self.quaternion = tf.transformations.quaternion_multiply(quat,self.quaternion)
+            angles = tf.transformations.euler_from_quaternion(self.quaternion)
+            print "Cumulative quat : ", angles
+            self.image_cumu_overlay = "Cumu  " + str(angles[0]*180/np.pi) + ", " + str(angles[1]*180/np.pi) + ", " + str(angles[2]*180/np.pi)
+        
+        angles = tf.transformations.euler_from_quaternion(self.world_to_drone_quaternion, axes='sxyz')      
+        
         
         return angles
     
     def publish_cloud(self, points):
         cloud = PointCloud()
-        cloud.header.stamp = rospy.Time.now() # Should copy img header
+        cloud.header.stamp = self.tf_time_stamp # Should copy img header
         cloud.header.frame_id = "/ardrone_base_link" # Should be front camera really
         
         for i, p in enumerate(points): # Ideally done without a loop
@@ -431,12 +488,13 @@ class FeatureTracker:
         Compute Planar Homography
         ===================================================================="""
         H, t_i1_pts_corr, t_i2_pts_corr = self.extract_homography(t_i1_pts_undistorted, t_i2_pts_undistorted)
+        print "homo : ", H
         if t_i1_pts_corr == None or len(t_i1_pts_corr) < 4:
             print "Failed to extract homography"
             return        
         
         
-        
+        self.homography_to_pose(H)
         
         
         """====================================================================
@@ -468,8 +526,8 @@ class FeatureTracker:
         # Calculate pose and translation to matched template
         ===================================================================="""
         
-        real_size_x = 0.63 #0.57
-        real_size_y = 0.44 #0.57
+        real_size_x = 0.57#0.63
+        real_size_y = 0.57#0.44
         
         t_x = real_size_x*((t_i1_pts_undistorted.T[0]/self.grey_template.shape[1])-0.5)
         t_y = real_size_y*((t_i1_pts_undistorted.T[1]/self.grey_template.shape[0])-0.5)
@@ -479,7 +537,9 @@ class FeatureTracker:
         R, t, inliers = cv2.solvePnPRansac(t_i1_pts_scaled, np.array(t_i2_pts, dtype=np.float32), self.cameraMatrix, self.distCoeffs)
         R, J = cv2.Rodrigues(R)
         
-        print R, t
+        print "Template"
+        print "R : ", R
+        print "r : ", t
         
         mag_dist_text = str(np.sqrt(t.T.dot(t)))
         
@@ -543,19 +603,19 @@ class FeatureTracker:
         points"""
         
         DEF_SET_DATA = False # Switches in fixed data
-        DEF_TEMPLATE_MATCH = True # Switches template match - should be ROS param
+        DEF_TEMPLATE_MATCH = False # Switches template match - should be ROS param
         
         # Initialise previous image buffer
         if self.grey_previous == None:
             self.grey_previous = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             
-
+        '''
         # Skip frames. Need to add ROS parameter to allow setting        
         self.frameskip += 1
-        if self.frameskip < 11:
+        if self.frameskip < 6:
             return            
         self.frameskip = 0
-        
+        '''
             
         # Convert working images to monochrome
         grey_previous = self.grey_previous
@@ -569,8 +629,8 @@ class FeatureTracker:
 
         # Swap in artificial data is necessary
         if DEF_SET_DATA:
-            img1 = cv2.imread("/home/alex/testData/1.jpg")
-            img2 = cv2.imread("/home/alex/testData/4.jpg")
+            img1 = cv2.imread("/home/alex/testData/0.jpg")
+            img2 = cv2.imread("/home/alex/testData/1.jpg")
             grey_now = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
             grey_previous = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
             pts1 = self.fd.detect(grey_previous)
@@ -663,6 +723,7 @@ class FeatureTracker:
         R = P2[:,:3]
         #print "Rotation Matrix : ", R
         t = P2[:,3:4]
+        t_scaled = t*self.drone_coord_trans[2]/t[2]
         
         """============================================================
         # Update cumulative orientation quaternion 
@@ -704,6 +765,7 @@ class FeatureTracker:
         # Publish point cloud
         ============================================================"""
         #self.cloud_from_navdata(i1_pts_final, i2_pts_final)
+        print "3D1 format : ", points3D1
         self.publish_cloud(points3D1)
         
 
@@ -725,6 +787,7 @@ class FeatureTracker:
         # Note: This plots undistorted points on the distorted image
         ===================================================================="""
         img2 = stackImagesVertically(grey_previous, grey_now)
+        img2 = cv2.cvtColor(img2, cv2.COLOR_GRAY2BGR)
         imh = grey_previous.shape[0]
         county = 0
         l = 120
@@ -742,15 +805,16 @@ class FeatureTracker:
         
         
         # Overlay text (more readable than console)
-        cv2.putText(img2, self.angle_overlay, (25,25), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255))
-        cv2.putText(img2, self.image_angle_overlay, (25,50), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255))
-        cv2.putText(img2, str(self.drone_coord_trans), (25,75), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255))
-        cv2.putText(img2, str(self.temp_text), (25,100), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255))
+        cv2.putText(img2, self.angle_overlay, (25,25), cv2.FONT_HERSHEY_PLAIN, 1, (255, 127, 255))
+        cv2.putText(img2, self.image_angle_overlay, (25,50), cv2.FONT_HERSHEY_PLAIN, 1, (255, 127, 255))
+        cv2.putText(img2, "tf t :"+str(self.drone_coord_trans), (25,75), cv2.FONT_HERSHEY_PLAIN, 1, (255, 127, 255))
+        cv2.putText(img2, "im t :"+str(t_scaled), (25,100), cv2.FONT_HERSHEY_PLAIN, 1, (255, 127, 255))
+        cv2.putText(img2, self.image_cumu_overlay, (25,25+imh), cv2.FONT_HERSHEY_PLAIN, 1, (255, 127, 255))
         
         # Draw
         cv2.imshow("track", img2)
-        cv2.waitKey(1)
-                
+        cv2.waitKey(2)
+        print "=============\r\nDrawn\r\n============="
             
         """====================================================================
         # Update previous image buffer
@@ -762,13 +826,14 @@ class FeatureTracker:
     def update_tf(self):
         """Updates the cache of most recent pose information"""
         t = self.tf.getLatestCommonTime("ardrone_base_link", "world")
+        self.tf_time_stamp = t
         
         # This is world w.r.t ardrone_base_link but yields a result consistent with ardrone_base_link w.r.t world
         # Documentation, or more likely my understanding of it is wrong (the other way round gives world origin in drone coords)
         position, self.world_to_drone_quaternion = self.tf.lookupTransform("world", "ardrone_base_link", t)
         
         gamma = tf.transformations.euler_from_quaternion(self.world_to_drone_quaternion, axes='sxyz')[2]
-        self.temp_text = position
+        #self.temp_text = position
         
         # Get change in position
         print "position", position
@@ -778,7 +843,7 @@ class FeatureTracker:
             trans = np.array(([position[0] - self.prev_position[0]],
                                             [position[1] - self.prev_position[1]],
                                             [0.]))
-            ''' This assumes flate drone
+            ''' This assumes flat drone
             # Convert to drone image-proc axis (z = drone forward , x = left to right horiz, y = down)
             self.drone_coord_trans = np.array([(trans[0]*math.cos(gamma)+trans[1]*math.sin(gamma)),
                                                [0.],
@@ -816,22 +881,57 @@ class FeatureTracker:
             self.relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.prev_quat), self.world_to_drone_quaternion)
         self.prev_position = position
         self.prev_quat = self.world_to_drone_quaternion
+    
+       
+    def homography_to_pose(self, H):
+        """input homography[9] - 3x3 Matrix
+        // please note that homography should be computed
+        // using centered object/reference points coordinates
+        // for example coords from [0, 0], [320, 0], [320, 240], [0, 240]
+        // should be converted to [-160, -120], [160, -120], [160, 120], [-160, 120]"""
         
+        invH = np.array([[self.inverseCameraMatrix[0,0]*H[0,0]+self.inverseCameraMatrix[1,0]*H[0,1]+self.inverseCameraMatrix[2,0]*H[0,2]],
+                        [self.inverseCameraMatrix[0,1]*H[0,0]+self.inverseCameraMatrix[1,1]*H[0,1]+self.inverseCameraMatrix[2,1]*H[0,2]],
+                        [self.inverseCameraMatrix[0,2]*H[0,0]+self.inverseCameraMatrix[1,2]*H[0,1]+self.inverseCameraMatrix[2,2]*H[0,2]]])
+        
+        # Get 1/mag
+        lam = 1/np.sqrt(invH.transpose().dot(invH))
+        
+        inverseCameraMatrixTemp = self.inverseCameraMatrix*lam
+
+        R = inverseCameraMatrixTemp.dot(H.transpose())
+        print "R : ", R
+        
+        t = inverseCameraMatrixTemp.transpose().dot(H.transpose()[2]).transpose()
+        print "t : ", t
+        
+        U,S,V = np.linalg.svd(R)
+        
+        R = U.dot(V.dot(R))
+        print "R ortho : ", R
+        
+        
+        
+    
+    
     def tf_triangulate_points(self, pts1, pts2):
         """ Triangulates 3D points from set of matches co-ords using relative
         camera position determined from tf"""
         
-        print "Triangulation"
+        #print "Triangulation"
         # For ease of reading until names are made consistent and clear
         t = self.drone_coord_trans
-        print "Translation : ", t
+        #t = np.array([[0.235],[0],[0]])#
+        #print "Translation : ", t
         R_cam1_to_cam2 = tf.transformations.quaternion_matrix(self.relative_quat)[:3, :3]
+        #R_cam1_to_cam2 = np.diag([1,1,1])#
         R = R_cam1_to_cam2
-        print "Rotation Matrix : ", R_cam1_to_cam2
-        print "Eulers : ", tf.transformations.euler_from_quaternion(self.relative_quat)
+        #print "Rotation Matrix : ", R_cam1_to_cam2
+        #print "Eulers : ", tf.transformations.euler_from_quaternion(self.relative_quat)
         P_cam1_to_cam2 = np.hstack((R_cam1_to_cam2, self.drone_coord_trans))
+        #P_cam1_to_cam2 = np.hstack((R_cam1_to_cam2, t))
         T = P_cam1_to_cam2
-        print P_cam1_to_cam2
+        #print P_cam1_to_cam2
         
         
         empty = np.array([[0],[0],[0]])
@@ -846,13 +946,14 @@ class FeatureTracker:
         Y = (a/b)*X
         Z = (1/a)*X
         
-        print Z[1]
+        #print Z[1]
         
-        print "x,y,z : ", X, ", ", Y, ", ", Z
+        #print "x,y,z : ", X, ", ", Y, ", ", Z
         
+        '''
         cloud = PointCloud()
-        cloud.header.stamp = rospy.Time.now() # Should copy img header
-        cloud.header.frame_id = "ardrone_base_link"
+        cloud.header.stamp = self.tf_time_stamp # Should copy img header
+        cloud.header.frame_id = "/ardrone_base_link"
         
         for i, ignore in enumerate(X): # Ideally done without a loop
             #print i
@@ -863,15 +964,17 @@ class FeatureTracker:
         
         #print "cloud : ", cloud
         self.cloud_pub.publish(cloud)
+        '''
         
-        print self.cameraMatrix.shape
+        #print self.cameraMatrix.shape
         PP1 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
         PP2 = self.cameraMatrix.dot(P_cam1_to_cam2)
-        print PP1.shape
-        print PP2.shape
-        points3D = np.reshape(zip(*self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2)), (-1, 4))[:, :3]
+        #print PP1.shape
+        #print PP2.shape
+        points3D_drone = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2)
+        points3D= zip(*np.vstack((points3D_drone[2], -points3D_drone[0], -points3D_drone[1])))
         
-        print "points3D : ", points3D
+        self.publish_cloud(points3D)
         
         
         
