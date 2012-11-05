@@ -204,6 +204,7 @@ class FeatureTracker:
         FM_LMEDS may be more robust in some cases
         """
         F, mask = cv2.findFundamentalMat(i1_pts_undistorted, i2_pts_undistorted, cv2.FM_RANSAC, param1 = 1, param2 = 0.99)
+        print mask.shape
         # Expand mask for easy filtering
         mask_prepped = np.append(mask, mask, 1.)
         # Efficient np-style filtering, then reform
@@ -237,6 +238,7 @@ class FeatureTracker:
         """
         Extract homography and then remove outliers
         """
+        
         H, mask = cv2.findHomography(i1_pts_undistorted, i2_pts_undistorted, cv2.RANSAC)
         # Expand mask for easy filtering
         mask_prepped = np.append(mask, mask, 1.)
@@ -272,7 +274,7 @@ class FeatureTracker:
         # Camera Matrices to extract essential matrix and then normalise
         E = self.cameraMatrix.transpose().dot(F.dot(self.cameraMatrix))
         E /= E[2,2]
-        #print "E", E
+        print "E", E
         
         W = np.array([[0, -1, 0],[1, 0, 0], [0, 0, 1]])
         Z = np.array([[0, 1, 0],[-1, 0, 0], [0, 0, 0]])
@@ -388,8 +390,8 @@ class FeatureTracker:
             #print "angles : ", angles[0]
             return True, angles[0]
             
-    def coord_image_drone_axis(self, angles):
-        drone_angles = angles
+    def coord_image_to_drone_axis(self, angles):
+        drone_angles = angles.copy()
         drone_angles[0] = -angles[2]
         drone_angles[1] = angles[0]
         drone_angles[2] = angles[1]
@@ -416,10 +418,10 @@ class FeatureTracker:
         '''
         
         # Output cumulative angles
-        #angles = tf.transformations.euler_from_quaternion(self.quaternion, axes='sxyz')
-        
+        #angles = tf.transformations.euler_from_matrix(R4, axes='sxyz')
+        #print angles
         success, angles = self.rotation_to_euler(R)
-        angles = self.coord_image_drone_axis(angles)
+        angles = self.coord_image_to_drone_axis(angles)
         self.image_angle_overlay = "Image " + str(angles[0]*180/np.pi) + ", " + str(angles[1]*180/np.pi) + ", " + str(angles[2]*180/np.pi)
         print self.image_angle_overlay
         
@@ -478,38 +480,71 @@ class FeatureTracker:
             t_i2_pts_undistorted = cv2.undistortPoints(np.array([t_i2_pts]), self.cameraMatrix, self.distCoeffs, P=self.P)
         else:
             print "WARNING: No calibration info. Cannot Continue"
-            return
+            return  
             
         t_i1_pts_undistorted = np.array([t_i1_pts,])
         t_i2_pts_undistorted = np.array([t_i2_pts,])
         
-            
+        
+        """====================================================================
+        Centre-reference pixel coord (necessary for easy R|t recovery
+        ===================================================================="""
+        t_i1_pts_undistorted[0][:,0] -= self.grey_template.shape[1]/2
+        t_i1_pts_undistorted[0][:,1] -= self.grey_template.shape[0]/2
+        t_i2_pts_undistorted[0][:,0] -= self.grey_previous.shape[1]/2
+        t_i2_pts_undistorted[0][:,1] -= self.grey_previous.shape[0]/2
+        
+        '''
+        """====================================================================
+        Implant world size in pixel co-ords
+        ===================================================================="""        
+        real_size_x = 0.57#0.63
+        real_size_y = 0.57#0.44
+        
+        t_x = real_size_x*((t_i1_pts_undistorted.T[0]/self.grey_template.shape[1])-0.5)
+        t_y = real_size_y*((t_i1_pts_undistorted.T[1]/self.grey_template.shape[0])-0.5)
+        t_z = np.zeros(t_x.shape)
+        t_i1_pts_scaled = np.array([np.hstack((t_x, t_y, t_z))], dtype=np.float32)
+        '''
+        
+                    
         """====================================================================
         Compute Planar Homography
         ===================================================================="""
         H, t_i1_pts_corr, t_i2_pts_corr = self.extract_homography(t_i1_pts_undistorted, t_i2_pts_undistorted)
         print "homo : ", H
-        if t_i1_pts_corr == None or len(t_i1_pts_corr) < 4:
+        if t_i2_pts_corr == None or len(t_i2_pts_corr) < 4:
             print "Failed to extract homography"
             return        
         
         
         self.homography_to_pose(H)
         
+        # Restore co-ords
+        t_i1_pts_corr[:,0] += self.grey_template.shape[1]/2
+        t_i1_pts_corr[:,1] += self.grey_template.shape[0]/2
+        t_i2_pts_corr[:,0] += self.grey_previous.shape[1]/2
+        t_i2_pts_corr[:,1] += self.grey_previous.shape[0]/2
+        
         
         """====================================================================
         Plot extracted perspective projection
         ===================================================================="""
         
-        # The corners of the template
-        corners = np.array([[[0,0],
-                           [self.grey_template.shape[1], 0],
-                           [self.grey_template.shape[1], self.grey_template.shape[0]],
-                           [0, self.grey_template.shape[0]]]], dtype=np.float32)
-                           
+        # The corners of the template in centre xeroed pixels
+        corners = np.array([[[-self.grey_template.shape[1]/2,-self.grey_template.shape[0]/2],
+                           [self.grey_template.shape[1]/2, -self.grey_template.shape[0]/2],
+                           [self.grey_template.shape[1]/2, self.grey_template.shape[0]/2],
+                           [-self.grey_template.shape[1]/2, self.grey_template.shape[0]/2]]], dtype=np.float32)
         
         # Transform to actual view
         c = cv2.perspectiveTransform(corners, H)[0]
+        
+        # Revert to corner zeroed pixels
+        c[:,0]+=self.grey_previous.shape[1]/2
+        c[:,1]+=self.grey_previous.shape[0]/2
+        
+        
                            
         # Draw perspective projection
         img2 = stackImagesVertically(self.grey_template, grey_now)
@@ -520,12 +555,9 @@ class FeatureTracker:
         cv2.line(img2,(int(c[3,0]), int(c[3,1])+imh), (int(c[0,0]), int(c[0,1])+imh), (255, 255 , 255), 2)
         
 
-        
-        
         """====================================================================
-        # Calculate pose and translation to matched template
-        ===================================================================="""
-        
+        Implant world size in pixel co-ords
+        ===================================================================="""        
         real_size_x = 0.57#0.63
         real_size_y = 0.57#0.44
         
@@ -533,6 +565,11 @@ class FeatureTracker:
         t_y = real_size_y*((t_i1_pts_undistorted.T[1]/self.grey_template.shape[0])-0.5)
         t_z = np.zeros(t_x.shape)
         t_i1_pts_scaled = np.array(np.hstack((t_x, t_y, t_z)), dtype=np.float32)
+        
+        """====================================================================
+        # Calculate pose and translation to matched template
+        ===================================================================="""
+
         
         R, t, inliers = cv2.solvePnPRansac(t_i1_pts_scaled, np.array(t_i2_pts, dtype=np.float32), self.cameraMatrix, self.distCoeffs)
         R, J = cv2.Rodrigues(R)
@@ -575,6 +612,16 @@ class FeatureTracker:
         cv2.line(img2,(int(c[3,0]), int(c[3,1])+imh), (int(c[0,0]), int(c[0,1])+imh), (255, 255 , 255), 2)
         '''
         
+        '''
+        """====================================================================
+        Restore co-ordinates to pixel
+        ===================================================================="""
+        
+        p_x = ((t_i1_corr_scaled.T[0]/real_size_x)+0.5)*self.grey_template.shape[1]
+        p_y = ((t_i1_corr_scaled.T[1]/real_size_x)+0.5)*self.grey_template.shape[0]
+        t_i1_pts_corr = np.array(np.hstack((p_x, p_y)), dtype=np.float32)
+        '''
+        
         
         """====================================================================
         Draw Matches
@@ -603,19 +650,19 @@ class FeatureTracker:
         points"""
         
         DEF_SET_DATA = False # Switches in fixed data
-        DEF_TEMPLATE_MATCH = False # Switches template match - should be ROS param
+        DEF_TEMPLATE_MATCH = True # Switches template match - should be ROS param
         
         # Initialise previous image buffer
         if self.grey_previous == None:
             self.grey_previous = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             
-        '''
+        
         # Skip frames. Need to add ROS parameter to allow setting        
         self.frameskip += 1
         if self.frameskip < 6:
             return            
         self.frameskip = 0
-        '''
+        
             
         # Convert working images to monochrome
         grey_previous = self.grey_previous
@@ -668,11 +715,8 @@ class FeatureTracker:
             print "WARNING: No calibration info. Cannot Continue"
             return
             
+        
         '''
-        """====================================================================
-        Normalise with inverse K, this means computing F gives E
-        This should avoid numerical problems in determining F
-        ===================================================================="""
         i1_pts_norm = self.make_homo(i1_pts_undistorted[0])
         i2_pts_norm = self.make_homo(i2_pts_undistorted[0])
         i1_pts_norm = self.inverseCameraMatrix.dot(i1_pts_norm.T)[:2].T
@@ -680,6 +724,8 @@ class FeatureTracker:
         print "No of undistorted points : ", len(i1_pts_norm)
         #print self.cameraMatrix.dot(i1_pts_norm)[:2].T
         '''
+        
+
         
         """============================================================
         Extract F and filter outliers
@@ -691,7 +737,17 @@ class FeatureTracker:
             self.kp1, self.desc1 = self.kp2, self.desc2
             return
         print "No of corrected points : ", len(i1_pts_corr)
-                     
+        
+        
+        '''
+        """====================================================================
+        Normalise with inverse K, this means computing F gives E
+        This should avoid numerical problems in determining F
+        ===================================================================="""
+        i1_temp = self.inverseCameraMatrix.dot(self.make_homo(i1_pts_undistorted).transpose()).transpose()[:, :2]        
+        i2_temp = self.inverseCameraMatrix.dot(self.make_homo(i2_pts_undistorted).transpose()).transpose()[:, :2]
+        E, i1_pts_corr, i2_pts_corr = self.extract_fundamental(i1_pts_undistorted, i2_pts_undistorted)
+        '''
 
         """============================================================
         # Examine quality of F
@@ -871,7 +927,7 @@ class FeatureTracker:
             self.tf_translation = trans[:3]
             trans[0] = -trans[1]
             trans[1] = -trans[2]
-            trans[2] = trans[0]
+            trans[2] = trans[0]l
             
             self.tf_translation = trans
             '''
@@ -889,26 +945,55 @@ class FeatureTracker:
         // using centered object/reference points coordinates
         // for example coords from [0, 0], [320, 0], [320, 240], [0, 240]
         // should be converted to [-160, -120], [160, -120], [160, 120], [-160, 120]"""
+        print "H : \r\n", H
+        print "K : \r\n", self.cameraMatrix
+        print "K-1 : \r\n", self.inverseCameraMatrix
         
+        '''
         invH = np.array([[self.inverseCameraMatrix[0,0]*H[0,0]+self.inverseCameraMatrix[1,0]*H[0,1]+self.inverseCameraMatrix[2,0]*H[0,2]],
                         [self.inverseCameraMatrix[0,1]*H[0,0]+self.inverseCameraMatrix[1,1]*H[0,1]+self.inverseCameraMatrix[2,1]*H[0,2]],
                         [self.inverseCameraMatrix[0,2]*H[0,0]+self.inverseCameraMatrix[1,2]*H[0,1]+self.inverseCameraMatrix[2,2]*H[0,2]]])
+        print "invH man : ", invH
+        
+ 
+                
+        
+        inverseCameraMatrix=self.inverseCameraMatrix.copy()
+        inverseCameraMatrix[2,0] = self.inverseCameraMatrix[0,2]
+        inverseCameraMatrix[2,1] = self.inverseCameraMatrix[1,2]
+        inverseCameraMatrix[0,2] = 0
+        inverseCameraMatrix[1,2] = 0        
+        
+        print "K-1 re : \r\n", inverseCameraMatrix
+        '''
+        
+        print "H vect : \r\n", H[:, :1]
+        invH = self.inverseCameraMatrix.dot(H[:, :1])
+        print "invH vec : \r\n", invH 
         
         # Get 1/mag
         lam = 1/np.sqrt(invH.transpose().dot(invH))
+        print "lam : ", lam
         
-        inverseCameraMatrixTemp = self.inverseCameraMatrix*lam
+        # Scale 
+        inverseCameraMatrix = self.inverseCameraMatrix.copy()*lam
 
-        R = inverseCameraMatrixTemp.dot(H.transpose())
-        print "R : ", R
+        # Extract R. Force 3rd column to be orthonormal
+        R = inverseCameraMatrix.dot(H)
+        print "R before : \r\n", R
+        R[:, 2:3] = np.cross(R[:,:1].T,R[:,1:2].T).T
+        print "R : \r\n", R
         
-        t = inverseCameraMatrixTemp.transpose().dot(H.transpose()[2]).transpose()
+        # Calc t (Scaled Kinv dot 3rd col of H)
+        t = inverseCameraMatrix.dot(H[:,2:3])
         print "t : ", t
         
+        # Transform T into next orthogonal matrix (Frobenius sense)
+        # Remember again that V is transpose compared to convention (R = USV)
         U,S,V = np.linalg.svd(R)
         
-        R = U.dot(V.dot(R))
-        print "R ortho : ", R
+        R = U.dot(V)
+        print "R ortho : \r\n", R
         
         
         
