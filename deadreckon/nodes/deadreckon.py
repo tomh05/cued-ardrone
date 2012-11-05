@@ -151,7 +151,7 @@ class DeadReckoning:
         br.sendTransform((self.x,self.y,self.z), 
                          # translation happens first, then rotation
                          quaternion,
-                         rospy.Time.now(), # NB: 'now' is not the same as time data was sent from drone
+                         time,
                          "ardrone_base_link",
                          "world")
 
