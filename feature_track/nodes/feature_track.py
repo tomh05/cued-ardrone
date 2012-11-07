@@ -26,10 +26,12 @@ import matplotlib.pyplot as plot
 from mpl_toolkits.mplot3d import Axes3D
 import tf
 from sensor_msgs.msg import PointCloud
+from std_msgs.msg import Empty
 from nav_msgs.msg import Path
 import math
 import time
 import threading
+import os
     
 def stackImagesVertically(top_image, bottom_image):
     """Takes two cv2 numpy array images top_image, bottom_image
@@ -63,6 +65,9 @@ class FeatureTracker:
         self.preload_template('/home/alex/cued-ardrone/feature_track/templates/boxTemplate.png')
         self.tf = tf.TransformListener()
         self.prev_position = None
+        self.mag_dist = None
+        self.speech_limiter = 0
+        self.corners = None
                 
     def preload_template(self, path):
         """Template features and descriptors need only be extracted once, so
@@ -690,7 +695,7 @@ class FeatureTracker:
         # Update distance to template
         ================================================================"""
         
-        self.mag_dist = np.sqrt(t.T.dot(t))
+        self.mag_dist = np.sqrt(t.T.dot(t)[0,0])
         self.t_debug_text.append("Dist " + str(self.mag_dist))
         
         
@@ -727,23 +732,24 @@ class FeatureTracker:
         
         square_side = 0.1
         
-        # The corners of the template        
-        corners = np.array([[-length/2,-width/2,0,1],
-                           [-length/2, +width/2,0,1],
-                           [+length/2, +width/2,0,1],
-                           [+length/2, -width/2,0,1],
-                           [-length/2,-width/2,+depth,1],
-                           [-length/2, +width/2,+depth,1],
-                           [+length/2, +width/2,+depth,1],
-                           [+length/2, -width/2,+depth,1],
-                           [-square_side,-square_side,0,1],
-                           [-square_side, +square_side,0,1],
-                           [+square_side, +square_side,0,1],
-                           [+square_side, -square_side,0,1],
-                           [-square_side, -square_side,-2*square_side,1],
-                           [-square_side, +square_side,-2*square_side,1],
-                           [+square_side, +square_side,-2*square_side,1],
-                           [+square_side, -square_side,-2*square_side,1]]).T
+        # The corners of the template 
+        if self.corners == None:       
+            self.corners = np.array(  [[-length/2,-width/2,0,1],
+                                       [-length/2, +width/2,0,1],
+                                       [+length/2, +width/2,0,1],
+                                       [+length/2, -width/2,0,1],
+                                       [-length/2,-width/2,+depth,1],
+                                       [-length/2, +width/2,+depth,1],
+                                       [+length/2, +width/2,+depth,1],
+                                       [+length/2, -width/2,+depth,1],
+                                       [-square_side,-square_side,0,1],
+                                       [-square_side, +square_side,0,1],
+                                       [+square_side, +square_side,0,1],
+                                       [+square_side, -square_side,0,1],
+                                       [-square_side, -square_side,-2*square_side,1],
+                                       [-square_side, +square_side,-2*square_side,1],
+                                       [+square_side, +square_side,-2*square_side,1],
+                                       [+square_side, -square_side,-2*square_side,1]]).T
         
         # Set up projection from extracted R and t                   
         P =  np.diag([1.,1.,1.,1.])
@@ -753,7 +759,7 @@ class FeatureTracker:
         # Reverse project corners to pixel space (effectively K.[R|t].X)
         # Instead of having inputting the real world corners with camera origin
         # We consider the template to be centred on origin xy plane at z = 0
-        sub = P.dot(corners)[:3]
+        sub = P.dot(self.corners)[:3]
         c = self.cameraMatrix.dot(sub).T
         # Normalise
         for xy in c:
@@ -1078,7 +1084,7 @@ class FeatureTracker:
         
         # Draw
         cv2.imshow("track", img2)
-        cv2.waitKey(2)
+        cv2.waitKey(3)
         print "=============\r\nDrawn\r\n============="
         times.append(time.time()-time_offset)
         
@@ -1332,6 +1338,18 @@ class FeatureTracker:
         ============================================================"""
         self.publish_cloud(points3D1)
     '''
+    
+    
+    def speakDistance(self, d):
+        print "bing-----------------------------------------------------------"
+        """Audibly reads the template distance"""
+        if self.mag_dist == None:
+            text = "Marker not seen"
+        else:
+            text = "Distance to marker is "
+        text+=str(self.mag_dist)
+        os.system('espeak "'+text+'" --stdout | paplay')
+    
 
     def imgproc(self, d):
         """Converts the ROS published image to a cv2 numpy array
@@ -1343,6 +1361,7 @@ class FeatureTracker:
         npimg = np.asarray(cvimg)
         # Pass to FeatureTracker
         self.featureTrack(npimg)
+        
         
     def setCameraInfo(self, ci):
         """Converts the ROS published camera info into numpy arrays and 
@@ -1362,7 +1381,7 @@ def connect(m):
     rospy.init_node('Feature_Tracker')
     rospy.Subscriber('/ardrone/front/image_raw',Image,m.imgproc)
     rospy.Subscriber('/ardrone/front/camera_info',sensor_msgs.msg.CameraInfo, m.setCameraInfo)
-    #rospy.Subscriber('/xboxcontroller/button_y',None,m.readDistance)
+    rospy.Subscriber('/xboxcontroller/button_y',Empty,m.speakDistance)
 
 
 def run():
