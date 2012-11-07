@@ -58,6 +58,23 @@ class HoverController:
 		self.hover_timer = rospy.Timer(rospy.Duration(1.0/20.0), self.hover_timer_callback)
 		sleep(2)
 		self.pc.pc_timer_init()
+		sleep(10)
+		self.desiposw=(0.7,0.0,0.0)
+		self.pc.dpw_handler(self.desiposw)
+		sleep(10)
+		self.desiposw=(0.0,-0.8,0.0)
+		self.pc.dpw_handler(self.desiposw)
+		sleep(10)
+		self.desiposw=(0.0,0.0,0.0)
+		self.pc.dpw_handler(self.desiposw)
+		sleep(10)
+		self.desiposw=(-1.0,-0.3,0.0)
+		self.pc.dpw_handler(self.desiposw)
+		sleep(10)
+		self.desiposw=(0.0,0.0,0.0)
+		self.pc.dpw_handler(self.desiposw)
+		sleep(10)
+		self.landpub.publish(Empty()); print 'land'
 	
 
 	def hover_timer_callback(self,event):

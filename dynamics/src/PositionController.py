@@ -133,6 +133,10 @@ class PositionController:
 		self.justgotpose = True
 		print 'gotpose - ' + str(time()-self.reftm)
 	
+	
+	def dpw_handler(self, dpw):
+		self.dpw = dpw
+	
 
 	def pc_timer_callback(self,event):
 		if (self.nd_log['al'][-1]>(self.ref['al']+500)):
