@@ -840,6 +840,7 @@ class FeatureTracker:
         
         DEF_SET_DATA = False # Switches in fixed data
         DEF_TEMPLATE_MATCH = True  # Switches template match - should be ROS param
+        DEF_THREADING = True # Enables threading of template matching
         
         # Initialise previous image buffer
         if self.grey_previous == None:
@@ -896,10 +897,12 @@ class FeatureTracker:
         times.append(time.time()-time_offset)
         
         if DEF_TEMPLATE_MATCH:    
-            # Carry out template match - Note this is the full procedure call and should really be threaded
-            template_thread = threading.Thread(target = self.templateTrack)
-            template_thread.start()
-            #self.templateTrack(grey_now)
+            # Carry out template match
+            if DEF_THREADING:
+                template_thread = threading.Thread(target = self.templateTrack)
+                template_thread.start()
+            else:
+                self.templateTrack()
         times.append(time.time()-time_offset)
         
         """====================================================================
@@ -1087,8 +1090,22 @@ class FeatureTracker:
         self.kp1, self.desc1 = self.kp2, self.desc2
         times.append(time.time()-time_offset)
         
-        print times
+        if DEF_THREADING and DEF_TEMPLATE_MATCH:
+            """================================================================
+            # Wait for threading to complete
+            ================================================================"""
+            idle = 0
+            idle_step = 2
+            if template_thread.isAlive():
+                cv2.waitKey(idle_step)
+                idle+=idle_step
+                print "Main thread waiting for template thread : ", idle, "us"
         
+        
+        times.append(time.time()-time_offset)
+        print times
+    
+    
     def update_tf(self):
         """Updates the cache of most recent pose information"""
         t = self.tf.getLatestCommonTime("ardrone_base_link", "world")
