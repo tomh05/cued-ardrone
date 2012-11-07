@@ -24,8 +24,8 @@ class PositionController:
 	def __init__(self):
 		
 		self.d0=1.0/2800
-		self.d1=-0.016
-		self.d2=-0.00025
+		self.d1=-0.011
+		self.d2=-0.00028
 		self.dpw=(0.0, 0.0, 0.0)
 		self.cpw=(0.0, 0.0, 0.0)
 		
