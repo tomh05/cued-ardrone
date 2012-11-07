@@ -1,0 +1,18 @@
+<package>
+  <description brief="particlefilter">
+
+     particlefilter
+
+  </description>
+  <author>Tom Howe</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/particlefilter</url>
+  <depend package="tf"/>
+  <depend package="rospy"/>
+  <depend package="ardrone_autonomy"/>
+  <depend package="ar_pose"/>
+
+</package>
+
+
