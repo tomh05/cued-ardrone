@@ -5,7 +5,7 @@
         <remap from="/usb_cam/image_raw" to="ardrone/bottom/image_raw" />
         
         <param name="marker_pattern_list" type="string" value="$(find ar_pose)/data/object_4x4_id100"/>
-		<param name="threshold" type="int" value="95"/>
+		<param name="threshold" type="int" value="90"/>
     </node>
     
 </launch>

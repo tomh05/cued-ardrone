@@ -22,11 +22,18 @@ import pickle
 class PositionController:
 	
 	def __init__(self):
+		
+		self.d0=1.0/2800
+		self.d1=-0.016
+		self.d2=-0.00025
+		self.dpw=(0.0, 0.0, 0.0)
+		self.cpw=(0.0, 0.0, 0.0)
+		
 		self.reftm = time()
 		self.cmd_log = {'tm':[], 'tw':[]}
-		self.nd_log = {'tm':[], 'nd':[], 'ph':[], 'th':[], 'ps':[], 'vx':[], 'vy':[], 'vz':[], 'al':[], 'cpw':[], 'psiw':[]}
+		self.nd_log = {'tm':[], 'nd':[], 'ph':[], 'th':[], 'ps':[], 'vx':[], 'vy':[], 'vz':[], 'al':[], 'cpw':[self.cpw,], 'psiw':[0,]}
 		
-		self.ref = {'al':1500, 'ps':0.0}
+		self.ref = {'al':1400, 'ps':0.0}
 		self.error = {'al':[], 'ps':[]}
 		
 		self.twist = Twist()
@@ -36,21 +43,15 @@ class PositionController:
 		self.takeoffpub = rospy.Publisher('/ardrone/takeoff', Empty)
 		self.navdatasub = rospy.Subscriber('/ardrone/navdata', Navdata, self.navdataCallback)
 		self.camselectclient = rospy.ServiceProxy('/ardrone/setcamchannel', CamSelect)
-		
-		self.d0=1.0/2000
-		self.d1=-0.010
-		self.d2=-0.0002
-		self.dpw=(0.0, 0.0, 0.0)
-		self.cpw=(0.0, 0.0, 0.0)
 				
 		self.posecmd = {'tm': [], 'cpw':[], 'cow':[], 'dpw':[]}
 		self.justgotpose = False
-		self.drone_pos_valid = False
+		#self.drone_pos_valid = False
 
 
 	def pc_timer_init(self):
 		try:
-			self.pc_timer = rospy.Timer(rospy.Duration(1.0/15.0), self.pc_timer_callback)
+			self.pc_timer = rospy.Timer(rospy.Duration(1.0/20.0), self.pc_timer_callback)
 		except:
 			pass
 			print 'pc_timer_init error'
@@ -100,8 +101,8 @@ class PositionController:
 				#print yaw
 				#print self.nd_log['cpw'][-1]
 		except:
-			self.drone_pos_valid = False
-			#print 'navdata callback error'
+			#self.drone_pos_valid = False
+			print 'navdata callback error'
 			
 
 	def nd_logger(self,msg):
@@ -130,6 +131,7 @@ class PositionController:
 		self.nd_log['cpw'].append(cpw)
 		self.dpw = dpw		
 		self.justgotpose = True
+		print 'gotpose - ' + str(time()-self.reftm)
 	
 
 	def pc_timer_callback(self,event):
@@ -142,7 +144,7 @@ class PositionController:
 
 		#endif height and yaw control are activated
 		
-		try:
+		if True:
 			(xcw, ycw, zcw) = self.nd_log['cpw'][-1]
 			(xdw, ydw, zdw) = self.dpw
 			xrw = xdw - xcw
@@ -163,8 +165,8 @@ class PositionController:
 			rx=1000.0*xrc*self.d0+oldth*self.d1+oldvx*self.d2
 			ry=1000.0*yrc*self.d0+oldph*self.d1+oldvy*self.d2
 			
-			print rx, ry
-			print psw
+			#print rx, ry
+			#print psw
 			self.twist.linear.x=max(min(rx,0.5),-0.5)
 			self.twist.linear.y=max(min(ry,0.5),-0.5)
 			
@@ -175,12 +177,12 @@ class PositionController:
 			self.main_timer.shutdown()
 			'''
 		
-		except:
+		else:
 			pass
 			#print 'calculate command error'
 		
-		if self.drone_pos_valid == False:
-			self.twist.linear.x = 0; self.twist.linear.y=0
+		#if self.drone_pos_valid == False:
+		#	self.twist.linear.x = 0; self.twist.linear.y=0
 
 		self.cmdpub.publish(self.twist)
 		self.cmd_logger(self.twist)

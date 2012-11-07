@@ -25,7 +25,6 @@ class HoverController:
 	
 	def __init__(self):
 		self.reftm = time()
-		self.cmdstart = self.reftm + 7.0
 		
 		self.twist = Twist()
 		self.cmdpub = rospy.Publisher('cmd_vel', Twist)
@@ -52,19 +51,18 @@ class HoverController:
 		self.pc = PositionController()		
 		
 		self.takeoffpub.publish(Empty()); print 'takeoff'
-		while (time() < (self.cmdstart)):
-			pass
+		sleep(4)
 
 		self.desiposw=(0.0, 0.0, 0.0)
 		print '*********** start control ***********'
-		self.hover_timer = rospy.Timer(rospy.Duration(1.0/5.0), self.hover_timer_callback)
-		sleep(1)
+		self.hover_timer = rospy.Timer(rospy.Duration(1.0/20.0), self.hover_timer_callback)
+		sleep(2)
 		self.pc.pc_timer_init()
 	
 
 	def hover_timer_callback(self,event):
 		
-		if (time() > self.cmdstart + 1.0):	
+		if True:	
 			if (self.tl.canTransform('/4x4_100','/ardrone_base_link', rospy.Time(0))):
 				tnow=rospy.Time.now()
 				tpast=self.tl.getLatestCommonTime('/4x4_100','/ardrone_base_link')
@@ -105,6 +103,7 @@ class HoverController:
 def main(args):
 	rospy.init_node('hovercontroller', anonymous=True)
 	hc = HoverController()
+	sleep(0.5)
 	hc.hover_procedure()
 	rospy.spin()
 
