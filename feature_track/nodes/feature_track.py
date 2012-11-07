@@ -28,6 +28,7 @@ import tf
 from sensor_msgs.msg import PointCloud
 from nav_msgs.msg import Path
 import math
+import time
     
 def stackImagesVertically(top_image, bottom_image):
     """Takes two cv2 numpy array images top_image, bottom_image
@@ -51,8 +52,8 @@ class FeatureTracker:
         self.grey_previous = None
         self.frameskip = 0
         self.calibrated = False
-        self.fd = cv2.FeatureDetector_create('ORB')
-        self.de = cv2.DescriptorExtractor_create('ORB')
+        self.fd = cv2.FeatureDetector_create('SIFT')
+        self.de = cv2.DescriptorExtractor_create('SIFT')
         self.dm = cv2.DescriptorMatcher_create('BruteForce')
         self.desc1 = None
         self.kp1 = None
@@ -203,8 +204,9 @@ class FeatureTracker:
         FM_RANSAC should be good with lowish outliers
         FM_LMEDS may be more robust in some cases
         """
+        temp_time = time.time()
         F, mask = cv2.findFundamentalMat(i1_pts_undistorted, i2_pts_undistorted, cv2.FM_RANSAC, param1 = 1, param2 = 0.99)
-        print mask.shape
+        print "F time : ", time.time()-temp_time
         # Expand mask for easy filtering
         mask_prepped = np.append(mask, mask, 1.)
         # Efficient np-style filtering, then reform
@@ -396,6 +398,13 @@ class FeatureTracker:
         drone_angles[1] = angles[0]
         drone_angles[2] = angles[1]
         return drone_angles
+        
+    def coord_drone_to_image_axis(self, angles):
+        drone_angles = angles.copy()
+        drone_angles[0] = angles[1]
+        drone_angles[1] = angles[2]
+        drone_angles[2] = -angles[0]
+        return drone_angles
     
     def update_quaternion(self, R):
         """Updates the cumulative local axis stored in self.quaternion"""
@@ -469,176 +478,280 @@ class FeatureTracker:
             print "No template matches"
             return
             
-        
-        
-        """====================================================================
-        Undistort points using known camera calibration
-        ===================================================================="""
-        if self.calibrated:
-            # Undistort points using calibration data
-            t_i1_pts_undistorted = cv2.undistortPoints(np.array([t_i1_pts]), self.cameraMatrix, self.distCoeffs, P=self.P)
-            t_i2_pts_undistorted = cv2.undistortPoints(np.array([t_i2_pts]), self.cameraMatrix, self.distCoeffs, P=self.P)
-        else:
-            print "WARNING: No calibration info. Cannot Continue"
-            return  
+        if len(t_i1_pts)>32:
             
-        t_i1_pts_undistorted = np.array([t_i1_pts,])
-        t_i2_pts_undistorted = np.array([t_i2_pts,])
-        
-        
-        """====================================================================
-        Centre-reference pixel coord (necessary for easy R|t recovery
-        ===================================================================="""
-        t_i1_pts_undistorted[0][:,0] -= self.grey_template.shape[1]/2
-        t_i1_pts_undistorted[0][:,1] -= self.grey_template.shape[0]/2
-        t_i2_pts_undistorted[0][:,0] -= self.grey_previous.shape[1]/2
-        t_i2_pts_undistorted[0][:,1] -= self.grey_previous.shape[0]/2
-        
-        '''
-        """====================================================================
-        Implant world size in pixel co-ords
-        ===================================================================="""        
-        real_size_x = 0.57#0.63
-        real_size_y = 0.57#0.44
-        
-        t_x = real_size_x*((t_i1_pts_undistorted.T[0]/self.grey_template.shape[1])-0.5)
-        t_y = real_size_y*((t_i1_pts_undistorted.T[1]/self.grey_template.shape[0])-0.5)
-        t_z = np.zeros(t_x.shape)
-        t_i1_pts_scaled = np.array([np.hstack((t_x, t_y, t_z))], dtype=np.float32)
-        '''
-        
-                    
-        """====================================================================
-        Compute Planar Homography
-        ===================================================================="""
-        H, t_i1_pts_corr, t_i2_pts_corr = self.extract_homography(t_i1_pts_undistorted, t_i2_pts_undistorted)
-        print "homo : ", H
-        if t_i2_pts_corr == None or len(t_i2_pts_corr) < 4:
-            print "Failed to extract homography"
-            return        
-        
-        
-        self.homography_to_pose(H)
-        
-        # Restore co-ords
-        t_i1_pts_corr[:,0] += self.grey_template.shape[1]/2
-        t_i1_pts_corr[:,1] += self.grey_template.shape[0]/2
-        t_i2_pts_corr[:,0] += self.grey_previous.shape[1]/2
-        t_i2_pts_corr[:,1] += self.grey_previous.shape[0]/2
-        
-        
-        """====================================================================
-        Plot extracted perspective projection
-        ===================================================================="""
-        
-        # The corners of the template in centre xeroed pixels
-        corners = np.array([[[-self.grey_template.shape[1]/2,-self.grey_template.shape[0]/2],
-                           [self.grey_template.shape[1]/2, -self.grey_template.shape[0]/2],
-                           [self.grey_template.shape[1]/2, self.grey_template.shape[0]/2],
-                           [-self.grey_template.shape[1]/2, self.grey_template.shape[0]/2]]], dtype=np.float32)
-        
-        # Transform to actual view
-        c = cv2.perspectiveTransform(corners, H)[0]
-        
-        # Revert to corner zeroed pixels
-        c[:,0]+=self.grey_previous.shape[1]/2
-        c[:,1]+=self.grey_previous.shape[0]/2
-        
-        
-                           
-        # Draw perspective projection
-        img2 = stackImagesVertically(self.grey_template, grey_now)
-        imh = self.grey_template.shape[0]
-        cv2.line(img2,(int(c[0,0]), int(c[0,1])+imh), (int(c[1,0]), int(c[1,1])+imh), (255, 255 , 255), 2)
-        cv2.line(img2,(int(c[1,0]), int(c[1,1])+imh), (int(c[2,0]), int(c[2,1])+imh), (255, 255 , 255), 2)
-        cv2.line(img2,(int(c[2,0]), int(c[2,1])+imh), (int(c[3,0]), int(c[3,1])+imh), (255, 255 , 255), 2)
-        cv2.line(img2,(int(c[3,0]), int(c[3,1])+imh), (int(c[0,0]), int(c[0,1])+imh), (255, 255 , 255), 2)
-        
+            """================================================================
+            Undistort points using known camera calibration
+            ================================================================"""
+            if self.calibrated:
+                # Undistort points using calibration data
+                t_i1_pts_undistorted = cv2.undistortPoints(np.array([t_i1_pts]), self.cameraMatrix, self.distCoeffs, P=self.P)
+                t_i2_pts_undistorted = cv2.undistortPoints(np.array([t_i2_pts]), self.cameraMatrix, self.distCoeffs, P=self.P)
+            else:
+                print "WARNING: No calibration info. Cannot Continue"
+                return  
+                
+            t_i1_pts_undistorted = np.array([t_i1_pts,])
+            t_i2_pts_undistorted = np.array([t_i2_pts,])
+            
+            '''
+            """================================================================
+            Centre-reference pixel coord (necessary for easy R|t recovery)
+            ================================================================"""
+            t_i1_pts_undistorted[0][:,0] -= self.grey_template.shape[1]/2
+            t_i1_pts_undistorted[0][:,1] -= self.grey_template.shape[0]/2
+            t_i2_pts_undistorted[0][:,0] -= self.grey_previous.shape[1]/2
+            t_i2_pts_undistorted[0][:,1] -= self.grey_previous.shape[0]/2
+            '''
+            
+            '''
+            """====================================================================
+            Scale template to real world known size
+            ===================================================================="""
+            real_size_x = 0.57#0.63
+            real_size_y = 0.57#0.44
+            
+            t_i1_pts_undistorted[0][:,0] /= self.grey_template.shape[1]
+            t_i1_pts_undistorted[0][:,1] /= self.grey_template.shape[0]
+            t_i1_pts_undistorted[0][:,0] *= real_size_x
+            t_i1_pts_undistorted[0][:,1] *= real_size_y
+            '''
+            
+            '''            
+            """================================================================
+            Compute Planar Homography
+            ================================================================"""
+            
+            H, t_i1_pts_corr, t_i2_pts_corr = self.extract_homography(t_i1_pts_undistorted, t_i2_pts_undistorted)
+            print "homo : ", H
+            if t_i2_pts_corr == None or len(t_i2_pts_corr) < 4:
+                print "Failed to extract homography"
+                return        
+            
+            
+            self.homography_to_pose(H)
+            
+            # Restore co-ords
+            t_i1_pts_corr[:,0] += self.grey_template.shape[1]/2
+            t_i1_pts_corr[:,1] += self.grey_template.shape[0]/2
+            t_i2_pts_corr[:,0] += self.grey_previous.shape[1]/2
+            t_i2_pts_corr[:,1] += self.grey_previous.shape[0]/2
+            '''
+            
+            '''
+            """================================================================
+            Plot extracted perspective projection via hmography
+            ================================================================"""
+            
+            # The corners of the template in centre zeroed pixels
+            corners = np.array([[[-self.grey_template.shape[1]/2,-self.grey_template.shape[0]/2],
+                               [self.grey_template.shape[1]/2, -self.grey_template.shape[0]/2],
+                               [self.grey_template.shape[1]/2, self.grey_template.shape[0]/2],
+                               [-self.grey_template.shape[1]/2, self.grey_template.shape[0]/2]]], dtype=np.float32)
+                               
+            # Transform to actual view
+            c = cv2.perspectiveTransform(corners, H)[0]
+            
+            # Revert to corner zeroed pixels
+            c[:,0]+=self.grey_previous.shape[1]/2
+            c[:,1]+=self.grey_previous.shape[0]/2      
+                               
+            # Draw perspective projection
+            img2 = stackImagesVertically(self.grey_template, grey_now)
+            img2 = cv2.cvtColor(img2, cv2.COLOR_GRAY2BGR)
+            imh = self.grey_template.shape[0]
+            cv2.line(img2,(int(c[0,0]), int(c[0,1])+imh), (int(c[1,0]), int(c[1,1])+imh), (255, 255 , 255), 2)
+            cv2.line(img2,(int(c[1,0]), int(c[1,1])+imh), (int(c[2,0]), int(c[2,1])+imh), (255, 255 , 255), 2)
+            cv2.line(img2,(int(c[2,0]), int(c[2,1])+imh), (int(c[3,0]), int(c[3,1])+imh), (255, 255 , 255), 2)
+            cv2.line(img2,(int(c[3,0]), int(c[3,1])+imh), (int(c[0,0]), int(c[0,1])+imh), (255, 255 , 255), 2)
+            '''
+            
 
-        """====================================================================
-        Implant world size in pixel co-ords
-        ===================================================================="""        
-        real_size_x = 0.57#0.63
-        real_size_y = 0.57#0.44
+            """================================================================
+            Implant world size in pixel co-ords
+            ================================================================"""        
+            temp_time = time.time()
+            
+            real_size_x = 0.57#0.63
+            real_size_y = 0.57#0.44
+            
+            t_x = real_size_x*((t_i1_pts_undistorted.T[0]/self.grey_template.shape[1])-0.5)
+            t_y = real_size_y*((t_i1_pts_undistorted.T[1]/self.grey_template.shape[0])-0.5)
+            t_z = np.zeros(t_x.shape)
+            t_i1_pts_scaled = np.array(np.hstack((t_x, t_y, t_z)), dtype=np.float32)
+            
+            
+            
+            """================================================================
+            # Calculate pose and translation to matched template
+            ================================================================"""
+            
+            R, t, inliers = cv2.solvePnPRansac(t_i1_pts_scaled, np.array(t_i2_pts, dtype=np.float32), self.cameraMatrix, self.distCoeffs)
+            
+            if inliers== None:
+                print "Template not found"
+                self.template_visualise(grey_now)
+                return
+            t_i1_pts_corr = t_i1_pts_undistorted[0][inliers[:,0]]
+            print t_i1_pts_corr
+            t_i2_pts_corr = t_i2_pts_undistorted[0][inliers[:,0]]
+            
+            R, J = cv2.Rodrigues(R)
+            
+            success, angles = self.rotation_to_euler(R)
+            angles*=180/np.pi
+            
+            
+            print "Template"
+            print "R : ", R
+            print "t : ", t
+            print "angles : ", angles
+            
+            
+            """================================================================
+            # Quick FOV based check on validity
+            ================================================================"""
+            
+            #extreme = np.array([[-shape.t[2]*fov_x
+            #delta_y = t[2]*fov_y
+            
+            """================================================================
+            # Update distance to template
+            ================================================================"""
+            
+            mag_dist = np.sqrt(t.T.dot(t))
+            mag_dist_text = str(mag_dist)
+            
+            
+            #imh = self.grey_template.shape[0]
+            #img2 = stackImagesVertically(self.grey_template, grey_now)
+            #cv2.putText(img2, mag_dist_text, (25,imh+25), cv2.FONT_HERSHEY_PLAIN, 1, (0, 255, 255))
         
-        t_x = real_size_x*((t_i1_pts_undistorted.T[0]/self.grey_template.shape[1])-0.5)
-        t_y = real_size_y*((t_i1_pts_undistorted.T[1]/self.grey_template.shape[0])-0.5)
-        t_z = np.zeros(t_x.shape)
-        t_i1_pts_scaled = np.array(np.hstack((t_x, t_y, t_z)), dtype=np.float32)
+            
+            
+            '''
+            
+            """====================================================================
+            Restore co-ordinates to pixel
+            ===================================================================="""
+            
+            p_x = ((t_i1_corr_scaled.T[0]/real_size_x)+0.5)*self.grey_template.shape[1]
+            p_y = ((t_i1_corr_scaled.T[1]/real_size_x)+0.5)*self.grey_template.shape[0]
+            t_i1_pts_corr = np.array(np.hstack((p_x, p_y)), dtype=np.float32)
+            '''
+            
+            """====================================================================
+            Draw Matches
+            ===================================================================="""
+            self.template_visualise(grey_now, t_i1_pts_corr, t_i2_pts_corr, True, R, t)
+            return
+            
+        self.template_visualise(grey_now)
         
-        """====================================================================
-        # Calculate pose and translation to matched template
-        ===================================================================="""
-
-        
-        R, t, inliers = cv2.solvePnPRansac(t_i1_pts_scaled, np.array(t_i2_pts, dtype=np.float32), self.cameraMatrix, self.distCoeffs)
-        R, J = cv2.Rodrigues(R)
-        
-        print "Template"
-        print "R : ", R
-        print "r : ", t
-        
-        mag_dist_text = str(np.sqrt(t.T.dot(t)))
-        
-        imh = self.grey_template.shape[0]
-        #img2 = stackImagesVertically(self.grey_template, grey_now)
-        cv2.putText(img2, mag_dist_text, (25,imh+25), cv2.FONT_HERSHEY_PLAIN, 1, (0, 255, 255))
-        
-        '''
+    def template_overlay(self, R, t, img2):
         """====================================================================
         Plot perspective projection without homography
         ===================================================================="""
+        length = 0.57
+        width = length
+        depth = 0.14
         
-        # The corners of the template
-        corners = np.array([[[-0.285,-0.285,0],
-                           [-0.285, +0.285,0],
-                           [+0.285, +0.285,0],
-                           [+0.285, -0.285,0]]])
-                           
-        print np.hstack((R, t))
+        square_side = 0.1
         
-        # Transform to actual view
-        c = cv2.perspectiveTransform(corners, np.hstack((R,t)))[0]
-        c = 256*(c+0.5)
+        # The corners of the template        
+        corners = np.array([[-length/2,-width/2,0,1],
+                           [-length/2, +width/2,0,1],
+                           [+length/2, +width/2,0,1],
+                           [+length/2, -width/2,0,1],
+                           [-length/2,-width/2,+depth,1],
+                           [-length/2, +width/2,+depth,1],
+                           [+length/2, +width/2,+depth,1],
+                           [+length/2, -width/2,+depth,1],
+                           [-square_side,-square_side,0,1],
+                           [-square_side, +square_side,0,1],
+                           [+square_side, +square_side,0,1],
+                           [+square_side, -square_side,0,1],
+                           [-square_side, -square_side,-2*square_side,1],
+                           [-square_side, +square_side,-2*square_side,1],
+                           [+square_side, +square_side,-2*square_side,1],
+                           [+square_side, -square_side,-2*square_side,1]]).T
         
-        print c
-                           
+        # Set up projection from extracted R and t                   
+        P =  np.diag([1.,1.,1.,1.])
+        Pinner = np.hstack((R, t))
+        P[:3, :4] =Pinner
+        
+        # Reverse project corners to pixel space (effectively K.[R|t].X)
+        # Instead of having inputting the real world corners with camera origin
+        # We consider the template to be centred on origin xy plane at z = 0
+        sub = P.dot(corners)[:3]
+        c = self.cameraMatrix.dot(sub).T
+        # Normalise
+        for xy in c:
+            xy/=xy[2]
+        
+        imh = self.grey_template.shape[0]
+            
         # Draw perspective projection
         
+        # Actual template square
+        cv2.line(img2,(int(c[0,0]), int(c[0,1])+imh), (int(c[1,0]), int(c[1,1])+imh), (255, 255 , 0), 1)
+        cv2.line(img2,(int(c[1,0]), int(c[1,1])+imh), (int(c[2,0]), int(c[2,1])+imh), (255, 255 , 0), 1)
+        cv2.line(img2,(int(c[2,0]), int(c[2,1])+imh), (int(c[3,0]), int(c[3,1])+imh), (255, 255 , 0), 1)
+        cv2.line(img2,(int(c[3,0]), int(c[3,1])+imh), (int(c[0,0]), int(c[0,1])+imh), (255, 255 , 0), 1)
         
-        cv2.line(img2,(int(c[0,0]), int(c[0,1])+imh), (int(c[1,0]), int(c[1,1])+imh), (255, 255 , 255), 2)
-        cv2.line(img2,(int(c[1,0]), int(c[1,1])+imh), (int(c[2,0]), int(c[2,1])+imh), (255, 255 , 255), 2)
-        cv2.line(img2,(int(c[2,0]), int(c[2,1])+imh), (int(c[3,0]), int(c[3,1])+imh), (255, 255 , 255), 2)
-        cv2.line(img2,(int(c[3,0]), int(c[3,1])+imh), (int(c[0,0]), int(c[0,1])+imh), (255, 255 , 255), 2)
+        # Projected back face of box
+        cv2.line(img2,(int(c[4,0]), int(c[4,1])+imh), (int(c[5,0]), int(c[5,1])+imh), (255, 255 , 0), 1)
+        cv2.line(img2,(int(c[5,0]), int(c[5,1])+imh), (int(c[6,0]), int(c[6,1])+imh), (255, 255 , 0), 1)
+        cv2.line(img2,(int(c[6,0]), int(c[6,1])+imh), (int(c[7,0]), int(c[7,1])+imh), (255, 255 , 0), 1)
+        cv2.line(img2,(int(c[7,0]), int(c[7,1])+imh), (int(c[4,0]), int(c[4,1])+imh), (255, 255 , 0), 1)
+        
+        # Links between front and back face
+        cv2.line(img2,(int(c[0,0]), int(c[0,1])+imh), (int(c[4,0]), int(c[4,1])+imh), (255, 255 , 0), 1)
+        cv2.line(img2,(int(c[1,0]), int(c[1,1])+imh), (int(c[5,0]), int(c[5,1])+imh), (255, 255 , 0), 1)
+        cv2.line(img2,(int(c[2,0]), int(c[2,1])+imh), (int(c[6,0]), int(c[6,1])+imh), (255, 255 , 0), 1)
+        cv2.line(img2,(int(c[3,0]), int(c[3,1])+imh), (int(c[7,0]), int(c[7,1])+imh), (255, 255 , 0), 1)
+        
         '''
+        cv2.line(img2,(int(c[8,0]), int(c[8,1])+imh), (int(c[9,0]), int(c[9,1])+imh), (255, 255 , 0), 1)
+        cv2.line(img2,(int(c[9,0]), int(c[9,1])+imh), (int(c[10,0]), int(c[10,1])+imh), (255, 255 , 0), 1)
+        cv2.line(img2,(int(c[10,0]), int(c[10,1])+imh), (int(c[11,0]), int(c[11,1])+imh), (255, 255 , 0), 1)
+        cv2.line(img2,(int(c[11,0]), int(c[11,1])+imh), (int(c[8,0]), int(c[8,1])+imh), (255, 255 , 0), 1)
         
+        cv2.line(img2,(int(c[12,0]), int(c[12,1])+imh), (int(c[13,0]), int(c[13,1])+imh), (255, 255 , 0), 1)
+        cv2.line(img2,(int(c[13,0]), int(c[13,1])+imh), (int(c[14,0]), int(c[14,1])+imh), (255, 255 , 0), 1)
+        cv2.line(img2,(int(c[14,0]), int(c[14,1])+imh), (int(c[15,0]), int(c[15,1])+imh), (255, 255 , 0), 1)
+        cv2.line(img2,(int(c[15,0]), int(c[15,1])+imh), (int(c[12,0]), int(c[12,1])+imh), (255, 255 , 0), 1)
+        
+        cv2.line(img2,(int(c[8,0]), int(c[8,1])+imh), (int(c[12,0]), int(c[12,1])+imh), (255, 255 , 0), 1)
+        cv2.line(img2,(int(c[9,0]), int(c[9,1])+imh), (int(c[13,0]), int(c[13,1])+imh), (255, 255 , 0), 1)
+        cv2.line(img2,(int(c[10,0]), int(c[10,1])+imh), (int(c[14,0]), int(c[14,1])+imh), (255, 255 , 0), 1)
+        cv2.line(img2,(int(c[11,0]), int(c[11,1])+imh), (int(c[15,0]), int(c[15,1])+imh), (255, 255 , 0), 1)
         '''
-        """====================================================================
-        Restore co-ordinates to pixel
-        ===================================================================="""
-        
-        p_x = ((t_i1_corr_scaled.T[0]/real_size_x)+0.5)*self.grey_template.shape[1]
-        p_y = ((t_i1_corr_scaled.T[1]/real_size_x)+0.5)*self.grey_template.shape[0]
-        t_i1_pts_corr = np.array(np.hstack((p_x, p_y)), dtype=np.float32)
-        '''
-        
-        
-        """====================================================================
-        Draw Matches
-        ===================================================================="""
-        
-        
-        county = 0
-        l = 35
-        for p1, p2 in zip(t_i1_pts_corr, t_i2_pts_corr):
-            #print p2[1]
-            county += 1
-            #cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
-            cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
-            cv2.imshow("template", img2)
-        #print "No of drawn points : ", county
 
 
+    def template_visualise(self, img, pts1=None, pts2=None,isTemplate=False, R=None, t=None):
+        """Carries out the visualisation routines for template tracking.
+        Draws stacked images with tracked points and template overlay is found
+        
+        isTemplate is True on match and requires accompanying R and t
+        """
+        # Clone image for drawing
+        img2 = stackImagesVertically(self.grey_template, img)
+        img2 = cv2.cvtColor(img2, cv2.COLOR_GRAY2BGR)
+        imh = self.grey_template.shape[0]
+        
+        # Draw template overlay
+        if isTemplate:
+            self.template_overlay(R, t, img2)
+        
+        # Draw matches
+        if pts1 != None and pts2 != None:
+            for p1, p2 in zip(pts1, pts2):
+                cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
+        
+        cv2.imshow("template", img2)    
+        
         
         
     def featureTrack(self, img):
@@ -649,8 +762,11 @@ class FeatureTracker:
         translation of the camera between frames and the position of observed
         points"""
         
+        times = []
+        time_offset = time.time()
+        
         DEF_SET_DATA = False # Switches in fixed data
-        DEF_TEMPLATE_MATCH = True # Switches template match - should be ROS param
+        DEF_TEMPLATE_MATCH = True  # Switches template match - should be ROS param
         
         # Initialise previous image buffer
         if self.grey_previous == None:
@@ -659,7 +775,7 @@ class FeatureTracker:
         
         # Skip frames. Need to add ROS parameter to allow setting        
         self.frameskip += 1
-        if self.frameskip < 6:
+        if self.frameskip < 11:
             return            
         self.frameskip = 0
         
@@ -683,11 +799,14 @@ class FeatureTracker:
             pts1 = self.fd.detect(grey_previous)
             self.kp1, self.desc1 = self.de.compute(grey_previous, pts1)
 
+        times.append(time.time()-time_offset)
         """====================================================================
         Rotation and translation from navdata
         ===================================================================="""
         self.update_tf()
         #self.projection_from_navdata()
+        
+        times.append(time.time()-time_offset)
         
 
         """====================================================================
@@ -699,10 +818,12 @@ class FeatureTracker:
         if not success:
             return
         #print "No of matched points : ", len(i1_pts)
+        times.append(time.time()-time_offset)
         
         if DEF_TEMPLATE_MATCH:    
             # Carry out template match - Note this is the full procedure call and should really be threaded
             self.templateTrack(grey_now)
+        times.append(time.time()-time_offset)
         
         """====================================================================
         Undistort points using known camera calibration
@@ -714,7 +835,8 @@ class FeatureTracker:
         else:
             print "WARNING: No calibration info. Cannot Continue"
             return
-            
+        
+        times.append(time.time()-time_offset)
         
         '''
         i1_pts_norm = self.make_homo(i1_pts_undistorted[0])
@@ -737,6 +859,8 @@ class FeatureTracker:
             self.kp1, self.desc1 = self.kp2, self.desc2
             return
         print "No of corrected points : ", len(i1_pts_corr)
+        
+        times.append(time.time()-time_offset)
         
         
         '''
@@ -762,9 +886,11 @@ class FeatureTracker:
             self.grey_previous = grey_now
             self.kp1, self.desc1 = self.kp2, self.desc2
             return
+        times.append(time.time()-time_offset)
         
         #============================================================================================================DOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOM
         self.tf_triangulate_points(i1_pts_corr, i2_pts_corr)
+        times.append(time.time()-time_offset)
             
         """============================================================
         # Extract P1 and P2 via E
@@ -780,15 +906,17 @@ class FeatureTracker:
         #print "Rotation Matrix : ", R
         t = P2[:,3:4]
         t_scaled = t*self.drone_coord_trans[2]/t[2]
+        times.append(time.time()-time_offset)
         
         """============================================================
         # Update cumulative orientation quaternion 
         ============================================================"""                
         angles = self.update_quaternion(R) 
+        times.append(time.time()-time_offset)
         
-        
+        '''
         """====================================================================
-        # Calculate 3D points
+        # Calculate 3D points (No point as scale unknown)
         ===================================================================="""
         points4D = cv2.triangulatePoints(P1, P2, i1_pts_final.transpose(), i2_pts_final.transpose())
         # normalise homogenous coords
@@ -815,6 +943,7 @@ class FeatureTracker:
         # Reform
         points3D1 = zip(*X1)
         points3D2 = zip(*X2)
+        '''
         
         '''
         """============================================================
@@ -871,13 +1000,17 @@ class FeatureTracker:
         cv2.imshow("track", img2)
         cv2.waitKey(2)
         print "=============\r\nDrawn\r\n============="
-            
+        times.append(time.time()-time_offset)
+        
         """====================================================================
         # Update previous image buffer
         ===================================================================="""
         self.grey_previous = grey_now
         self.pts1 = self.pts2
         self.kp1, self.desc1 = self.kp2, self.desc2
+        times.append(time.time()-time_offset)
+        
+        print times
         
     def update_tf(self):
         """Updates the cache of most recent pose information"""
@@ -937,7 +1070,8 @@ class FeatureTracker:
             self.relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.prev_quat), self.world_to_drone_quaternion)
         self.prev_position = position
         self.prev_quat = self.world_to_drone_quaternion
-    
+
+
        
     def homography_to_pose(self, H):
         """input homography[9] - 3x3 Matrix
@@ -970,6 +1104,8 @@ class FeatureTracker:
         print "H vect : \r\n", H[:, :1]
         invH = self.inverseCameraMatrix.dot(H[:, :1])
         print "invH vec : \r\n", invH 
+        invH2 = self.inverseCameraMatrix.dot(H)
+        print "invh2 : \r\n", invH2
         
         # Get 1/mag
         lam = 1/np.sqrt(invH.transpose().dot(invH))
@@ -977,6 +1113,7 @@ class FeatureTracker:
         
         # Scale 
         inverseCameraMatrix = self.inverseCameraMatrix.copy()*lam
+        print "Scaled : \r\n", inverseCameraMatrix
 
         # Extract R. Force 3rd column to be orthonormal
         R = inverseCameraMatrix.dot(H)
@@ -1003,22 +1140,27 @@ class FeatureTracker:
         """ Triangulates 3D points from set of matches co-ords using relative
         camera position determined from tf"""
         
-        #print "Triangulation"
+        print "Triangulation"
         # For ease of reading until names are made consistent and clear
         t = self.drone_coord_trans
-        #t = np.array([[0.235],[0],[0]])#
-        #print "Translation : ", t
-        R_cam1_to_cam2 = tf.transformations.quaternion_matrix(self.relative_quat)[:3, :3]
+        #t = np.array([[-0.235],[0],[0]])#
+        print "Translation : ", t
+        
+        # Get rotation matrix for crone co-ord axis
+        # Rebuild R
+        # Flip eulers to image axis
+        angles = np.array(tf.transformations.euler_from_quaternion(self.relative_quat))        
+        angles = self.coord_drone_to_image_axis(angles)
+        R_cam1_to_cam2 = tf.transformations.euler_matrix(angles[0],angles[1],angles[2], axes='sxyz')[:3, :3]        
         #R_cam1_to_cam2 = np.diag([1,1,1])#
         R = R_cam1_to_cam2
         #print "Rotation Matrix : ", R_cam1_to_cam2
-        #print "Eulers : ", tf.transformations.euler_from_quaternion(self.relative_quat)
-        P_cam1_to_cam2 = np.hstack((R_cam1_to_cam2, self.drone_coord_trans))
-        #P_cam1_to_cam2 = np.hstack((R_cam1_to_cam2, t))
+        P_cam1_to_cam2 = np.hstack((R_cam1_to_cam2, t))
         T = P_cam1_to_cam2
-        #print P_cam1_to_cam2
+        print P_cam1_to_cam2
+        print self.P
         
-        
+        '''
         empty = np.array([[0],[0],[0]])
         ab = np.reshape(self.inverseCameraMatrix.dot(self.make_homo(pts1).transpose()), (3, -1))
         a = ab[0]
@@ -1030,34 +1172,33 @@ class FeatureTracker:
         X = (-t[0] + c*t[2])/(R[0,0]-c*R[2,0]-(b/a)*(R[0,1]-c*R[2,1]+(1/b)*(R[0,2] - c*R[2,2])))
         Y = (a/b)*X
         Z = (1/a)*X
+
         
         #print Z[1]
         
         #print "x,y,z : ", X, ", ", Y, ", ", Z
-        
         '''
-        cloud = PointCloud()
-        cloud.header.stamp = self.tf_time_stamp # Should copy img header
-        cloud.header.frame_id = "/ardrone_base_link"
         
-        for i, ignore in enumerate(X): # Ideally done without a loop
-            #print i
-            cloud.points.append(gm.Point32())
-            cloud.points[i].x = Z[i]
-            cloud.points[i].y = -X[i]
-            cloud.points[i].z = -Y[i]
-        
-        #print "cloud : ", cloud
-        self.cloud_pub.publish(cloud)
-        '''
         
         #print self.cameraMatrix.shape
         PP1 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
         PP2 = self.cameraMatrix.dot(P_cam1_to_cam2)
-        #print PP1.shape
-        #print PP2.shape
-        points3D_drone = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2)
-        points3D= zip(*np.vstack((points3D_drone[2], -points3D_drone[0], -points3D_drone[1])))
+        points3D_image = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2)[:3]
+        
+        infront = points3D_image[2] > 0
+        #print infront
+        # Filter points
+        infront = np.array([infront]).transpose()
+        infront = np.hstack((infront, infront, infront)).transpose()
+        #print infront.shape
+        #print points3D_image
+        
+        points3D_image= np.reshape(points3D_image[infront==True], (3, -1))
+        #print points3D_image
+        
+        points3D= zip(*np.vstack((points3D_image[2], -points3D_image[0], -points3D_image[1])))
+        #print len(points3D)
+        
         
         self.publish_cloud(points3D)
         
@@ -1097,11 +1238,6 @@ class FeatureTracker:
         ============================================================"""
         self.publish_cloud(points3D1)
     '''
-        
-        
-        
-        
-
 
     def imgproc(self, d):
         """Converts the ROS published image to a cv2 numpy array
@@ -1126,11 +1262,13 @@ class FeatureTracker:
             self.P = np.array([ci.P[:4],ci.P[4:8],ci.P[8:12]])
             self.calibrated = True    
             print "Calibration Initialised"
+
   
 def connect(m):
     rospy.init_node('Feature_Tracker')
     rospy.Subscriber('/ardrone/front/image_raw',Image,m.imgproc)
     rospy.Subscriber('/ardrone/front/camera_info',sensor_msgs.msg.CameraInfo, m.setCameraInfo)
+    #rospy.Subscriber('/xboxcontroller/button_y',None,m.readDistance)
 
 
 def run():
