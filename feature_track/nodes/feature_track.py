@@ -470,184 +470,251 @@ class FeatureTracker:
 
         
     def templateTrack(self, grey_now):
+        self.t_debug_text = []
+        
         """====================================================================
         Match points with template (reusing previously calculated data)
         ===================================================================="""
         t_i1_pts, t_i2_pts = self.match_points(self.template_kp, self.kp2, self.template_desc, self.desc2)
-        if t_i1_pts == None or len(t_i1_pts) < 4:
-            print "No template matches"
+        if t_i1_pts == None or len(t_i1_pts) < 32:
+            print "===================="
+            print "Too few template matches"
+            print "===================="
+            self.template_visualise(grey_now, t_i1_pts, t_i2_pts)
             return
             
-        if len(t_i1_pts)>32:
+        self.t_debug_text.append("No of matches " + str(len(t_i1_pts)))    
             
-            """================================================================
-            Undistort points using known camera calibration
-            ================================================================"""
-            if self.calibrated:
-                # Undistort points using calibration data
-                t_i1_pts_undistorted = cv2.undistortPoints(np.array([t_i1_pts]), self.cameraMatrix, self.distCoeffs, P=self.P)
-                t_i2_pts_undistorted = cv2.undistortPoints(np.array([t_i2_pts]), self.cameraMatrix, self.distCoeffs, P=self.P)
-            else:
-                print "WARNING: No calibration info. Cannot Continue"
-                return  
-                
-            t_i1_pts_undistorted = np.array([t_i1_pts,])
-            t_i2_pts_undistorted = np.array([t_i2_pts,])
+        """================================================================
+        Undistort points using known camera calibration
+        ================================================================"""
+        if self.calibrated:
+            # Undistort points using calibration data
+            t_i1_pts_undistorted = cv2.undistortPoints(np.array([t_i1_pts]), self.cameraMatrix, self.distCoeffs, P=self.P)
+            t_i2_pts_undistorted = cv2.undistortPoints(np.array([t_i2_pts]), self.cameraMatrix, self.distCoeffs, P=self.P)
+        else:
+            print "WARNING: No calibration info. Cannot Continue"
+            return  
             
-            '''
-            """================================================================
-            Centre-reference pixel coord (necessary for easy R|t recovery)
-            ================================================================"""
-            t_i1_pts_undistorted[0][:,0] -= self.grey_template.shape[1]/2
-            t_i1_pts_undistorted[0][:,1] -= self.grey_template.shape[0]/2
-            t_i2_pts_undistorted[0][:,0] -= self.grey_previous.shape[1]/2
-            t_i2_pts_undistorted[0][:,1] -= self.grey_previous.shape[0]/2
-            '''
-            
-            '''
-            """====================================================================
-            Scale template to real world known size
-            ===================================================================="""
-            real_size_x = 0.57#0.63
-            real_size_y = 0.57#0.44
-            
-            t_i1_pts_undistorted[0][:,0] /= self.grey_template.shape[1]
-            t_i1_pts_undistorted[0][:,1] /= self.grey_template.shape[0]
-            t_i1_pts_undistorted[0][:,0] *= real_size_x
-            t_i1_pts_undistorted[0][:,1] *= real_size_y
-            '''
-            
-            '''            
-            """================================================================
-            Compute Planar Homography
-            ================================================================"""
-            
-            H, t_i1_pts_corr, t_i2_pts_corr = self.extract_homography(t_i1_pts_undistorted, t_i2_pts_undistorted)
-            print "homo : ", H
-            if t_i2_pts_corr == None or len(t_i2_pts_corr) < 4:
-                print "Failed to extract homography"
-                return        
-            
-            
-            self.homography_to_pose(H)
-            
-            # Restore co-ords
-            t_i1_pts_corr[:,0] += self.grey_template.shape[1]/2
-            t_i1_pts_corr[:,1] += self.grey_template.shape[0]/2
-            t_i2_pts_corr[:,0] += self.grey_previous.shape[1]/2
-            t_i2_pts_corr[:,1] += self.grey_previous.shape[0]/2
-            '''
-            
-            '''
-            """================================================================
-            Plot extracted perspective projection via hmography
-            ================================================================"""
-            
-            # The corners of the template in centre zeroed pixels
-            corners = np.array([[[-self.grey_template.shape[1]/2,-self.grey_template.shape[0]/2],
-                               [self.grey_template.shape[1]/2, -self.grey_template.shape[0]/2],
-                               [self.grey_template.shape[1]/2, self.grey_template.shape[0]/2],
-                               [-self.grey_template.shape[1]/2, self.grey_template.shape[0]/2]]], dtype=np.float32)
-                               
-            # Transform to actual view
-            c = cv2.perspectiveTransform(corners, H)[0]
-            
-            # Revert to corner zeroed pixels
-            c[:,0]+=self.grey_previous.shape[1]/2
-            c[:,1]+=self.grey_previous.shape[0]/2      
-                               
-            # Draw perspective projection
-            img2 = stackImagesVertically(self.grey_template, grey_now)
-            img2 = cv2.cvtColor(img2, cv2.COLOR_GRAY2BGR)
-            imh = self.grey_template.shape[0]
-            cv2.line(img2,(int(c[0,0]), int(c[0,1])+imh), (int(c[1,0]), int(c[1,1])+imh), (255, 255 , 255), 2)
-            cv2.line(img2,(int(c[1,0]), int(c[1,1])+imh), (int(c[2,0]), int(c[2,1])+imh), (255, 255 , 255), 2)
-            cv2.line(img2,(int(c[2,0]), int(c[2,1])+imh), (int(c[3,0]), int(c[3,1])+imh), (255, 255 , 255), 2)
-            cv2.line(img2,(int(c[3,0]), int(c[3,1])+imh), (int(c[0,0]), int(c[0,1])+imh), (255, 255 , 255), 2)
-            '''
-            
+        t_i1_pts_undistorted = np.array([t_i1_pts,])
+        t_i2_pts_undistorted = np.array([t_i2_pts,])
+        
+        '''
+        """================================================================
+        Centre-reference pixel coord (necessary for easy R|t recovery)
+        ================================================================"""
+        t_i1_pts_undistorted[0][:,0] -= self.grey_template.shape[1]/2
+        t_i1_pts_undistorted[0][:,1] -= self.grey_template.shape[0]/2
+        t_i2_pts_undistorted[0][:,0] -= self.grey_previous.shape[1]/2
+        t_i2_pts_undistorted[0][:,1] -= self.grey_previous.shape[0]/2
+        '''
+        
+        '''
+        """====================================================================
+        Scale template to real world known size
+        ===================================================================="""
+        real_size_x = 0.57#0.63
+        real_size_y = 0.57#0.44
+        
+        t_i1_pts_undistorted[0][:,0] /= self.grey_template.shape[1]
+        t_i1_pts_undistorted[0][:,1] /= self.grey_template.shape[0]
+        t_i1_pts_undistorted[0][:,0] *= real_size_x
+        t_i1_pts_undistorted[0][:,1] *= real_size_y
+        '''
+        
+        '''            
+        """================================================================
+        Compute Planar Homography
+        ================================================================"""
+        
+        H, t_i1_pts_corr, t_i2_pts_corr = self.extract_homography(t_i1_pts_undistorted, t_i2_pts_undistorted)
+        print "homo : ", H
+        if t_i2_pts_corr == None or len(t_i2_pts_corr) < 4:
+            print "Failed to extract homography"
+            return        
+        
+        
+        self.homography_to_pose(H)
+        
+        # Restore co-ords
+        t_i1_pts_corr[:,0] += self.grey_template.shape[1]/2
+        t_i1_pts_corr[:,1] += self.grey_template.shape[0]/2
+        t_i2_pts_corr[:,0] += self.grey_previous.shape[1]/2
+        t_i2_pts_corr[:,1] += self.grey_previous.shape[0]/2
+        '''
+        
+        '''
+        """================================================================
+        Plot extracted perspective projection via hmography
+        ================================================================"""
+        
+        # The corners of the template in centre zeroed pixels
+        corners = np.array([[[-self.grey_template.shape[1]/2,-self.grey_template.shape[0]/2],
+                           [self.grey_template.shape[1]/2, -self.grey_template.shape[0]/2],
+                           [self.grey_template.shape[1]/2, self.grey_template.shape[0]/2],
+                           [-self.grey_template.shape[1]/2, self.grey_template.shape[0]/2]]], dtype=np.float32)
+                           
+        # Transform to actual view
+        c = cv2.perspectiveTransform(corners, H)[0]
+        
+        # Revert to corner zeroed pixels
+        c[:,0]+=self.grey_previous.shape[1]/2
+        c[:,1]+=self.grey_previous.shape[0]/2      
+                           
+        # Draw perspective projection
+        img2 = stackImagesVertically(self.grey_template, grey_now)
+        img2 = cv2.cvtColor(img2, cv2.COLOR_GRAY2BGR)
+        imh = self.grey_template.shape[0]
+        cv2.line(img2,(int(c[0,0]), int(c[0,1])+imh), (int(c[1,0]), int(c[1,1])+imh), (255, 255 , 255), 2)
+        cv2.line(img2,(int(c[1,0]), int(c[1,1])+imh), (int(c[2,0]), int(c[2,1])+imh), (255, 255 , 255), 2)
+        cv2.line(img2,(int(c[2,0]), int(c[2,1])+imh), (int(c[3,0]), int(c[3,1])+imh), (255, 255 , 255), 2)
+        cv2.line(img2,(int(c[3,0]), int(c[3,1])+imh), (int(c[0,0]), int(c[0,1])+imh), (255, 255 , 255), 2)
+        '''
+        
 
-            """================================================================
-            Implant world size in pixel co-ords
-            ================================================================"""        
-            temp_time = time.time()
-            
-            real_size_x = 0.57#0.63
-            real_size_y = 0.57#0.44
-            
-            t_x = real_size_x*((t_i1_pts_undistorted.T[0]/self.grey_template.shape[1])-0.5)
-            t_y = real_size_y*((t_i1_pts_undistorted.T[1]/self.grey_template.shape[0])-0.5)
-            t_z = np.zeros(t_x.shape)
-            t_i1_pts_scaled = np.array(np.hstack((t_x, t_y, t_z)), dtype=np.float32)
-            
-            
-            
-            """================================================================
-            # Calculate pose and translation to matched template
-            ================================================================"""
-            
-            R, t, inliers = cv2.solvePnPRansac(t_i1_pts_scaled, np.array(t_i2_pts, dtype=np.float32), self.cameraMatrix, self.distCoeffs)
-            
-            if inliers== None:
-                print "Template not found"
-                self.template_visualise(grey_now)
-                return
-            t_i1_pts_corr = t_i1_pts_undistorted[0][inliers[:,0]]
-            print t_i1_pts_corr
-            t_i2_pts_corr = t_i2_pts_undistorted[0][inliers[:,0]]
-            
-            R, J = cv2.Rodrigues(R)
-            
-            success, angles = self.rotation_to_euler(R)
-            angles*=180/np.pi
-            
-            
-            print "Template"
-            print "R : ", R
-            print "t : ", t
-            print "angles : ", angles
-            
-            
-            """================================================================
-            # Quick FOV based check on validity
-            ================================================================"""
-            
-            #extreme = np.array([[-shape.t[2]*fov_x
-            #delta_y = t[2]*fov_y
-            
-            """================================================================
-            # Update distance to template
-            ================================================================"""
-            
-            mag_dist = np.sqrt(t.T.dot(t))
-            mag_dist_text = str(mag_dist)
-            
-            
-            #imh = self.grey_template.shape[0]
-            #img2 = stackImagesVertically(self.grey_template, grey_now)
-            #cv2.putText(img2, mag_dist_text, (25,imh+25), cv2.FONT_HERSHEY_PLAIN, 1, (0, 255, 255))
+        """================================================================
+        Implant world size in pixel co-ords
+        ================================================================"""        
+        temp_time = time.time()
         
-            
-            
-            '''
-            
-            """====================================================================
-            Restore co-ordinates to pixel
-            ===================================================================="""
-            
-            p_x = ((t_i1_corr_scaled.T[0]/real_size_x)+0.5)*self.grey_template.shape[1]
-            p_y = ((t_i1_corr_scaled.T[1]/real_size_x)+0.5)*self.grey_template.shape[0]
-            t_i1_pts_corr = np.array(np.hstack((p_x, p_y)), dtype=np.float32)
-            '''
-            
-            """====================================================================
-            Draw Matches
-            ===================================================================="""
-            self.template_visualise(grey_now, t_i1_pts_corr, t_i2_pts_corr, True, R, t)
+        real_size_x = 0.57#0.63
+        real_size_y = 0.57#0.44
+        
+        t_x = real_size_x*((t_i1_pts_undistorted.T[0]/self.grey_template.shape[1])-0.5)
+        t_y = real_size_y*((t_i1_pts_undistorted.T[1]/self.grey_template.shape[0])-0.5)
+        t_z = np.zeros(t_x.shape)
+        t_i1_pts_scaled = np.array(np.hstack((t_x, t_y, t_z)), dtype=np.float32)
+        
+        
+        
+        """================================================================
+        # Calculate pose and translation to matched template
+        ================================================================"""
+        
+        R, t, inliers = cv2.solvePnPRansac(t_i1_pts_scaled, np.array(t_i2_pts, dtype=np.float32), self.cameraMatrix, self.distCoeffs)
+        
+        if inliers== None:
+            print "===================="
+            print "Template not found"
+            print "===================="
+            self.template_visualise(grey_now)
+            return
+        t_i1_pts_corr = t_i1_pts_undistorted[0][inliers[:,0]]
+        t_i2_pts_corr = t_i2_pts_undistorted[0][inliers[:,0]]
+        
+        self.t_debug_text.append("No of fits " + str(len(t_i1_pts_corr)))
+        if len(t_i1_pts_corr) < 20:
+            print "===================="
+            print "Too few fits"
+            print "===================="
+            self.template_visualise(grey_now)
+            return
+        
+        R, J = cv2.Rodrigues(R)
+        
+        success, angles = self.rotation_to_euler(R)
+        angles*=180/np.pi
+        
+        
+        print "Template"
+        print "R : ", R
+        print "t : ", t
+        print "angles : ", angles
+        
+        
+        """================================================================
+        # Checks on validity
+        ================================================================"""
+        # Check for reasonable distance
+        if t[2] < 0.35:
+            print "===================="
+            print "False match - too close"
+            print "===================="
+            self.template_visualise(grey_now, t_i1_pts_corr, t_i2_pts_corr)
+            return
+        if t[2] > 4:
+            print "===================="
+            print "False match - too far"
+            print "===================="
+            self.template_visualise(grey_now, t_i1_pts_corr, t_i2_pts_corr)
             return
             
-        self.template_visualise(grey_now)
         
+        # Check forward facing (potential faster solution exists)
+        # Get plane of projected corners
+        # Check if plane normal dot depth is negative
+        length = 0.57
+        width = length
+        depth = 0.14
+    
+        # The corners of the template in anticlockwise convention        
+        corners = np.array([[-length/2,-width/2,0,1],
+                       [+length/2, -width/2,0,1],
+                       [+length/2, +width/2,0,1],
+                       [-length/2, +width/2,0,1]]).T
+        # Rotate-translate                
+        P =  np.diag([1.,1.,1.,1.])
+        Pinner = np.hstack((R, t))
+        P[:3, :4] =Pinner
+        corners_rot= P.dot(corners)
+        # Normalise
+        corners_rot = corners_rot.T[:, :3]
+        # Get plane normal
+        AB = corners_rot[1]-corners_rot[0]
+        AC = corners_rot[2]-corners_rot[0]
+        print AC
+        plane_normal = np.cross(AB,AC)
+        print "plane_normal : ", plane_normal
+        # Backward test
+        if plane_normal[2] < 0:
+            # Template backward facing
+            print "===================="
+            print "False match - backward facing"
+            print "===================="
+            self.template_visualise(grey_now, t_i1_pts_corr, t_i2_pts_corr)
+            return
+        # Acceptable angle test
+        plane_normal_mag = np.sqrt(plane_normal.transpose().dot(plane_normal))
+        theta = np.arccos(plane_normal[2]/plane_normal_mag)
+        if theta > 1.308996939: # > 75deg:
+            print "===================="
+            print "False match - too much angle"
+            print "===================="
+            self.template_visualise(grey_now, t_i1_pts_corr, t_i2_pts_corr)
+            return
+        
+        
+        """================================================================
+        # Update distance to template
+        ================================================================"""
+        
+        self.mag_dist = np.sqrt(t.T.dot(t))
+        self.t_debug_text.append("Dist " + str(self.mag_dist))
+        
+        
+        #imh = self.grey_template.shape[0]
+        #img2 = stackImagesVertically(self.grey_template, grey_now)
+        #cv2.putText(img2, mag_dist_text, (25,imh+25), cv2.FONT_HERSHEY_PLAIN, 1, (0, 255, 255))
+    
+        
+        
+        '''
+        
+        """====================================================================
+        Restore co-ordinates to pixel
+        ===================================================================="""
+        
+        p_x = ((t_i1_corr_scaled.T[0]/real_size_x)+0.5)*self.grey_template.shape[1]
+        p_y = ((t_i1_corr_scaled.T[1]/real_size_x)+0.5)*self.grey_template.shape[0]
+        t_i1_pts_corr = np.array(np.hstack((p_x, p_y)), dtype=np.float32)
+        '''
+        
+        """====================================================================
+        Draw Matches
+        ===================================================================="""
+        self.template_visualise(grey_now, t_i1_pts_corr, t_i2_pts_corr, True, R, t)
+    
+    
     def template_overlay(self, R, t, img2):
         """====================================================================
         Plot perspective projection without homography
@@ -749,6 +816,10 @@ class FeatureTracker:
         if pts1 != None and pts2 != None:
             for p1, p2 in zip(pts1, pts2):
                 cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
+        
+        # Write debug text
+        for i, l in enumerate(self.t_debug_text):
+            cv2.putText(img2, str(l), (img2.shape[1]/2,img2.shape[0]-25*(i+1)), cv2.FONT_HERSHEY_PLAIN, 1, (63, 63, 255))
         
         cv2.imshow("template", img2)    
         
