@@ -29,6 +29,7 @@ from sensor_msgs.msg import PointCloud
 from nav_msgs.msg import Path
 import math
 import time
+import threading
     
 def stackImagesVertically(top_image, bottom_image):
     """Takes two cv2 numpy array images top_image, bottom_image
@@ -62,7 +63,7 @@ class FeatureTracker:
         self.preload_template('/home/alex/cued-ardrone/feature_track/templates/boxTemplate.png')
         self.tf = tf.TransformListener()
         self.prev_position = None
-        
+                
     def preload_template(self, path):
         """Template features and descriptors need only be extracted once, so
         they are pre-calced here"""
@@ -469,8 +470,9 @@ class FeatureTracker:
         self.cloud_pub.publish(cloud)
 
         
-    def templateTrack(self, grey_now):
+    def templateTrack(self):
         self.t_debug_text = []
+        grey_now = self.grey_now
         
         """====================================================================
         Match points with template (reusing previously calculated data)
@@ -869,6 +871,8 @@ class FeatureTracker:
             grey_previous = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
             pts1 = self.fd.detect(grey_previous)
             self.kp1, self.desc1 = self.de.compute(grey_previous, pts1)
+            
+        self.grey_now = grey_now
 
         times.append(time.time()-time_offset)
         """====================================================================
@@ -893,7 +897,9 @@ class FeatureTracker:
         
         if DEF_TEMPLATE_MATCH:    
             # Carry out template match - Note this is the full procedure call and should really be threaded
-            self.templateTrack(grey_now)
+            template_thread = threading.Thread(target = self.templateTrack)
+            template_thread.start()
+            #self.templateTrack(grey_now)
         times.append(time.time()-time_offset)
         
         """====================================================================
