@@ -463,7 +463,7 @@ class FeatureTracker:
     
     def publish_cloud(self, points):
         cloud = PointCloud()
-        cloud.header.stamp = self.time_now # Should copy img header
+        cloud.header.stamp = self.tf_time_stamp # Should copy img header
         cloud.header.frame_id = "/ardrone_base_link" # Should be front camera really
         
         for i, p in enumerate(points): # Ideally done without a loop
@@ -698,19 +698,6 @@ class FeatureTracker:
         self.mag_dist = np.sqrt(t.T.dot(t)[0,0])
         self.t_debug_text.append("Dist " + str(self.mag_dist))
         
-        # Make homogenous rotation matrix from R
-        R4 = np.diag([0., 0., 0., 1.])
-        R4[:3, :3] = R
-        
-        quaternion = tf.transformations.quaternion_from_matrix(R4)
-        
-        br = tf.TransformBroadcaster() #create broadcaster
-        br.sendTransform((t[0],t[1],t[2]), 
-                         # translation happens first, then rotation
-                         quaternion,
-                         self.time_now, # NB: 'now' is not the same as time data was sent from drone
-                         "ardrone_base_link",
-                         "template_match")
         
         #imh = self.grey_template.shape[0]
         #img2 = stackImagesVertically(self.grey_template, grey_now)
@@ -1098,6 +1085,7 @@ class FeatureTracker:
         
         # Draw
         cv2.imshow("track", img2)
+        cv2.waitKey(3)
         print "=============\r\nDrawn\r\n============="
         times.append(time.time()-time_offset)
         
@@ -1120,8 +1108,7 @@ class FeatureTracker:
                 idle+=idle_step
                 print "Main thread waiting for template thread : ", idle, "us"
         
-        # Render Windows
-        cv2.waitKey(3)
+        
         times.append(time.time()-time_offset)
         print times
     
@@ -1130,10 +1117,10 @@ class FeatureTracker:
         """Updates the cache of most recent pose information"""
         t = self.tf.getLatestCommonTime("ardrone_base_link", "world")
         self.tf_time_stamp = self.time_now
-        self.time_now = t
+        
         #print "=================================================Update tf========================================="
         
-        #self.tf.waitForTransform("world", "ardrone_base_link", self.time_now, rospy.Duration(4.0))
+        self.tf.waitForTransform("world", "ardrone_base_link", self.time_now, rospy.Duration(4.0))
         
         # This is world w.r.t ardrone_base_link but yields a result consistent with ardrone_base_link w.r.t world
         # Documentation, or more likely my understanding of it is wrong (the other way round gives world origin in drone coords)
@@ -1261,7 +1248,7 @@ class FeatureTracker:
         print "Triangulation"
         # For ease of reading until names are made consistent and clear
         t = self.drone_coord_trans
-        t = np.array([[-0.235],[0],[0]])
+        #t = np.array([[-0.235],[0],[0]])#
         print "Translation : ", t
         
         # Get rotation matrix for crone co-ord axis
@@ -1270,7 +1257,7 @@ class FeatureTracker:
         angles = np.array(tf.transformations.euler_from_quaternion(self.relative_quat))        
         angles = self.coord_drone_to_image_axis(angles)
         R_cam1_to_cam2 = tf.transformations.euler_matrix(angles[0],angles[1],angles[2], axes='sxyz')[:3, :3]        
-        R_cam1_to_cam2 = np.diag([1,1,1])
+        #R_cam1_to_cam2 = np.diag([1,1,1])#
         R = R_cam1_to_cam2
         #print "Rotation Matrix : ", R_cam1_to_cam2
         P_cam1_to_cam2 = np.hstack((R_cam1_to_cam2, t))
@@ -1316,6 +1303,7 @@ class FeatureTracker:
         
         points3D= zip(*np.vstack((points3D_image[2], -points3D_image[0], -points3D_image[1])))
         #print len(points3D)
+        
         
         self.publish_cloud(points3D)
         
