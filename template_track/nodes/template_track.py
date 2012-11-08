@@ -47,6 +47,9 @@ class FeatureTracker:
         self.preload_template(directory+'/templates/boxTemplate.png')#/home/alex/cued-ardrone/template_track/templates/boxTemplate.png')
         self.mag_dist = None
         self.corners = None
+        
+        self.avg_time = 0
+        self.accepted = 0
                 
     def preload_template(self, path):
         """Template features and descriptors need only be extracted once, so
@@ -347,6 +350,8 @@ class FeatureTracker:
         Draw Matches
         ===================================================================="""
         self.template_visualise(grey_now, t_i1_pts_corr, t_i2_pts_corr, True, R, t)
+        
+        return True
     
     def world_to_pixel_distorted(self, pts, R, t, K=None, k=None):
         """Takes 3D world co-ord and reverse projects using K and distCoeffs"""
@@ -514,8 +519,8 @@ class FeatureTracker:
     def manager(self, img):
         """Feeds data to template match"""
         
-        times = []
-        time_offset = time.time()
+        launch = time.time()
+        
         
         DEF_THREADING = True # Enables threading of template matching
         
@@ -546,10 +551,17 @@ class FeatureTracker:
             return
         
         # Run Template Tracking
-        self.templateTrack()
+        success = self.templateTrack()
         
         # Render Windows
         cv2.waitKey(3)
+        
+        if success:
+            self.accepted += 1
+            run_time = time.time()-launch
+            self.avg_time = (self.avg_time*(self.accepted-1)+run_time)/self.accepted
+        print "No of tracks (accepted): ", self.accepted
+        print "Average track time (accepted): ", self.avg_time
     
     def tf_triangulate_points(self, pts1, pts2):
         """ Triangulates 3D points from set of matches co-ords using relative
@@ -595,6 +607,8 @@ class FeatureTracker:
         #print len(points3D)
         
         self.publish_cloud(points3D)
+        
+        
     
     
     def speakDistance(self, d):
