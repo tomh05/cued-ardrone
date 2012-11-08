@@ -43,7 +43,8 @@ class FeatureTracker:
         self.fd = cv2.FeatureDetector_create('SIFT')
         self.de = cv2.DescriptorExtractor_create('SIFT')
         self.dm = cv2.DescriptorMatcher_create('BruteForce')
-        self.preload_template('/home/alex/cued-ardrone/feature_track/templates/boxTemplate.png')
+        directory = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+        self.preload_template(directory+'/templates/boxTemplate.png')#/home/alex/cued-ardrone/template_track/templates/boxTemplate.png')
         self.mag_dist = None
         self.corners = None
                 
@@ -347,6 +348,55 @@ class FeatureTracker:
         ===================================================================="""
         self.template_visualise(grey_now, t_i1_pts_corr, t_i2_pts_corr, True, R, t)
     
+    def world_to_pixel_distorted(self, pts, R, t, K=None, k=None):
+        """Takes 3D world co-ord and reverse projects using K and distCoeffs"""
+        
+        if k == None:
+            k = self.distCoeffs
+        print "k : \r\n", k
+        k1 = k[0][0] # Radial coeff 1
+        k2 = k[0][1] # Radial coeff 2
+        p1 = k[0][2] # Tangential coeff 1
+        p2 = k[0][3] # Tangential coeff 2
+        
+            
+        if K == None:
+            K = self.cameraMatrix
+        fx = K[0,0]
+        fy = K[1,1]
+        cx = K[0,2]                    
+        cy = K[1,2]
+        
+        print "k : \r\n", len(k)
+        print "pts : \r\n", pts
+        
+        # Set up projection from R and t                   
+        P =  np.diag([1.,1.,1.,1.])
+        Pinner = np.hstack((R, t))
+        P[:3, :4] = Pinner
+        
+        # Resolve to world Frame
+        sub = P.dot(pts)[:3]
+        
+        # First order
+        x_dash = sub[0]/sub[2]
+        print "x_dash : \r\n", x_dash
+        y_dash = sub[1]/sub[2]
+        
+        # Precalc terms (Note: This is significantly simpler than if we had all 8 distCoeffs)
+        r_2 = x_dash*x_dash + y_dash*y_dash
+        r_4 = r_2*r_2
+        terms = (1+k1*r_2+k2*r_4)
+        
+        # Second Order
+        x_dash2 = x_dash*terms+2*p1*x_dash*y_dash+p2*(r_2+2*x_dash*x_dash)
+        y_dash2 = y_dash*terms+2*p2*x_dash*y_dash+p1*(r_2+2*y_dash*y_dash)
+        
+        # To pixel
+        u = fx*x_dash2+cx
+        v = fy*y_dash2+cy
+        
+        return np.array([u,v]).T
     
     def template_overlay(self, R, t, img2):
         """====================================================================
@@ -376,7 +426,10 @@ class FeatureTracker:
                                        [-square_side, +square_side,-2*square_side,1],
                                        [+square_side, +square_side,-2*square_side,1],
                                        [+square_side, -square_side,-2*square_side,1]]).T
+                                       
+        c = self.world_to_pixel_distorted(self.corners, R, t)
         
+        '''
         # Set up projection from extracted R and t                   
         P =  np.diag([1.,1.,1.,1.])
         Pinner = np.hstack((R, t))
@@ -390,6 +443,7 @@ class FeatureTracker:
         # Normalise
         for xy in c:
             xy/=xy[2]
+        '''
         
         imh = self.grey_template.shape[0]
             
