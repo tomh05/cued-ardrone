@@ -3,3 +3,6 @@
 simpledrone/build
 */build/*
 *.pyc
+/build/
+drone_demo/
+

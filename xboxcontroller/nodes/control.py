@@ -97,10 +97,11 @@ def scanAxes(d):
 #    d.axes[6] # D-pad X
 #    d.axes[7] # D-pad Y
     t = Twist()
-    t.linear.x  = d.axes[1]
-    t.linear.y  = d.axes[0]
-    t.linear.z  = 0.5 * ( d.axes[2] - d.axes[5] )
-    t.angular.z = d.axes[3]
+    # 0.5 scaling factor for sensitivity
+    t.linear.x  = 0.5 * d.axes[1]
+    t.linear.y  = 0.5 * d.axes[0]
+    t.linear.z  = 0.5 * 0.5 * ( d.axes[2] - d.axes[5] )
+    t.angular.z = 0.8 * d.axes[3]
 
     twist_pub = rospy.Publisher('cmd_vel',Twist)
     twist_pub.publish(t)
