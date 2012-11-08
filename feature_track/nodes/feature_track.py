@@ -62,12 +62,13 @@ class FeatureTracker:
         self.kp1 = None
         cv2.namedWindow("track")
         self.cloud_pub = rospy.Publisher('pointCloud', PointCloud)
+        self.cloud_pub2 = rospy.Publisher('pointCloud_no_floor', PointCloud)
         self.preload_template('/home/alex/cued-ardrone/feature_track/templates/boxTemplate.png')
-        self.tf = tf.TransformListener()
         self.prev_position = None
         self.mag_dist = None
         self.speech_limiter = 0
         self.corners = None
+        self.time_prev = None
                 
     def preload_template(self, path):
         """Template features and descriptors need only be extracted once, so
@@ -461,18 +462,27 @@ class FeatureTracker:
         
         return angles
     
-    def publish_cloud(self, points):
+    def publish_cloud(self, points, timestamp):
         cloud = PointCloud()
-        cloud.header.stamp = self.time_now # Should copy img header
+        cloud.header.stamp = timestamp
         cloud.header.frame_id = "/ardrone_base_link" # Should be front camera really
+        cloud2 = PointCloud()
+        cloud2.header.stamp = timestamp
+        cloud2.header.frame_id = "/ardrone_base_link" # Should be front camera really
+        
         
         for i, p in enumerate(points): # Ideally done without a loop
             cloud.points.append(gm.Point32())
             cloud.points[i].x = p[0]
             cloud.points[i].y = p[1]
             cloud.points[i].z = p[2]
-        
+            if p[2] > 0: # Only points above drone image axis (crude removing of floor)
+                cloud2.points.append(gm.Point32())
+                cloud2.points[len(cloud2.points)-1].x = p[0]
+                cloud2.points[len(cloud2.points)-1].y = p[1]
+                cloud2.points[len(cloud2.points)-1].z = p[2]
         self.cloud_pub.publish(cloud)
+        self.cloud_pub2.publish(cloud2)
 
         
     def templateTrack(self):
@@ -858,7 +868,7 @@ class FeatureTracker:
         time_offset = time.time()
         
         DEF_SET_DATA = False # Switches in fixed data
-        DEF_TEMPLATE_MATCH = True  # Switches template match - should be ROS param
+        DEF_TEMPLATE_MATCH = False  # Switches template match - should be ROS param
         DEF_THREADING = True # Enables threading of template matching
         
         # Initialise previous image buffer
@@ -988,8 +998,6 @@ class FeatureTracker:
             return
         times.append(time.time()-time_offset)
         
-        #============================================================================================================DOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOM
-        self.tf_triangulate_points(i1_pts_corr, i2_pts_corr)
         times.append(time.time()-time_offset)
             
         """============================================================
@@ -1007,6 +1015,9 @@ class FeatureTracker:
         t = P2[:,3:4]
         t_scaled = t*self.drone_coord_trans[2]/t[2]
         times.append(time.time()-time_offset)
+        
+        #============================================================================================================DOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOM
+        self.tf_triangulate_points(i1_pts_final, i2_pts_final)
         
         """============================================================
         # Update cumulative orientation quaternion 
@@ -1128,16 +1139,16 @@ class FeatureTracker:
     
     def update_tf(self):
         """Updates the cache of most recent pose information"""
-        t = self.tf.getLatestCommonTime("ardrone_base_link", "world")
-        self.tf_time_stamp = self.time_now
-        self.time_now = t
+        self.latest_common_t = self.tf.getLatestCommonTime("ardrone_base_link", "world")
+        #self.time_now = t
         #print "=================================================Update tf========================================="
         
-        #self.tf.waitForTransform("world", "ardrone_base_link", self.time_now, rospy.Duration(4.0))
+        self.tf.waitForTransform("world", "ardrone_base_link", self.time_now, rospy.Duration(99999))
         
         # This is world w.r.t ardrone_base_link but yields a result consistent with ardrone_base_link w.r.t world
         # Documentation, or more likely my understanding of it is wrong (the other way round gives world origin in drone coords)
         position, self.world_to_drone_quaternion = self.tf.lookupTransform("world", "ardrone_base_link", self.time_now)
+        
         
         gamma = tf.transformations.euler_from_quaternion(self.world_to_drone_quaternion, axes='sxyz')[2]
         #self.temp_text = position
@@ -1317,7 +1328,10 @@ class FeatureTracker:
         points3D= zip(*np.vstack((points3D_image[2], -points3D_image[0], -points3D_image[1])))
         #print len(points3D)
         
-        self.publish_cloud(points3D)
+        # Publish Cloud
+        # Note: img1 camera is taken to be the origin, so time_prev NOT
+        # time_now is used.
+        self.publish_cloud(points3D, self.time_prev)
         
         
         
@@ -1372,8 +1386,8 @@ class FeatureTracker:
         """Converts the ROS published image to a cv2 numpy array
         and passes to FeatureTracker"""
         self.time_now = d.header.stamp
-        if self.time_now == None:
-            self.time_prev = self.time_prev
+        if self.time_prev == None:
+            self.time_prev = self.time_now
         #print "--------------------------------------------------------img proc -----------------------------------------------"
         # ROS to cv image
         bridge = CvBridge()
@@ -1382,6 +1396,7 @@ class FeatureTracker:
         npimg = np.asarray(cvimg)
         # Pass to FeatureTracker
         self.featureTrack(npimg)
+        self.time_prev = self.time_now
         
         
     def setCameraInfo(self, ci):
@@ -1400,6 +1415,7 @@ class FeatureTracker:
   
 def connect(m):
     rospy.init_node('Feature_Tracker')
+    m.tf = tf.TransformListener()
     rospy.Subscriber('/ardrone/front/image_raw',Image,m.imgproc)
     rospy.Subscriber('/ardrone/front/camera_info',sensor_msgs.msg.CameraInfo, m.setCameraInfo)
     rospy.Subscriber('/xboxcontroller/button_y',Empty,m.speakDistance)
