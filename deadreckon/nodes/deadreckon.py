@@ -29,6 +29,8 @@ class DeadReckoning:
         self.x = 0.0 # x location in world
         self.y = 0.0 # y location in world
         self.z = 0.0 # z location in world
+        self.prevtime = None
+        slef.v_buffer = []
         self.prev_vx_rot = 0. # previous x vel for trapezium rule
         self.prev_vy_rot = 0. # previous y vel for trapezium rule
         self.init_vx_rot = None # initial x vel for trapezium rule
