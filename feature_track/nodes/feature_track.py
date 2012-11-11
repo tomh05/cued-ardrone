@@ -12,6 +12,8 @@
 # Only need to store the keypoints and descriptors (kp# and desc#)
 #==============================================================================
 
+# Currently tf_triangulate_points may operate on the wrong data if a frame fails to match
+
 import roslib; roslib.load_manifest('feature_track')
 import rospy
 import ardrone_autonomy.msg
@@ -57,7 +59,7 @@ class FeatureTracker:
         self.calibrated = False
         self.fd = cv2.FeatureDetector_create('SIFT')
         self.de = cv2.DescriptorExtractor_create('SIFT')
-        self.dm = cv2.DescriptorMatcher_create('BruteForce')
+        self.dm = cv2.DescriptorMatcher_create('BruteForce') #'BruteForce-Hamming' for binary
         self.desc1 = None
         self.kp1 = None
         cv2.namedWindow("track")
@@ -65,6 +67,8 @@ class FeatureTracker:
         self.cloud_pub2 = rospy.Publisher('pointCloud_no_floor', PointCloud)
         self.preload_template('/home/alex/cued-ardrone/feature_track/templates/boxTemplate.png')
         self.prev_position = None
+        self.prev_quat = None
+        self.prev_prev_position = None
         self.mag_dist = None
         self.speech_limiter = 0
         self.corners = None
@@ -921,18 +925,18 @@ class FeatureTracker:
         translation of the camera between frames and the position of observed
         points"""
         
+        self.debug_text = []
         times = []
         time_offset = time.time()
         
         DEF_SET_DATA = False # Switches in fixed data
-        DEF_TEMPLATE_MATCH = True  # Switches template match - should be ROS param
+        DEF_TEMPLATE_MATCH = False  # Switches template match - should be ROS param
         DEF_THREADING = False # Enables threading of template matching
         
         # Initialise previous image buffer
         if self.grey_previous == None:
             self.grey_previous = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             
-        #print "***************************************frameskipping***********************************"
         
         # Skip frames. Need to add ROS parameter to allow setting        
         self.frameskip += 1
@@ -1073,8 +1077,13 @@ class FeatureTracker:
         t_scaled = t*self.drone_coord_trans[2]/t[2]
         times.append(time.time()-time_offset)
         
+        #==========
+        #self.prev_i1_pts_final = i1_pts_final
+        #self.prev_i2_pts_final = i2_pts_final
         #============================================================================================================DOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOM
         self.tf_triangulate_points(i1_pts_final, i2_pts_final)
+        #if self.prev_i1_pts_final != None:
+        #    self.tf_triangulate_points_3f(self.prev_i1_pts_final, self.prev_i2_pts_final, i1_pts_final, i2_pts_final)
         
         """============================================================
         # Update cumulative orientation quaternion 
@@ -1164,6 +1173,10 @@ class FeatureTracker:
         cv2.putText(img2, "im t :"+str(t_scaled), (25,100), cv2.FONT_HERSHEY_PLAIN, 1, (255, 127, 255))
         cv2.putText(img2, self.image_cumu_overlay, (25,25+imh), cv2.FONT_HERSHEY_PLAIN, 1, (255, 127, 255))
         
+        # Write debug text
+        for i, l in enumerate(self.debug_text):
+            cv2.putText(img2, str(l), (25,img2.shape[0]-25*(i+1)), cv2.FONT_HERSHEY_PLAIN, 1, (63, 63, 255))
+        
         # Draw
         cv2.imshow("track", img2)
         print "=============\r\nDrawn\r\n============="
@@ -1200,24 +1213,22 @@ class FeatureTracker:
         #self.time_now = t
         #print "=================================================Update tf========================================="
         
-        self.tf.waitForTransform("world", "ardrone_base_link", self.time_now, rospy.Duration(99999))
+        self.tf.waitForTransform("world", "ardrone_base_link", self.time_now, rospy.Duration(16))
         
         # This is world w.r.t ardrone_base_link but yields a result consistent with ardrone_base_link w.r.t world
         # Documentation, or more likely my understanding of it is wrong (the other way round gives world origin in drone coords)
-        position, self.world_to_drone_quaternion = self.tf.lookupTransform("world", "ardrone_base_link", self.time_now)
+        position, self.world_to_drone_quaternion = self.tf.lookupTransform("world", "ardrone_base_link", self.time_now)        
         
-        
-        gamma = tf.transformations.euler_from_quaternion(self.world_to_drone_quaternion, axes='sxyz')[2]
-        #self.temp_text = position
         
         # Get change in position
-        print "position", position
-        print "prev_position", self.prev_position
         if self.prev_position != None:
+            
             # Difference in position in world axis
             trans = np.array(([position[0] - self.prev_position[0]],
-                                            [position[1] - self.prev_position[1]],
-                                            [0.]))
+                              [position[1] - self.prev_position[1]],
+                              [0.]))
+            self.debug_text.append("trans w: " + str(trans))
+                              
             ''' This assumes flat drone
             # Convert to drone image-proc axis (z = drone forward , x = left to right horiz, y = down)
             self.drone_coord_trans = np.array([(trans[0]*math.cos(gamma)+trans[1]*math.sin(gamma)),
@@ -1228,12 +1239,10 @@ class FeatureTracker:
             R = tf.transformations.quaternion_matrix(self.world_to_drone_quaternion)[:3, :3]
             # Into ardrone_base_link co-ords
             trans = R.dot(trans)
+            self.debug_text.append("trans d : "+ str( trans))
             # Re-order axis into image co-ords
             self.drone_coord_trans = np.array([-trans[1], -trans[2], trans[0]])
-            
-            
-            
-            
+            self.debug_text.append("trans i : "+ str(self.drone_coord_trans))
             '''
             trans = np.array([[position[0] - self.prev_position[0]],
                                             [position[1] - self.prev_position[1]],
@@ -1254,11 +1263,31 @@ class FeatureTracker:
             # Get relative quaternion
             # qmid = qbefore-1.qafter
             self.relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.prev_quat), self.world_to_drone_quaternion)
+            
+        
+            if self.prev_prev_position != None:    
+                
+                trans = np.array(([self.prev_position[0] - self.prev_prev_position[0]],
+                                  [self.prev_position[1] - self.prev_prev_position[1]],
+                                  [0.]))
+                
+                R = tf.transformations.quaternion_matrix(self.prev_quat)[:3, :3] # Should match other for ease of use
+                # Into ardrone_base_link co-ords
+                trans = R.dot(trans)
+                # Re-order axis into image co-ords
+                self.prev_drone_coord_trans = np.array([-trans[1], -trans[2], trans[0]])
+                
+                
+                # Get relative quaternion
+                # qmid = qbefore-1.qafter
+                self.prev_relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.prev_prev_quat), self.prev_quat)
+            
+            self.prev_prev_quat = self.prev_quat
+            self.prev_trans = self.drone_coord_trans
+            
         self.prev_position = position
         self.prev_quat = self.world_to_drone_quaternion
 
-
-       
     def homography_to_pose(self, H):
         """input homography[9] - 3x3 Matrix
         // please note that homography should be computed
@@ -1317,10 +1346,7 @@ class FeatureTracker:
         
         R = U.dot(V)
         print "R ortho : \r\n", R
-        
-        
-        
-    
+
     
     def tf_triangulate_points(self, pts1, pts2):
         """ Triangulates 3D points from set of matches co-ords using relative
@@ -1329,10 +1355,10 @@ class FeatureTracker:
         print "Triangulation"
         # For ease of reading until names are made consistent and clear
         t = self.drone_coord_trans
-        t = np.array([[-0.235],[0],[0]])
+        #t = np.array([[-0.235],[0],[0]])
         print "Translation : ", t
         
-        # Get rotation matrix for crone co-ord axis
+        # Get rotation matrix for drone co-ord axis
         # Rebuild R
         # Flip eulers to image axis
         angles = np.array(tf.transformations.euler_from_quaternion(self.relative_quat))        
@@ -1346,25 +1372,67 @@ class FeatureTracker:
         print P_cam1_to_cam2
         print self.P
         
-        '''
-        empty = np.array([[0],[0],[0]])
-        ab = np.reshape(self.inverseCameraMatrix.dot(self.make_homo(pts1).transpose()), (3, -1))
-        a = ab[0]
-        b = ab[1]
-        cd = np.reshape(self.inverseCameraMatrix.dot(self.make_homo(pts2).transpose()), (3, -1))
-        c = cd[0]
-        d = cd[1]
+        #print self.cameraMatrix.shape
+        PP1 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
+        PP2 = self.cameraMatrix.dot(P_cam1_to_cam2)
+        points3D_image = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2)[:3]
         
-        X = (-t[0] + c*t[2])/(R[0,0]-c*R[2,0]-(b/a)*(R[0,1]-c*R[2,1]+(1/b)*(R[0,2] - c*R[2,2])))
-        Y = (a/b)*X
-        Z = (1/a)*X
-
+        infront = points3D_image[2] > 0
+        #print infront
+        # Filter points
+        infront = np.array([infront]).transpose()
+        infront = np.hstack((infront, infront, infront)).transpose()
+        #print infront.shape
+        #print points3D_image
         
-        #print Z[1]
+        points3D_image= np.reshape(points3D_image[infront==True], (3, -1))
+        #print points3D_image
         
-        #print "x,y,z : ", X, ", ", Y, ", ", Z
-        '''
+        points3D= zip(*np.vstack((points3D_image[2], -points3D_image[0], -points3D_image[1])))
+        #print "points3D : \r\n", points3D
         
+        # Publish Cloud
+        # Note: img1 camera is taken to be the origin, so time_prev NOT
+        # time_now is used.
+        self.publish_cloud(points3D, self.time_prev)
+    
+    
+    def tf_triangulate_points_3f(self, pts1, pts2a, pts2b, pts3):
+        """ Triangulates 3D points from set of matches co-ords using relative
+        camera position determined from tf"""
+        
+        comb1 = set(pts2a.flat)
+        comb2 = set(pts2b.flat)
+        comb = list(comb1.intersection(comb2))
+        print "comb : ", comb
+        """
+        # Find pairing that are consistent in both dirs
+        comb1 = set(zip(i1_indices, i2_indices))
+        comb2 = set(zip(i1_indices2, i2_indices2))
+        comb = list(comb1.intersection(comb2))
+        comb = zip(*list(comb))
+        i1_indices = comb[0]
+        i2_indices = comb[1]
+        
+        print "Triangulation"
+        # For ease of reading until names are made consistent and clear
+        t = self.drone_coord_trans
+        #t = np.array([[-0.235],[0],[0]])
+        print "Translation : ", t
+        
+        # Get rotation matrix for drone co-ord axis
+        # Rebuild R
+        # Flip eulers to image axis
+        angles = np.array(tf.transformations.euler_from_quaternion(self.relative_quat))        
+        angles = self.coord_drone_to_image_axis(angles)
+        R_cam1_to_cam2 = tf.transformations.euler_matrix(angles[0],angles[1],angles[2], axes='sxyz')[:3, :3]        
+        #R_cam1_to_cam2 = np.diag([1,1,1])
+        R = R_cam1_to_cam2
+        #print "Rotation Matrix : ", R_cam1_to_cam2
+        P_cam1_to_cam2 = np.hstack((R_cam1_to_cam2, t))
+        T = P_cam1_to_cam2
+        print P_cam1_to_cam2
+        print self.P
         
         #print self.cameraMatrix.shape
         PP1 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
@@ -1389,10 +1457,7 @@ class FeatureTracker:
         # Note: img1 camera is taken to be the origin, so time_prev NOT
         # time_now is used.
         self.publish_cloud(points3D, self.time_prev)
-        
-        
-        
-        
+        """
     
     '''    
     def cloud_from_navdata(self, i1_pts_final, i2_pts_final):

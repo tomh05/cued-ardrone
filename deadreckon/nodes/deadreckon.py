@@ -29,6 +29,8 @@ class DeadReckoning:
         self.x = 0.0 # x location in world
         self.y = 0.0 # y location in world
         self.z = 0.0 # z location in world
+        self.prevtime = None
+        self.v_buffer = []
         self.prev_vx_rot = 0. # previous x vel for trapezium rule
         self.prev_vy_rot = 0. # previous y vel for trapezium rule
         self.init_vx_rot = None # initial x vel for trapezium rule
@@ -88,6 +90,8 @@ class DeadReckoning:
         # if playing rosbags and time jumps backwards, we want to reset
         if (deltat < -1.0): 
             self.reset(self)
+            
+        print "deltat : ", deltat
  
         
         '''
@@ -154,6 +158,7 @@ class DeadReckoning:
                          time,
                          "ardrone_base_link",
                          "world")
+        print self.x, ", ", self.y, ", ", self.z
 
         '''
         # Publish path visualisation data
