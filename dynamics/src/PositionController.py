@@ -24,8 +24,8 @@ class PositionController:
 	def __init__(self):
 		
 		self.d0=1.0/2600
-		self.d1=-0.012
-		self.d2=-0.00033
+		self.d1=-0.008
+		self.d2=-0.00032
 		self.dpw=(0.0, 0.0, 0.0)
 		self.cpw=(0.0, 0.0, 0.0)
 		
@@ -171,8 +171,9 @@ class PositionController:
 			
 			#print rx, ry
 			#print psw
-			self.twist.linear.x=max(min(rx,0.5),-0.5)
-			self.twist.linear.y=max(min(ry,0.5),-0.5)
+			llim=0.5	#linear cmd limit
+			self.twist.linear.x=max(min(rx,llim),-llim)
+			self.twist.linear.y=max(min(ry,llim),-llim)
 			
 			'''
 			file1 = open('ssm-r-0-05','w')
