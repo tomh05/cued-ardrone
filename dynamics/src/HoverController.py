@@ -53,26 +53,21 @@ class HoverController:
 		self.takeoffpub.publish(Empty()); print 'takeoff'
 		sleep(4)
 
-		self.desiposw=(0.0, 0.0, 0.0)
+		self.dpw=(0.0, 0.0, 0.0)
+		self.dyw=0.0
 		print '*********** start control ***********'
 		self.hover_timer = rospy.Timer(rospy.Duration(1.0/20.0), self.hover_timer_callback)
 		sleep(2)
 		self.pc.pc_timer_init()
 		sleep(10)
-		self.desiposw=(0.7,0.0,0.0)
-		self.pc.dpw_handler(self.desiposw)
+		self.dpw=(0.7,-0.7,1.6)
+		self.pc.dpw_handler(self.dpw)
 		sleep(10)
-		#self.desiposw=(0.0,-0.8,0.0)
-		#self.pc.dpw_handler(self.desiposw)
-		#sleep(10)
-		#self.desiposw=(0.0,0.0,0.0)
-		#self.pc.dpw_handler(self.desiposw)
-		#sleep(10)
-		self.desiposw=(-1.0,-0.3,0.0)
-		self.pc.dpw_handler(self.desiposw)
+		self.dpw=(-1.0,0.0,0.8)
+		self.pc.dpw_handler(self.dpw)
 		sleep(10)
-		self.desiposw=(0.0,0.0,0.0)
-		self.pc.dpw_handler(self.desiposw)
+		self.dpw=(0.0,0.0,1.3)
+		self.pc.dpw_handler(self.dpw)
 		sleep(10)
 		self.landpub.publish(Empty()); print 'land'
 	
@@ -102,7 +97,7 @@ class HoverController:
 				ori2e = tf.transformations.euler_from_quaternion(ori)
 				curroriw = (ori2e[0], ori2e[1], ori2e[2]+pi)	#curroriw is in euler form! And +pi to align base_link frame with marker frame
 				currposw = pos
-				self.pc.pose_handler(currposw, curroriw, self.desiposw)
+				self.pc.pose_handler(currposw, curroriw)
 				#print currposw
 				#print curroriw
 				

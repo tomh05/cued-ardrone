@@ -15,7 +15,7 @@ from std_msgs.msg import Empty, UInt8
 
 from time import time, sleep
 import sys
-from math import sin, cos, radians, pi
+from math import sin, cos, radians, degrees, pi
 import pickle
 
 
@@ -125,28 +125,36 @@ class PositionController:
 		self.cmd_log['tw'].append(twcmd)
 	
 
-	def pose_handler(self, cpw, cow, dpw):
-		self.posecmd_logger(cpw, cow, dpw)
-		self.nd_log['psiw'].append(cow[2])
+	def pose_handler(self, cpw, cow):
+		#self.posecmd_logger(cpw, cow, dpw)
+		self.nd_log['psiw'].append(cow[2])	#pose_handler uses cow[2] (z rot, euler) to determine rot of cmd frame wrt. world frame
 		self.nd_log['cpw'].append(cpw)
-		self.dpw = dpw		
 		self.justgotpose = True
-		print 'gotpose - ' + str(time()-self.reftm)
+		print '\ngotpose - \nposition: ' + str(cpw) + '\norientation-z: ' + str(cow[2]) + '\ntime: ' + str(time()-self.reftm)
+		#print 'gotpose'
 	
 	
 	def dpw_handler(self, dpw):
 		self.dpw = dpw
+		if dpw[2] > 0.3:
+			newal = min(dpw[2]*1000, 1700)
+			self.ref['al'] = newal
+		
 	
+	def dyw_handler(self, dyw):
+		self.ref['ps'] = dyw		#dyaww is the required euler z rot of the drone wrt. world frame, in degrees
+
 
 	def pc_timer_callback(self,event):
-		if (self.nd_log['al'][-1]>(self.ref['al']+500)):
+		if (self.nd_log['al'][-1]>(2000)):
 			self.landpub.publish(Empty())	#height switch
+			print 'error: altitude too high - landing'
 		
 		self.twist.linear.z = max(min(0.0013*self.error['al'][-1], 1.0), -1.0)
-		#self.twist.angular.z = max(min(self.error['ps'][-1]/150, 1.0), -1.0)
-		#print self.nd_log['al'][-1]
-
-		#endif height and yaw control are activated
+		yawwerror = -self.cyd(degrees(self.nd_log['psiw'][-1]),self.ref['ps'])		# computes error in yaw world in degrees
+		#print degrees(self.nd_log['psiw'][-1]),self.ref['ps']
+		#print yawwerror
+		#self.twist.angular.z = max(min(yawwerror/120, 1.0), -1.0)
 		
 		if True:
 			(xcw, ycw, zcw) = self.nd_log['cpw'][-1]
@@ -192,7 +200,14 @@ class PositionController:
 		self.cmdpub.publish(self.twist)
 		self.cmd_logger(self.twist)
 		#print 'twist: \n', self.twist
-			
+		
+		
+	def cyd(self, yaw, center):
+		#compute yaw-desiyaw in interval (-180,180)
+		rem = (yaw-center)%360
+		if rem>180:
+			rem=rem-360
+		return rem
 			
 def main(args):
 	pass
