@@ -58,8 +58,8 @@ class DeadReckoning:
             self.v_buffer.append([d.vx, d.vy])
             vx = np.median(zip(*self.v_buffer)[0])
             vy = np.median(zip(*self.v_buffer)[1])
-        #vx = d.vx 
-        #vy = d.vy 
+        vx = d.vx 
+        vy = d.vy 
         #print str(d.vx) + "," + str(d.vy) + "," + str(d.vz)
         
         
@@ -76,7 +76,8 @@ class DeadReckoning:
         
         #print "bearing " + str(alpha) + ", " + str(beta)+", "+str(gamma)
         
-        
+        print "vz : ", d.vz
+        print "altd : ", d.altd
         
         '''
         # Sort out frame timings
@@ -143,10 +144,13 @@ class DeadReckoning:
         '''
         self.x += vx_rot*deltat / 1000
         self.y += vy_rot*deltat / 1000
+        self.z = (d.altd*1.) / 1000 # *1. is to ensure treated as float. altd is actually altitude in integer mm
+        
 
         # doesn't set altitude nicely at moment, so leave at zero
-        self.z = 0 
+        #self.z = 0 
         #self.z = d.altd / 1000
+        #print self.z
 
         '''
         # Publish tf

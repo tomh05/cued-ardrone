@@ -424,11 +424,11 @@ class FeatureTracker:
         return drone_angles
         
     def coord_drone_to_image_axis(self, angles): #verified
-        drone_angles = angles.copy()
-        drone_angles[0] = -angles[1]
-        drone_angles[1] = -angles[2]
-        drone_angles[2] = angles[0]
-        return drone_angles
+        image_angles = angles.copy()
+        image_angles[0] = -angles[1]
+        image_angles[1] = -angles[2]
+        image_angles[2] = angles[0]
+        return image_angles
     
     def update_quaternion(self, R):
         """Updates the cumulative local axis stored in self.quaternion"""
@@ -946,7 +946,7 @@ class FeatureTracker:
         
         DEF_SET_DATA = False # Switches in fixed data
         self.DEF_SET_DATA = DEF_SET_DATA
-        DEF_TEMPLATE_MATCH = False  # Switches template match - should be ROS param
+        DEF_TEMPLATE_MATCH = True  # Switches template match - should be ROS param
         DEF_THREADING = False # Enables threading of template matching
         
         # Initialise previous image buffer
