@@ -16,13 +16,13 @@ class IMUHandle:
         self.prevtime = None # time (float secs) of prev frame
 
         self.v_buffer = [] # buffer of last 10 frames [d.vx, d.vy]
-        self.prev_vx_rot = 0. # previous x vel for trapezium rule
-        self.prev_vy_rot = 0. # previous y vel for trapezium rule
-        self.init_vx_rot = None # initial x vel for trapezium rule
-        self.init_vy_rot = None # initial y vel for trapezium rule
 
-        self.rotZoffset = 0 # initial value of yaw to allow for offsets
-
+        self.prev_z = 0.0
+        self.prev_alpha = 0.0
+        self.prev_beta = 0.0
+        self.prev_gamma = 0.0
+        #self.rotZoffset = 0 # initial value of yaw to allow for offsets
+        self.isFirstFrame= True # for resetting initial yaw value
 
 
     def handle_get_imu_movement(self,obj):
@@ -42,22 +42,38 @@ class IMUHandle:
         # get time difference between messages
         time = navdata.header.stamp
         if self.prevtime == None:
-            #self.reset(self)
             self.prevtime = time
         deltat = (time - self.prevtime).to_sec()
         self.prevtime = time
 
+        if (deltat<0): # rosbag looping
+            self.isFirstFrame = True
+
+
         # translation
-        t.transform.translation.x = np.float64( vx*deltat / 1000)
-        t.transform.translation.y = np.float64( vy*deltat / 1000)
-        t.transform.translation.z = np.float64( 0.0)
+        t.transform.translation.x = np.float64( vx*deltat / 1000.0)
+        t.transform.translation.y = np.float64( vy*deltat / 1000.0)
+        t.transform.translation.z = np.float64( (navdata.altd - self.prev_z) / 1000.0)
+        self.prev_z = navdata.altd
 
         # Euler angles in radians
         self.alpha = math.radians(navdata.rotX) # roll
         self.beta  = math.radians(navdata.rotY) # pitch
         self.gamma = math.radians(navdata.rotZ) # yaw
+
+        if (self.isFirstFrame):
+            self.prevYaw = self.gamma
+            self.isFirstFrame = False 
+
         # produce quaternion
-        q= tf.transformations.quaternion_from_euler(self.alpha, self.beta, self.gamma)
+        da = self.alpha - self.prev_alpha
+        db = self.beta - self.prev_beta
+        dg = self.gamma - self.prev_gamma
+        q= tf.transformations.quaternion_from_euler(da,db,dg)
+
+        self.prev_alpha = self.alpha
+        self.prev_beta = self.beta
+        self.prev_gamma = self.gamma
 
         #t.transform.translation = (x,y,z)
         t.transform.rotation = q

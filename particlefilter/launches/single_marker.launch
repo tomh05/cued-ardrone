@@ -1,0 +1,19 @@
+<launch>
+    <group ns="ardrone/front">
+        <node name="image_proc" pkg="image_proc" type="image_proc" />
+    </group>
+    
+   <node name="IMU_parser" pkg="particlefilter" type="imu_movement.py" />
+
+    
+    <node name="ar_pose" pkg="ar_pose" type="ar_multi" output="screen">
+        <remap from="/usb_cam/camera_info" to="ardrone/front/camera_info" />
+        <remap from="/usb_cam/image_raw" to="ardrone/front/image_rect" />
+        
+        <param name="marker_pattern_list" type="string" value="$(find ar_pose)/data/marker_79_only"/>
+		<param name="threshold" type="int" value="100"/>
+    
+    </node>
+
+    <!--<node name="Particle_Filter" pkg="particlefilter" type="particlefilter.py" />-->
+</launch>
