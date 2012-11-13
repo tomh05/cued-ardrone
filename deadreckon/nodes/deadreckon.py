@@ -29,6 +29,8 @@ class DeadReckoning:
         self.x = 0.0 # x location in world
         self.y = 0.0 # y location in world
         self.z = 0.0 # z location in world
+        self.prevtime = None
+        self.v_buffer = []
         self.prev_vx_rot = 0. # previous x vel for trapezium rule
         self.prev_vy_rot = 0. # previous y vel for trapezium rule
         self.init_vx_rot = None # initial x vel for trapezium rule
@@ -140,9 +142,9 @@ class DeadReckoning:
         self.x += vx_rot*deltat / 1000
         self.y += vy_rot*deltat / 1000
 
-        # doesn't set altitude nicely at moment, so leave at zero
-        self.z = 0 
-        #self.z = d.altd / 1000
+        # altd is an >>>int<<< in mm for drone altitude relative to some initialisation (not elevation from ground)
+        # *1. is to force float for division
+        self.z = (d.altd*1.) / 1000
 
         '''
         # Publish tf
