@@ -1245,7 +1245,7 @@ class FeatureTracker:
             # Difference in position in world axis
             trans = np.array(([position[0] - self.prev_position[0]],
                               [position[1] - self.prev_position[1]],
-                              [0.]))
+                              [position[1] - self.prev_position[1]]))
             #self.debug_text.append("trans w: " + str(trans))
             
             R = tf.transformations.quaternion_matrix(self.world_to_drone_quaternion)[:3, :3]
