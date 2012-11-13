@@ -286,9 +286,9 @@ class FeatureTracker:
         # Get plane normal
         AB = corners_rot[1]-corners_rot[0]
         AC = corners_rot[2]-corners_rot[0]
-        print AC
+        #print AC
         plane_normal = np.cross(AB,AC)
-        print "plane_normal : ", plane_normal
+        #print "plane_normal : ", plane_normal
         # Backward test
         if plane_normal[2] < 0:
             # Template backward facing
@@ -321,13 +321,15 @@ class FeatureTracker:
         
         quaternion = tf.transformations.quaternion_from_matrix(R4)
         
+        print "Broadcasting tf"
         br = tf.TransformBroadcaster() #create broadcaster
         br.sendTransform((t[0],t[1],t[2]), 
                          # translation happens first, then rotation
                          quaternion,
                          self.time_now, # NB: 'now' is not the same as time data was sent from drone
-                         "ardrone_base_link",
-                         "template_match")
+                         "/template_match",
+                         "/ardrone_base_link"
+                         )
         
         #imh = self.grey_template.shape[0]
         #img2 = stackImagesVertically(self.grey_template, grey_now)
@@ -372,8 +374,8 @@ class FeatureTracker:
         cx = K[0,2]                    
         cy = K[1,2]
         
-        print "k : \r\n", len(k)
-        print "pts : \r\n", pts
+        #print "k : \r\n", len(k)
+        #print "pts : \r\n", pts
         
         # Set up projection from R and t                   
         P =  np.diag([1.,1.,1.,1.])
@@ -385,7 +387,7 @@ class FeatureTracker:
         
         # First order
         x_dash = sub[0]/sub[2]
-        print "x_dash : \r\n", x_dash
+        #print "x_dash : \r\n", x_dash
         y_dash = sub[1]/sub[2]
         
         # Precalc terms (Note: This is significantly simpler than if we had all 8 distCoeffs)
