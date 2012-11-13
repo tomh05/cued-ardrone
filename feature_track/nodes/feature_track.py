@@ -50,6 +50,19 @@ def stackImagesVertically(top_image, bottom_image):
     stacked[h1:h1+h2, :w2] = bottom_image
     return stacked
     
+def trunc(f, n=10):
+    '''Truncates/pads a float f to a string of n decimal places without rounding'''
+    slen = len('%.*f' % (n, f))
+    return str(f)[:slen]
+    
+def np_to_str(n):
+    """Tidily converts a numpy array to a string"""
+    s = ""
+    for r in n:
+        s+=trunc(r)+", "
+    return s
+        
+    
 class FeatureTracker:
     def __init__(self):
         self.roll = 0.
@@ -443,13 +456,14 @@ class FeatureTracker:
         success, angles = self.rotation_to_euler(R)
         angles = self.coord_image_to_drone_axis(angles)
         self.image_angle_overlay = "Image " + str(angles[0]*180/np.pi) + ", " + str(angles[1]*180/np.pi) + ", " + str(angles[2]*180/np.pi)
+        self.upper_debug_text.append("Image " + trunc(angles[0]*180/np.pi) + ", " + trunc(angles[1]*180/np.pi) + ", " + trunc(angles[2]*180/np.pi))
         #print self.image_angle_overlay
         
         
         
         # [0]=roll, [1]=pitch, [2]=yaw
         angles = tf.transformations.euler_from_quaternion(self.relative_quat, axes='sxyz')
-        self.angle_overlay = "Dead " + str(angles[0]*180/np.pi) + ", " + str(angles[1]*180/np.pi) + ", " + str(angles[2]*180/np.pi)
+        self.upper_debug_text.append("Dead " + trunc(angles[0]*180/np.pi) + ", " + trunc(angles[1]*180/np.pi) + ", " + trunc(angles[2]*180/np.pi))
         #print self.angle_overlay
         
         # Update Quaternion
@@ -753,7 +767,7 @@ class FeatureTracker:
         
         if k == None:
             k = self.distCoeffs
-        print "k : \r\n", k
+        #print "k : \r\n", k
         k1 = k[0][0] # Radial coeff 1
         k2 = k[0][1] # Radial coeff 2
         p1 = k[0][2] # Tangential coeff 1
@@ -767,8 +781,8 @@ class FeatureTracker:
         cx = K[0,2]                    
         cy = K[1,2]
         
-        print "k : \r\n", len(k)
-        print "pts : \r\n", pts
+        #print "k : \r\n", len(k)
+        #print "pts : \r\n", pts
         
         # Set up projection from R and t                   
         P =  np.diag([1.,1.,1.,1.])
@@ -780,7 +794,7 @@ class FeatureTracker:
         
         # First order
         x_dash = sub[0]/sub[2]
-        print "x_dash : \r\n", x_dash
+        #print "x_dash : \r\n", x_dash
         y_dash = sub[1]/sub[2]
         
         # Precalc terms (Note: This is significantly simpler than if we had all 8 distCoeffs)
@@ -915,7 +929,7 @@ class FeatureTracker:
         
         cv2.imshow("template", img2)    
         
-        
+
         
     def featureTrack(self, img):
         """Takes a cv2 numpy array image and compared to a previously
@@ -926,10 +940,12 @@ class FeatureTracker:
         points"""
         
         self.debug_text = []
+        self.upper_debug_text = []
         times = []
         time_offset = time.time()
         
         DEF_SET_DATA = False # Switches in fixed data
+        self.DEF_SET_DATA = DEF_SET_DATA
         DEF_TEMPLATE_MATCH = False  # Switches template match - should be ROS param
         DEF_THREADING = False # Enables threading of template matching
         
@@ -1090,6 +1106,7 @@ class FeatureTracker:
         ============================================================"""                
         angles = self.update_quaternion(R) 
         times.append(time.time()-time_offset)
+        self.upper_debug_text.append("im trans: " + str(t))
         
         '''
         """====================================================================
@@ -1165,24 +1182,18 @@ class FeatureTracker:
         cv2.line(img2, (w0/2, h), (int(w0/2+l*math.cos(angles[0])), int(h+l*math.sin(angles[0]))), (255, 255, 255), 1)
         cv2.line(img2, (w0/2, h), (int(w0/2-l*math.cos(angles[0])), int(h-l*math.sin(angles[0]))), (255, 255, 255), 1)
         
-        
-        # Overlay text (more readable than console)
-        cv2.putText(img2, self.angle_overlay, (25,25), cv2.FONT_HERSHEY_PLAIN, 1, (255, 127, 255))
-        cv2.putText(img2, self.image_angle_overlay, (25,50), cv2.FONT_HERSHEY_PLAIN, 1, (255, 127, 255))
-        #cv2.putText(img2, "tf t :"+str(self.drone_coord_trans), (25,75), cv2.FONT_HERSHEY_PLAIN, 1, (255, 127, 255))
-        #cv2.putText(img2, "im t :"+str(t), (25,100), cv2.FONT_HERSHEY_PLAIN, 1, (255, 127, 255))
-        cv2.putText(img2, self.image_cumu_overlay, (25,25+imh), cv2.FONT_HERSHEY_PLAIN, 1, (255, 127, 255))
-        
         # Write debug text
         for i, l in enumerate(self.debug_text):
             cv2.putText(img2, str(l), (25,img2.shape[0]-25*(i+1)), cv2.FONT_HERSHEY_PLAIN, 1, (63, 63, 255))
+        for i, l in enumerate(self.upper_debug_text):
+            cv2.putText(img2, str(l), (25,25*(i+1)), cv2.FONT_HERSHEY_PLAIN, 1, (63, 63, 255))
             
         # Reproject triangulated points
         for p in self.reprojected:
-            cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (63, 63, 255), 1)
+            cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 63, 63), 1)
             #cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 63, 63), 1)
         for p in self.reprojected2:
-            cv2.circle(img2, (int(p[0]),int(p[1])), 3, (63, 63, 255), 1)
+            cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 63, 255), 1)
             #cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 63, 63), 1)
         
         # Draw
@@ -1242,7 +1253,7 @@ class FeatureTracker:
             trans = R.dot(trans)
             #self.debug_text.append("trans d : "+ str( trans))
             # Re-order axis into image co-ords
-            self.drone_coord_trans = np.array([-trans[1], -trans[2], trans[0]])
+            self.drone_coord_trans = np.array([trans[1], -trans[2], trans[0]]) # drone y should map to - image x. This suggests that this is going the wrong way ************************************************************
             #self.debug_text.append("trans i : "+ str(self.drone_coord_trans))
             '''
             trans = np.array([[position[0] - self.prev_position[0]],
@@ -1264,7 +1275,7 @@ class FeatureTracker:
             # Get relative quaternion
             # qmid = qbefore-1.qafter
             self.relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.prev_quat), self.world_to_drone_quaternion)
-            self.debug_text.append(str(tf.transformations.euler_from_quaternion(self.relative_quat)))
+            self.debug_text.append("dr ang: "+ np_to_str(tf.transformations.euler_from_quaternion(self.relative_quat)))
             
         
             if self.prev_prev_position != None:    
@@ -1348,7 +1359,6 @@ class FeatureTracker:
         
         R = U.dot(V)
         print "R ortho : \r\n", R
-
     
     def tf_triangulate_points(self, pts1, pts2):
         """ Triangulates 3D points from set of matches co-ords using relative
@@ -1357,11 +1367,16 @@ class FeatureTracker:
         self.reprojected = []
         self.reprojected2 = []
         
+        #print pts1
+        #print pts2
+        
         #print "Triangulation"
         # For ease of reading until names are made consistent and clear
         t = self.drone_coord_trans
-        self.debug_text.append("t:"+str(t))
-        #t = np.array([[-0.235],[0],[0]])
+        self.debug_text.append("trans: "+str(t))
+        if self.DEF_SET_DATA:
+            #t = np.array([[-0.235],[0],[0]])
+            t = np.array([[1.65141756E-2],[6.43338465E-5],[-2.68414366E-2]])
         #print "Translation : ", t
         
         # Get rotation matrix for drone co-ord axis
@@ -1370,19 +1385,39 @@ class FeatureTracker:
         angles = np.array(tf.transformations.euler_from_quaternion(self.relative_quat))        
         angles = self.coord_drone_to_image_axis(angles)
         R_cam1_to_cam2 = tf.transformations.euler_matrix(angles[0],angles[1],angles[2], axes='sxyz')[:3, :3]      
-        self.debug_text.append(str(tf.transformations.euler_from_matrix(R_cam1_to_cam2)))  
-        
-        #R1, R2, P1, P2, Q, validPixROI1, validPixROI2 = cv2.stereoRectify(self.cameraMatrix, self.distCoeffs, self.cameraMatrix, self.distCoeffs, self.grey_previous.size, R_cam1_to_cam2, t)
+        if self.DEF_SET_DATA:
+            #R_cam1_to_cam2 = np.diag([1,1,1])
+            R_cam1_to_cam2 = np.array([[0.94590068, 0.1207697, 0.32423148],[-0.01332381, 0.99990991, 0.00162574],[-0.32418263, -0.00585779, 0.94597638]])
+        #print R_cam1_to_cam2
+        self.debug_text.append("rot: "+np_to_str(tf.transformations.euler_from_matrix(R_cam1_to_cam2)))  
         
         '''
-        if abs(t[0] < 0.1) and abs(t[1]) < 0.1 and abs(angles[0])<0.057 and abs(angles[1])<0.057 and abs(angles[2])<0.057:
+        # Note size is used for these operations which is the transpose of shape ([column,row])
+        R1, R2, P1, P2, Q, validPixROI1, validPixROI2 = cv2.stereoRectify(self.cameraMatrix, self.distCoeffs, self.cameraMatrix, self.distCoeffs, (self.grey_previous.shape[1],self.grey_previous.shape[0]), R_cam1_to_cam2, t)
+        # Note R1 and R2 are rectification NOT rotation matrices
+        
+        map11, map21 = cv2.initUndistortRectifyMap(self.cameraMatrix, self.distCoeffs, R1, P1, (self.grey_previous.shape[1],self.grey_previous.shape[0]), cv2.CV_16SC2)
+        map12, map22 = cv2.initUndistortRectifyMap(self.cameraMatrix, self.distCoeffs, R2, P2, (self.grey_previous.shape[1],self.grey_previous.shape[0]), cv2.CV_16SC2)
+        remapped1 = cv2.remap(self.grey_previous, map11, map21, cv2.INTER_LINEAR)
+        remapped2 = cv2.remap(self.grey_now, map12, map22, cv2.INTER_LINEAR)
+        stereo = cv2.StereoBM()
+        disp = stereo.compute(remapped1,remapped2).astype(np.float32) / 16.0
+        threeDImage = cv2.reprojectImageTo3D(disp, Q)
+        cv2.imshow('remap', remapped1)
+        print remapped1.shape
+        cv2.imshow('remap2', remapped2)
+        cv2.imshow('remap3', disp)
+        cv2.waitKey(50)
+        '''
+    
+        if abs(t[1]) < 0.15 and abs(t[2]) < 0.15:
             print t[0]
             print t[1]
             print "Motion bad for triangulation"
             return
-        '''
+    
         
-        #R_cam1_to_cam2 = np.diag([1,1,1])
+        
         R = R_cam1_to_cam2
         #print "Rotation Matrix : ", R_cam1_to_cam2
         P_cam1_to_cam2 = np.hstack((R_cam1_to_cam2, t))
@@ -1395,6 +1430,9 @@ class FeatureTracker:
         PP2 = self.cameraMatrix.dot(P_cam1_to_cam2)
         #print PP1
         points3D_image = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2)[:3]
+        points4D = cv2.triangulatePoints(PP1, PP2, pts1.transpose(), pts2.transpose())
+        # normalise homogenous coords
+        points3D_image = (points4D/points4D[3])[:3]
         #print "pts 3Di : \r\n", points3D_image
         triangulated = len(points3D_image[0])+0.
         self.debug_text.append(triangulated)
@@ -1410,7 +1448,7 @@ class FeatureTracker:
         #print points3D_image
         
         points3D_image= np.reshape(points3D_image[infront==True], (3, -1))
-        print self.make_homo(points3D_image).T.shape
+        #print self.make_homo(points3D_image).T.shape
         
 
         self.reprojected2 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, np.diag((1,1,1)), np.array([[0],[0],[0]]))
@@ -1429,7 +1467,7 @@ class FeatureTracker:
         # Note: img1 camera is taken to be the origin, so time_prev NOT
         # time_now is used.        
         if (forward_triangulated/triangulated) > 0.5:
-            print "-------------\r\n-------------\r\n-------------\r\n-------------\r\n"
+            #print "-------------\r\n-------------\r\n-------------\r\n-------------\r\n"
             self.publish_cloud(points3D, self.time_prev)
     
     
