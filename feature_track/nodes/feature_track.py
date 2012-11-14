@@ -997,7 +997,7 @@ class FeatureTracker:
         
         if self.frameLock == 0 and self.setFrame == True:
             # lock image
-            self.frameLock_img1 = img1
+            self.frameLock_img1 = img
             # lock tf data
             self.frameLock_prev_position = self.prev_position
             self.frameLock_prev_quat = self.prev_quat
@@ -1013,14 +1013,14 @@ class FeatureTracker:
             self.kp1, self.desc1 = self.de.compute(grey_previous, pts1)
             if self.setFrame == True:
                 # lock image
-                self.frameLock_img2 = img2
+                self.frameLock_img2 = img
                 
                 # lock tf data
                 self.tf.waitForTransform("world", "ardrone_base_link", self.time_now, rospy.Duration(16))
                 frameLock_position, self.frameLock_world_to_drone_quaternion = self.tf.lookupTransform("world", "ardrone_base_link", self.time_now)
-                frameLock_trans = np.array(([frameLock_position[0] - self.frame_prev_position[0]],
-                                  [frameLock_position[1] - self.frame_prev_position[1]],
-                                  [frameLock_position[2] - self.frame_prev_position[2]]))
+                frameLock_trans = np.array(([frameLock_position[0] - self.frameLock_prev_position[0]],
+                                  [frameLock_position[1] - self.frameLock_prev_position[1]],
+                                  [frameLock_position[2] - self.frameLock_prev_position[2]]))
                 frameLock_R = tf.transformations.quaternion_matrix(self.frameLock_world_to_drone_quaternion)[:3, :3]
                 frameLock_trans = frameLock_R.dot(frameLock_trans)
                 self.frameLock_drone_coord_trans = np.array([frameLock_trans[1], -frameLock_trans[2], frameLock_trans[0]]) # drone y should map to - image x. This suggests that this is going the wrong way ************************************************************
@@ -1267,9 +1267,9 @@ class FeatureTracker:
             cv2.putText(img2, str(l), (25,25*(i+1)), cv2.FONT_HERSHEY_PLAIN, 1, (63, 63, 255))
             
         # Draw framelock indicatance borders
-        if frameLock == 1:
+        if self.frameLock == 1:
             cv2.rectangle(img2, (0,0), (grey_previous.shape[1],grey_previous.shape[0]), (255, 255, 63), 3)
-        if frameLock == 2:
+        if self.frameLock == 2:
             cv2.rectangle(img2, (0,0), (grey_previous.shape[1],grey_previous.shape[0]), (63, 255, 63), 3)
             cv2.rectangle(img2, (0,imh), (grey_now.shape[1],grey_now.shape[0]+imh), (63, 255, 63), 3)
             
@@ -1313,11 +1313,11 @@ class FeatureTracker:
     
     def update_tf(self):
         """Updates the cache of most recent pose information"""
-        self.latest_common_t = self.tf.getLatestCommonTime("ardrone_base_link", "world")
+        self.latest_common_t = self.tf.getLatestCommonTime("ardrone_base_frontcam", "world")
         #self.time_now = t
         #print "=================================================Update tf========================================="
         
-        self.tf.waitForTransform("world", "ardrone_base_link", self.time_now, rospy.Duration(16))
+        self.tf.waitForTransform("world", "ardrone_base_frontcam", self.time_now, rospy.Duration(16))
         
         # This is world w.r.t ardrone_base_link but yields a result consistent with ardrone_base_link w.r.t world
         # Documentation, or more likely my understanding of it is wrong (the other way round gives world origin in drone coords)
@@ -1655,11 +1655,11 @@ class FeatureTracker:
         ============================================================"""
         self.publish_cloud(points3D1)
     '''
-    def frameLock(self, d):
+    def frameLock_reset(self, d):
         self.frameLock = 0
         print "Framelock reset"
         
-    def setFrame(self, d):
+    def setFrame_trigger(self, d):
         self.setFrame = True
         print "Locking frame ... "
     
@@ -1711,8 +1711,8 @@ def connect(m):
     rospy.Subscriber('/ardrone/front/image_raw',Image,m.imgproc)
     rospy.Subscriber('/ardrone/front/camera_info',sensor_msgs.msg.CameraInfo, m.setCameraInfo)
     rospy.Subscriber('/xboxcontroller/button_y',Empty,m.speakDistance)
-    rospy.Subscriber('/xboxcontroller/button_back',Empty,m.frameLock)
-    rospy.Subscriber('/xboxcontroller/button_x',Empty,m.setFrame)
+    rospy.Subscriber('/xboxcontroller/button_back',Empty,m.frameLock_reset)
+    rospy.Subscriber('/xboxcontroller/button_x',Empty,m.setFrame_trigger)
 
 
 def run():
