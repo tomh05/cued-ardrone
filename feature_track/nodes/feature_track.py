@@ -86,6 +86,9 @@ class FeatureTracker:
         self.speech_limiter = 0
         self.corners = None
         self.time_prev = None
+        
+        self.setFrame = False
+        self.frameLock = 0
                 
     def preload_template(self, path):
         """Template features and descriptors need only be extracted once, so
@@ -432,7 +435,8 @@ class FeatureTracker:
     
     def update_quaternion(self, R):
         """Updates the cumulative local axis stored in self.quaternion"""
-        
+        if self.relative_quat == None:
+            return
         
         
         # Make homogenous rotation matrix from R
@@ -979,15 +983,73 @@ class FeatureTracker:
             grey_previous = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
             pts1 = self.fd.detect(grey_previous)
             self.kp1, self.desc1 = self.de.compute(grey_previous, pts1)
-            
-        self.grey_now = grey_now
-
-        times.append(time.time()-time_offset)
+        
         """====================================================================
         Rotation and translation from navdata
         ===================================================================="""
         self.update_tf()
         #self.projection_from_navdata()
+        
+        
+        """====================================================================
+        Framelock
+        ===================================================================="""
+        
+        if self.frameLock == 0 and self.setFrame == True:
+            # lock image
+            self.frameLock_img1 = img1
+            # lock tf data
+            self.frameLock_prev_position = self.prev_position
+            self.frameLock_prev_quat = self.prev_quat
+            self.frameLock_time_prev = self.time_now
+            
+            print "Frame 1 locked"
+            self.frameLock+=1
+            self.setFrame = False
+        elif self.frameLock == 1:
+            img1 = self.frameLock_img1
+            grey_previous = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+            pts1 = self.fd.detect(grey_previous)
+            self.kp1, self.desc1 = self.de.compute(grey_previous, pts1)
+            if self.setFrame == True:
+                # lock image
+                self.frameLock_img2 = img2
+                
+                # lock tf data
+                self.tf.waitForTransform("world", "ardrone_base_link", self.time_now, rospy.Duration(16))
+                frameLock_position, self.frameLock_world_to_drone_quaternion = self.tf.lookupTransform("world", "ardrone_base_link", self.time_now)
+                frameLock_trans = np.array(([frameLock_position[0] - self.frame_prev_position[0]],
+                                  [frameLock_position[1] - self.frame_prev_position[1]],
+                                  [frameLock_position[2] - self.frame_prev_position[2]]))
+                frameLock_R = tf.transformations.quaternion_matrix(self.frameLock_world_to_drone_quaternion)[:3, :3]
+                frameLock_trans = frameLock_R.dot(frameLock_trans)
+                self.frameLock_drone_coord_trans = np.array([frameLock_trans[1], -frameLock_trans[2], frameLock_trans[0]]) # drone y should map to - image x. This suggests that this is going the wrong way ************************************************************
+                self.frameLock_relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.frameLock_prev_quat), self.frameLock_world_to_drone_quaternion)
+                
+                print "Frame 2 locked"
+                self.frameLock+=1
+                self.setFrame = False
+                
+        elif self.frameLock == 2:
+            # lock image
+            img1 = self.frameLock_img1
+            img2 = self.frameLock_img2
+            grey_now = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
+            grey_previous = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+            pts1 = self.fd.detect(grey_previous)
+            self.kp1, self.desc1 = self.de.compute(grey_previous, pts1)
+            
+            # lock tf_data
+            self.world_to_drone_quaternion = self.frameLock_world_to_drone_quaternion
+            self.drone_coord_trans = self.frameLock_drone_coord_trans
+            self.relative_quat = self.frameLock_relative_quat
+                 
+            
+        self.grey_now = grey_now
+
+        
+        
+        
         
         times.append(time.time()-time_offset)
         
@@ -1010,6 +1072,22 @@ class FeatureTracker:
                 template_thread.start()
             else:
                 self.templateTrack()
+        times.append(time.time()-time_offset)
+        
+        
+        """====================================================================
+        # Bottom out on first run
+        ===================================================================="""
+        if self.relative_quat == None:
+            
+            self.grey_previous = grey_now
+            self.pts1 = self.pts2
+            self.kp1, self.desc1 = self.kp2, self.desc2
+            times.append(time.time()-time_offset)
+            return
+            
+        self.debug_text.append("dr ang: "+ np_to_str(tf.transformations.euler_from_quaternion(self.relative_quat)))
+        
         times.append(time.time()-time_offset)
         
         """====================================================================
@@ -1188,6 +1266,13 @@ class FeatureTracker:
         for i, l in enumerate(self.upper_debug_text):
             cv2.putText(img2, str(l), (25,25*(i+1)), cv2.FONT_HERSHEY_PLAIN, 1, (63, 63, 255))
             
+        # Draw framelock indicatance borders
+        if frameLock == 1:
+            cv2.rectangle(img2, (0,0), (grey_previous.shape[1],grey_previous.shape[0]), (255, 255, 63), 3)
+        if frameLock == 2:
+            cv2.rectangle(img2, (0,0), (grey_previous.shape[1],grey_previous.shape[0]), (63, 255, 63), 3)
+            cv2.rectangle(img2, (0,imh), (grey_now.shape[1],grey_now.shape[0]+imh), (63, 255, 63), 3)
+            
         # Reproject triangulated points
         for p in self.reprojected:
             cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 63, 63), 1)
@@ -1238,14 +1323,14 @@ class FeatureTracker:
         # Documentation, or more likely my understanding of it is wrong (the other way round gives world origin in drone coords)
         position, self.world_to_drone_quaternion = self.tf.lookupTransform("world", "ardrone_base_link", self.time_now)        
         
-        
+        self.relative_quat = None
         # Get change in position
         if self.prev_position != None:
             
             # Difference in position in world axis
             trans = np.array(([position[0] - self.prev_position[0]],
                               [position[1] - self.prev_position[1]],
-                              [position[1] - self.prev_position[1]]))
+                              [position[2] - self.prev_position[2]]))
             #self.debug_text.append("trans w: " + str(trans))
             
             R = tf.transformations.quaternion_matrix(self.world_to_drone_quaternion)[:3, :3]
@@ -1275,9 +1360,9 @@ class FeatureTracker:
             # Get relative quaternion
             # qmid = qbefore-1.qafter
             self.relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.prev_quat), self.world_to_drone_quaternion)
-            self.debug_text.append("dr ang: "+ np_to_str(tf.transformations.euler_from_quaternion(self.relative_quat)))
             
-        
+            
+            '''
             if self.prev_prev_position != None:    
                 
                 trans = np.array(([self.prev_position[0] - self.prev_prev_position[0]],
@@ -1297,6 +1382,7 @@ class FeatureTracker:
             
             self.prev_prev_quat = self.prev_quat
             self.prev_trans = self.drone_coord_trans
+            '''
             
         self.prev_position = position
         self.prev_quat = self.world_to_drone_quaternion
@@ -1367,11 +1453,15 @@ class FeatureTracker:
         self.reprojected = []
         self.reprojected2 = []
         
+        if self.relative_quat == None:
+            return
+        
         #print pts1
         #print pts2
         
         #print "Triangulation"
         # For ease of reading until names are made consistent and clear
+        
         t = self.drone_coord_trans
         self.debug_text.append("trans: "+str(t))
         if self.DEF_SET_DATA:
@@ -1565,7 +1655,13 @@ class FeatureTracker:
         ============================================================"""
         self.publish_cloud(points3D1)
     '''
-    
+    def frameLock(self, d):
+        self.frameLock = 0
+        print "Framelock reset"
+        
+    def setFrame(self, d):
+        self.setFrame = True
+        print "Locking frame ... "
     
     def speakDistance(self, d):
         print "bing-----------------------------------------------------------"
@@ -1615,6 +1711,8 @@ def connect(m):
     rospy.Subscriber('/ardrone/front/image_raw',Image,m.imgproc)
     rospy.Subscriber('/ardrone/front/camera_info',sensor_msgs.msg.CameraInfo, m.setCameraInfo)
     rospy.Subscriber('/xboxcontroller/button_y',Empty,m.speakDistance)
+    rospy.Subscriber('/xboxcontroller/button_back',Empty,m.frameLock)
+    rospy.Subscriber('/xboxcontroller/button_x',Empty,m.setFrame)
 
 
 def run():

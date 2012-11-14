@@ -1,6 +1,0 @@
-<launch>
-    <node name="ardrone_driver" pkg="ardrone_autonomy" type="ardrone_driver" />
-    <node name="joy" pkg="joy" type="joy_node" />
-    <node name="xboxcontroller" pkg="xboxcontroller" type="control.py" />
-
-</launch>

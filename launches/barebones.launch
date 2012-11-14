@@ -1,7 +1,0 @@
-<launch>
-    <node name="ardrone_driver" pkg="ardrone_autonomy" type="ardrone_driver" />
-    <group ns="ardrone/front">
-        <node name="image_proc" pkg="image_proc" type="image_proc" />
-    </group>
-
-</launch>
