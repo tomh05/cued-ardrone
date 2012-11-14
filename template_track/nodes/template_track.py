@@ -328,8 +328,20 @@ class FeatureTracker:
                          quaternion,
                          self.time_now, # NB: 'now' is not the same as time data was sent from drone
                          "/template_match",
-                         "/ardrone_base_link"
+                         "/ardrone_base_frontcam"
                          )
+        
+
+        newPose = gm.PoseStamped()
+        newPose.header.stamp         = self.time_now
+        newPose.header.frame_id      = 'template_match'
+
+        dummy = Path()
+        dummy.poses.append(newPose)
+
+        pathPub = rospy.Publisher('/template_dummy',Path)
+        pathPub.publish(dummy)
+        
         
         #imh = self.grey_template.shape[0]
         #img2 = stackImagesVertically(self.grey_template, grey_now)
@@ -530,7 +542,7 @@ class FeatureTracker:
         
         # Skip frames. Need to add ROS parameter to allow setting        
         self.frameskip += 1
-        if self.frameskip < 11:
+        if self.frameskip < 7:
             return            
         self.frameskip = 0
             
