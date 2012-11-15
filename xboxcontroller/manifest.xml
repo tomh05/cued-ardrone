@@ -1,0 +1,16 @@
+<package>
+  <description brief="xboxcontroller">
+
+     xboxcontroller
+
+  </description>
+  <author>Tom Howe</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/xboxcontroller</url>
+  <depend package="ardrone_autonomy"/>
+  <depend package="joy"/>
+
+</package>
+
+

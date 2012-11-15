@@ -1,0 +1,13 @@
+# Build and built files
+build/
+bin/
+
+# Temp files
+*.*~
+
+# vim swap files
+.*.swp
+simpledrone/build
+
+/build/
+drone_demo/
