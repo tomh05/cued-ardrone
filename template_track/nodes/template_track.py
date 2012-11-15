@@ -642,7 +642,7 @@ class FeatureTracker:
             text = "Marker not seen"
         else:
             text = "Distance to marker is "
-        text+=str(self.mag_dist)
+        text+=trunc(self.mag_dist)
         os.system('espeak "'+text+'" --stdout | paplay')
     
 
@@ -671,6 +671,18 @@ class FeatureTracker:
             self.P = np.array([ci.P[:4],ci.P[4:8],ci.P[8:12]])
             self.calibrated = True    
             print "Calibration Initialised"
+            
+def trunc(f, n=10):
+    '''Truncates/pads a float f to a string of n decimal places without rounding'''
+    slen = len('%.*f' % (n, f))
+    return str(f)[:slen]
+    
+def np_to_str(n):
+    """Tidily converts a numpy array to a string"""
+    s = ""
+    for r in n:
+        s+=trunc(r)+", "
+    return s
 
   
 def connect(m):
