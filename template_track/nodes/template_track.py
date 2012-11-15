@@ -690,7 +690,7 @@ def connect(m):
     rospy.Subscriber('/ardrone/front/image_raw',Image,m.imgproc)
     rospy.Subscriber('/ardrone/front/camera_info',sensor_msgs.msg.CameraInfo, m.setCameraInfo)
     rospy.Subscriber('/xboxcontroller/button_y',Empty,m.speakDistance)
-    rospy.Subscriber('/xboxcontroller/button_start',Empty,m.toggle_template)
+    rospy.Subscriber('/xboxcontroller/button_b',Empty,m.toggle_template)
 
 
 def run():
