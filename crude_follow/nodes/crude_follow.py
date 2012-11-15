@@ -24,9 +24,23 @@ class CrudeFollower:
         self.tf = tf.TransformListener()
         self.last_tf_time = None
         self.enable = False
+        self.timeout = None
+        
+    def action_timeout(self, event):
+        """ This sets twist to zero if the marker is ever lost for too long """
+        # Stop timer
+        # Not necessary as oneshot mode is used
+        
+        print "Action timed out"
+        
+        # Transmit zero twist -> drone will simply hover and hold pos
+        t = gm.Twist()
+        twist_pub = rospy.Publisher('cmd_vel',gm.Twist)
+        twist_pub.publish(t)
         
     def timed_callback(self, event):
-        
+        if self.timeout != None:
+            self.timeout.shutdown()
         
         self.deadreckon_common_t = self.tf.getLatestCommonTime("ardrone_base_link", "template_match")
         #self.template_common_t = self.tf.getLatestCommonTime("/template_match", "/ardrone_base_link")
@@ -96,7 +110,7 @@ class CrudeFollower:
         twist_pub = rospy.Publisher('cmd_vel',gm.Twist)
         twist_pub.publish(t)
                 
-        
+        self.timeout = rospy.Timer(rospy.Duration(.75), self.action_timeout, oneshot = True)
         #self.last_tf_time = self.template_common_t
         
     def toggle_enable(self, d):
