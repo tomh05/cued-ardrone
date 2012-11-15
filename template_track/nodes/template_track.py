@@ -45,11 +45,21 @@ class FeatureTracker:
         self.dm = cv2.DescriptorMatcher_create('BruteForce')
         directory = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
         self.preload_template(directory+'/templates/boxTemplate.png')#/home/alex/cued-ardrone/template_track/templates/boxTemplate.png')
+        self.template_toggle = False
         self.mag_dist = None
         self.corners = None
         
         self.avg_time = 0
         self.accepted = 0
+        
+    def toggle_template(self, d):
+        if self.template_toggle == False:
+            self.preload_template(directory+'/templates/boxTemplate2.png')
+            self.template_toggle = True
+        else:
+            self.preload_template(directory+'/templates/boxTemplate.png')
+            self.template_toggle = False
+        
                 
     def preload_template(self, path):
         """Template features and descriptors need only be extracted once, so
@@ -632,7 +642,7 @@ class FeatureTracker:
             text = "Marker not seen"
         else:
             text = "Distance to marker is "
-        text+=str(self.mag_dist)
+        text+=trunc(self.mag_dist)
         os.system('espeak "'+text+'" --stdout | paplay')
     
 
@@ -661,6 +671,18 @@ class FeatureTracker:
             self.P = np.array([ci.P[:4],ci.P[4:8],ci.P[8:12]])
             self.calibrated = True    
             print "Calibration Initialised"
+            
+def trunc(f, n=10):
+    '''Truncates/pads a float f to a string of n decimal places without rounding'''
+    slen = len('%.*f' % (n, f))
+    return str(f)[:slen]
+    
+def np_to_str(n):
+    """Tidily converts a numpy array to a string"""
+    s = ""
+    for r in n:
+        s+=trunc(r)+", "
+    return s
 
   
 def connect(m):
@@ -668,6 +690,7 @@ def connect(m):
     rospy.Subscriber('/ardrone/front/image_raw',Image,m.imgproc)
     rospy.Subscriber('/ardrone/front/camera_info',sensor_msgs.msg.CameraInfo, m.setCameraInfo)
     rospy.Subscriber('/xboxcontroller/button_y',Empty,m.speakDistance)
+    rospy.Subscriber('/xboxcontroller/button_b',Empty,m.toggle_template)
 
 
 def run():
