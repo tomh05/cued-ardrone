@@ -43,8 +43,8 @@ class FeatureTracker:
         self.fd = cv2.FeatureDetector_create('SIFT')
         self.de = cv2.DescriptorExtractor_create('SIFT')
         self.dm = cv2.DescriptorMatcher_create('BruteForce')
-        directory = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-        self.preload_template(directory+'/templates/boxTemplate.png')#/home/alex/cued-ardrone/template_track/templates/boxTemplate.png')
+        self.directory = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+        self.preload_template(self.directory+'/templates/boxTemplate.png')#/home/alex/cued-ardrone/template_track/templates/boxTemplate.png')
         self.template_toggle = False
         self.mag_dist = None
         self.corners = None
@@ -54,10 +54,10 @@ class FeatureTracker:
         
     def toggle_template(self, d):
         if self.template_toggle == False:
-            self.preload_template(directory+'/templates/boxTemplate2.png')
+            self.preload_template(self.directory+'/templates/boxTemplate2.png')
             self.template_toggle = True
         else:
-            self.preload_template(directory+'/templates/boxTemplate.png')
+            self.preload_template(self.directory+'/templates/boxTemplate.png')
             self.template_toggle = False
         
                 
