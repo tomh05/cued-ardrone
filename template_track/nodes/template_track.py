@@ -45,11 +45,21 @@ class FeatureTracker:
         self.dm = cv2.DescriptorMatcher_create('BruteForce')
         directory = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
         self.preload_template(directory+'/templates/boxTemplate.png')#/home/alex/cued-ardrone/template_track/templates/boxTemplate.png')
+        self.template_toggle = False
         self.mag_dist = None
         self.corners = None
         
         self.avg_time = 0
         self.accepted = 0
+        
+    def toggle_template(self, d):
+        if self.template_toggle == False:
+            self.preload_template(directory+'/templates/boxTemplate2.png')
+            self.template_toggle = True
+        else:
+            self.preload_template(directory+'/templates/boxTemplate.png')
+            self.template_toggle = False
+        
                 
     def preload_template(self, path):
         """Template features and descriptors need only be extracted once, so
@@ -668,6 +678,7 @@ def connect(m):
     rospy.Subscriber('/ardrone/front/image_raw',Image,m.imgproc)
     rospy.Subscriber('/ardrone/front/camera_info',sensor_msgs.msg.CameraInfo, m.setCameraInfo)
     rospy.Subscriber('/xboxcontroller/button_y',Empty,m.speakDistance)
+    rospy.Subscriber('/xboxcontroller/button_start',Empty,m.toggle_template)
 
 
 def run():
