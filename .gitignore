@@ -8,6 +8,8 @@ bin/
 # vim swap files
 .*.swp
 simpledrone/build
-
+*/build/*
+*.pyc
 /build/
 drone_demo/
+
