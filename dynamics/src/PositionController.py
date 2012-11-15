@@ -25,16 +25,19 @@ class PositionController:
 		
 		self.d0=1.0/2600
 		self.d1=-0.008
-		self.d2=-0.00032
+		self.d2=-0.00026		#-0.00032 for marker and indep modes control		#-0.00026 for good 'walk the dog'
 		self.dpw=(0.0, 0.0, 0.0)
-		self.cpw=(0.0, 0.0, 0.0)
+		
+		cpw0=(0.0, 0.0, 0.0)
 		
 		self.reftm = time()
 		self.cmd_log = {'tm':[], 'tw':[]}
-		self.nd_log = {'tm':[], 'nd':[], 'ph':[], 'th':[], 'ps':[], 'vx':[], 'vy':[], 'vz':[], 'al':[], 'cpw':[self.cpw,], 'psiw':[0,]}
+		self.nd_log = {'tm':[], 'nd':[], 'ph':[], 'th':[], 'ps':[], 'vx':[], 'vy':[], 'vz':[], 'al':[], 'cpw':[cpw0,], 'psiw':[0,]}
 		
-		self.ref = {'al':1400, 'ps':0.0}
+		self.ref = {'al':1400, 'ps':0.0, 'z': 0.0}	#'al' for height, 'ps' for designated psiw in 'world', 'z' for designated z in 'world'
 		self.error = {'al':[], 'ps':[]}
+		self.zon = False
+		self.pson = False
 		
 		self.twist = Twist()
 		self.cmdpub = rospy.Publisher('cmd_vel', Twist)
@@ -137,8 +140,8 @@ class PositionController:
 	def dpw_handler(self, dpw):
 		self.dpw = dpw
 		if dpw[2] > 0.3:
-			newal = min(dpw[2]*1000, 1700)
-			self.ref['al'] = newal
+			newz = min(dpw[2]*1000, 1700)
+			self.ref['z'] = newz
 		
 	
 	def dyw_handler(self, dyw):
@@ -150,11 +153,17 @@ class PositionController:
 			self.landpub.publish(Empty())	#height switch
 			print 'error: altitude too high - landing'
 		
-		self.twist.linear.z = max(min(0.0013*self.error['al'][-1], 1.0), -1.0)
-		yawwerror = -self.cyd(degrees(self.nd_log['psiw'][-1]),self.ref['ps'])		# computes error in yaw world in degrees
-		#print degrees(self.nd_log['psiw'][-1]),self.ref['ps']
-		#print yawwerror
-		#self.twist.angular.z = max(min(yawwerror/120, 1.0), -1.0)
+		if self.zon == False:
+			self.twist.linear.z = max(min(0.0013*self.error['al'][-1], 1.0), -1.0)
+		else:
+			zerror = self.ref['z']-self.nd_log['cpw'][-1][2]						#zerror is in meters
+			self.twist.linear.z = max(min(0.0013*zerror*1000, 1.0), -1.0)
+		
+		if self.pson == True:
+			yawwerror = -self.cyd(degrees(self.nd_log['psiw'][-1]),self.ref['ps'])		# computes error in yaw world in degrees
+			self.twist.angular.z = max(min(yawwerror/120, 1.0), -1.0)
+			#print degrees(self.nd_log['psiw'][-1]),self.ref['ps']
+			#print yawwerror
 		
 		if True:
 			(xcw, ycw, zcw) = self.nd_log['cpw'][-1]

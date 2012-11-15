@@ -60,28 +60,28 @@ class HoverController:
 		sleep(2)
 		self.pc.pc_timer_init()
 		sleep(10)
-		self.dpw=(0.7,-0.7,1.6)
+		#self.dpw=(0.7,-0.7,1.6)
 		self.pc.dpw_handler(self.dpw)
 		sleep(10)
-		self.dpw=(-1.0,0.0,0.8)
+		#self.dpw=(-1.0,0.0,0.8)
 		self.pc.dpw_handler(self.dpw)
 		sleep(10)
-		self.dpw=(0.0,0.0,1.3)
+		#self.dpw=(0.0,0.0,1.3)
 		self.pc.dpw_handler(self.dpw)
 		sleep(10)
-		self.landpub.publish(Empty()); print 'land'
+		#self.landpub.publish(Empty()); print 'land'
 	
 
 	def hover_timer_callback(self,event):
 		
 		if True:	
-			if (self.tl.canTransform('/4x4_100','/ardrone_base_link', rospy.Time(0))):
+			if (self.tl.canTransform('/4x4_94','/ardrone_base_link', rospy.Time(0))):
 				tnow=rospy.Time.now()
-				tpast=self.tl.getLatestCommonTime('/4x4_100','/ardrone_base_link')
+				tpast=self.tl.getLatestCommonTime('/4x4_94','/ardrone_base_link')
 				tdiff=rospy.Time.to_sec(tnow)-rospy.Time.to_sec(tpast)
 				if (tdiff<0.1):
 					try:
-						(pos, ori) = self.tl.lookupTransform('/4x4_100','/ardrone_base_link', rospy.Time(0))
+						(pos, ori) = self.tl.lookupTransform('/4x4_94','/ardrone_base_link', rospy.Time(0))
 						self.gottf = True
 					except:
 						self.gottf = False
