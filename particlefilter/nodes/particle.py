@@ -13,41 +13,28 @@ from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import Vector3Stamped
 
 
-
 mapsize = 10
 
 class Particle:
     def __init__(self):
-        #self.position.x = random.random() * mapsize
-        #self.position.y = random.random() * mapsize
-        #self.position.z = random.random() * mapsize
-
-
-        #self.pos = Vector3Stamped()
-        #self.pos.vector=(random.random() * mapsize,
-        #x=random.random() * mapsize - mapsize/2
-        #y=random.random() * mapsize - mapsize/2
-        #z=random.random() * mapsize
         x=0.0
         y=0.0
         z=0.0
         self.pos = np.array([x,y,z])
         self.prevtime = None
 
+        # for drawing debug pointcloud
+        self.markerPos = np.array([0.0,0.0,0.0])
 
-        #self.alpha = random.random() * 2*math.pi
-        #self.beta = random.random() * 2*math.pi
         self.alpha = 0.0
         self.beta = 0.0
-        #self.gamma = random.random() * 2*math.pi
         self.gamma = 0.0
         self.orientation = tf.transformations.quaternion_from_euler(self.alpha, self.beta, self.gamma)
-        self.translationNoise = 0.0
-        self.rotationNoise = 0.0
-        self.markerNoise = 10.0
 
-    def set_noise(self,_noise):
-        self.noise = _noise
+        self.translationNoise = 0.05
+        self.rotationNoise = 0.01
+        self.markerNoise = 10.0
+        self.age = 0
 
     def move(self,ts):
         # rosbag: reset if time starts again
@@ -60,7 +47,6 @@ class Particle:
             self.pos = np.array([0.0,0.0,0.0])
             self.orientation = tf.transformations.quaternion_from_euler(0.0,0.0,0.0)
 
-
         # convert translation to numpy format
         t = ts.transform.translation
         displacement = np.array([t.x,t.y,t.z])
@@ -70,15 +56,15 @@ class Particle:
         np_quaternion = np.array([q.x,q.y,q.z,q.w])
 
         # add noise
-        nx = random.gauss(0,self.translationNoise)
-        ny = random.gauss(0,self.translationNoise)
-        nz = random.gauss(0,self.translationNoise)
+        nx = random.gauss(0.0,self.translationNoise)
+        ny = random.gauss(0.0,self.translationNoise)
+        nz = random.gauss(0.0,self.translationNoise)
         translationNoise = np.array([nx,ny,nz])
 
-        nx = random.gauss(0,self.rotationNoise)
-        ny = random.gauss(0,self.rotationNoise)
-        nz = random.gauss(0,self.rotationNoise)
-        nw = random.gauss(0,self.rotationNoise)
+        nx = random.gauss(0.0,self.rotationNoise)
+        ny = random.gauss(0.0,self.rotationNoise)
+        nz = random.gauss(0.0,self.rotationNoise)
+        nw = random.gauss(0.0,self.rotationNoise)
         np_quaternion = np.add(np_quaternion,[nx,ny,nz,nw])
         # quaternion_matrix() will renormalise np_quaternion for us
 
@@ -89,11 +75,24 @@ class Particle:
         # perform position update
         rotationmat = tf.transformations.quaternion_matrix(np_quaternionrot)[:3,:3]
         self.pos = self.pos + np.dot(rotationmat,displacement) + translationNoise
-        self.orientation=np_quaternionrot
+        self.age+=1
 
-        # return new particle
+    def clone(self):
+        # return new particle at the current position
         newself = Particle()
         newself.pos = self.pos
+        # this causes it to spread!
+
+        '''
+        for i in range(2):
+            print "pos"
+        print newself.pos
+        print newself.pos
+        print newself.pos
+        print self.pos
+        print self.pos
+        print self.pos
+        '''
         newself.orientation = self.orientation
         newself.prevtime = self.prevtime
         return newself
@@ -103,35 +102,41 @@ class Particle:
 
     def likelihood(self,worldmap,ar_markers):
         #TODO use covariance data?
-        # markers are currently relative to base. Transform to particle location
-
         weight = 1.0
+
+        # markers are currently relative to base. Transform to particle location
         rotationmat = tf.transformations.quaternion_matrix(self.orientation)[:3,:3]
 
         for i in range(len(ar_markers.markers)):
-            #print ar_markers.markers[i]
             # convert marker to numpy format
             t = ar_markers.markers[i].pose.pose.position
             displacement = np.array([t.x,t.y,t.z])
- 
+            # adjust for front camera
+            #displacement += np.array([0.0,0.0,0.21])
+
             q = ar_markers.markers[i].pose.pose.orientation
             np_quaternion = np.array([q.x,q.y,q.z,q.w])
 
             # compute marker position in world coordinates
-            markerPos = self.pos + np.dot(rotationmat,displacement)
+            self.markerPos = self.pos + np.dot(rotationmat,displacement)
 
-           #TODO subtract from camera to base_link manually! TODO 
-            worldmark = []
-            worldmark.append(3.0)
-            worldmark.append(4.0)
-            worldmark.append(0.0)
+            #TODO subtract from camera to base_link manually! 
+            marker = None
+            conf = 0
+            for j in range(len(worldmap.markers)):
+                
+                if (worldmap.markers[j].id == ar_markers.markers[i].id):
+                    mapPosition = worldmap.markers[j].pose.pose.position
+                    mapconf = worldmap.markers[j].confidence
+                    break
             conf = ar_markers.markers[i].confidence
             error2=0.0
             if (conf>70):
-                #error2 = (worldmap[i].x-markerPos.x)**2 + (worldmap[i].y-markerPos.y)**2 + (worldmap[i].z-markerPos.z)**2
-                error2 = (worldmark[0]-markerPos[0])**2 + (worldmark[1]-markerPos[1])**2 + (worldmark[2]-markerPos[2])**2
+                #error2 = (worldmap[i].x-self.markerPos.x)**2 + (worldmap[i].y-self.markerPos.y)**2 + (worldmap[i].z-self.markerPos.z)**2
+                #error2 = (worldmark[0]-self.markerPos[0])**2 + (worldmark[1]-self.markerPos[1])**2 + (worldmark[2]-self.markerPos[2])**2
+                error2 = (mapPosition.x-self.markerPos[0])**2 + (mapPosition.y-self.markerPos[1])**2 + (mapPosition.z-self.markerPos[2])**2
                 #print error2
-                #error2 = (markerPos[0])**2 + (markerPos[1])**2 + (markerPos[2])**2
+                #error2 = (self.markerPos[0])**2 + (self.markerPos[1])**2 + (self.markerPos[2])**2
                 weight *= self.gauss(0,self.markerNoise,error2)
                 #print str(error2) +" gave " +  str(weight)
                 #weight = 1.0

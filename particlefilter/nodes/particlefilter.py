@@ -9,6 +9,8 @@ import numpy as np
 import random
 import particle
 import struct
+import pickle # for importing map files
+import time
 
 from std_msgs.msg import Empty
 from nav_msgs.msg import Path
@@ -30,15 +32,35 @@ from visualization_msgs.msg import MarkerArray
 
 #---------------------------
 # Map Setup
-mapsize = 20
-worldmap=[] # Will be array of geometry_msgs/Pose
+mapfile = open("../maps/singlemarker.map","r")
+worldmap = pickle.load(mapfile)
 
+mapVisualisation = MarkerArray()
+for i in range(len(worldmap.markers)):
+    marker = Marker()
+    marker.header.frame_id = '/world'
+    marker.type = marker.CUBE
+    marker.action = marker.ADD
+    marker.scale.x = 1
+    marker.scale.y = 1
+    marker.scale.z = 0.1
+    marker.color.a = 1.0
+    marker.color.r = 1.0
+    marker.color.g = 1.0
+    marker.color.b = 0.0
+    marker.id=i
+    marker.pose = worldmap.markers[i].pose.pose
+    mapVisualisation.markers.append(marker)
+ 
 
 class ParticleFilter:
     def __init__(self):
         self.N          = 100    # number of particles
         self.p          = []      # particle list
-        
+      
+        # Callbacks may overlap: make sure they don't by having a 'teddy' that a callback takes and receives in turn
+
+        self.busy = False 
         # service that handles accelerometer smoothing, integrating etc.
         print "waiting for IMU server..."
         rospy.wait_for_service('get_imu_movement') 
@@ -49,7 +71,9 @@ class ParticleFilter:
 
         # marker publisher for rviz 
         #self.markerPub = rospy.Publisher('particle_filter_markers',MarkerArray)
+        self.markerPub = rospy.Publisher('map_markers',MarkerArray)
         self.pclPub = rospy.Publisher('point_cloud',PointCloud)
+        self.pclBPub = rospy.Publisher('point_cloudB',PointCloud)
 
         # move particles each time navigation data arrives
         rospy.Subscriber('/ardrone/navdata',ardrone_autonomy.msg.Navdata,self.navdataCallback)
@@ -67,6 +91,10 @@ class ParticleFilter:
             self.p.append(x)
 
     def navdataCallback(self,navdata):
+        while (self.busy):
+            time.sleep(0.001)
+        # reserve control of thread
+        self.busy = True
         #find change in position
         t = self.getIMUMovement(navdata).transform
     	'''
@@ -100,18 +128,19 @@ class ParticleFilter:
         '''
         pc = PointCloud(header	= navdata.header)
         pc.header.frame_id = "/world"
-
-			
+        
 
         for i in range(self.N):
             # update particle locations
-            self.p[i]=self.p[i].move(t)
+            #self.p[i]=self.p[i].move(t)
+            self.p[i].move(t)
             #print self.p
-            
+             
             newp = Point32()
             newp.x =  self.p[i].pos[0]
             newp.y =  self.p[i].pos[1] 
             newp.z =  self.p[i].pos[2] 
+            #newp.z =  self.p[i].age 
                 
             pc.points.append(newp)
             '''
@@ -143,16 +172,39 @@ class ParticleFilter:
 
         #self.markerPub.publish(markerArray)
         self.pclPub.publish(pc)
+        
+        # return control
+        self.busy = False
 
     def markerCallback(self,ar_markers):
+        while (self.busy):
+            time.sleep(0.001)
+        # reserve control of thread
+        self.busy = True
+        if (len(ar_markers.markers)>0):
 
-        if (len(ar_markers.markers))>0:
             # find weights
             w = []
             for i in range(self.N):
                 w.append(self.p[i].likelihood(worldmap,ar_markers))
                 #print w[i]
-             
+            
+            # debug: if the markers were used...
+            if w[0]!=1.0:
+                # flash marker and draw estimates
+                mapVisualisation.markers[0].color.g = 0.0
+                self.markerPub.publish(mapVisualisation)
+
+                pcB = PointCloud(header	= ar_markers.header)
+                pcB.header.frame_id = "/world"
+                for i in range(self.N):
+                    newp = Point32()
+                    newp.x =  self.p[i].markerPos[0]
+                    newp.y =  self.p[i].markerPos[1] 
+                    newp.z =  self.p[i].markerPos[2] 
+                    pcB.points.append(newp)
+                self.pclBPub.publish(pcB)
+            
             # resample
             index = int(random.random() * self.N)
             beta = 0.0
@@ -163,8 +215,18 @@ class ParticleFilter:
                 while w[index]< beta:
                     beta -= w[index]
                     index = (index+1) % self.N # increment and wrap
-                new_p.append(self.p[index])
+
+                clonedParticle = self.p[index].clone()
+                new_p.append(clonedParticle)
+                for j in new_p[0:-1]:
+                    if j  is clonedParticle:
+                        print "Help!"
             self.p = new_p
+ 
+        mapVisualisation.markers[0].color.g = 1.0
+        self.markerPub.publish(mapVisualisation)
+       # return control of thread
+        self.busy = False
 
 if __name__ == '__main__':
     rospy.init_node('particle_filter')
