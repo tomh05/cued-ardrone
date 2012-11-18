@@ -21,23 +21,22 @@ import pickle
 
 class PositionController:
 	
-	def __init__(self):
+	def __init__(self, dpw0, dyw0, cpw0, cyw0, d0=1.0/2500, d1=-0.007, d2=-0.00030):
 		
-		self.d0=1.0/2600
-		self.d1=-0.008
-		self.d2=-0.00026		#-0.00032 for marker and indep modes control		#-0.00026 for good 'walk the dog'
-		self.dpw=(0.0, 0.0, 0.0)
-		
-		cpw0=(0.0, 0.0, 0.0)
+		self.d0=d0			#1/2600 for marker and indep modes control
+		self.d1=d1			#-0.008 for marker and indep modes control
+		self.d2=d2			#-0.00032 for marker and indep modes control		#-0.00026 for good 'walk the dog'
+		self.dpw=dpw0
+		self.dyw=dyw0
 		
 		self.reftm = time()
 		self.cmd_log = {'tm':[], 'tw':[]}
-		self.nd_log = {'tm':[], 'nd':[], 'ph':[], 'th':[], 'ps':[], 'vx':[], 'vy':[], 'vz':[], 'al':[], 'cpw':[cpw0,], 'psiw':[0,]}
+		self.nd_log = {'tm':[], 'nd':[], 'ph':[], 'th':[], 'ps':[], 'vx':[], 'vy':[], 'vz':[], 'al':[], 'cpw':[cpw0,], 'cyw':[dyw0,]}
 		
-		self.ref = {'al':1400, 'ps':0.0, 'z': 0.0}	#'al' for height, 'ps' for designated psiw in 'world', 'z' for designated z in 'world'
-		self.error = {'al':[], 'ps':[]}
-		self.zon = False
-		self.pson = False
+		self.ref = {'al':1400}	#'al' for height
+		self.error = {'al':[]}
+		self.refalon = True
+		self.yawon = False
 		
 		self.twist = Twist()
 		self.cmdpub = rospy.Publisher('cmd_vel', Twist)
@@ -47,9 +46,7 @@ class PositionController:
 		self.navdatasub = rospy.Subscriber('/ardrone/navdata', Navdata, self.navdataCallback)
 		self.camselectclient = rospy.ServiceProxy('/ardrone/setcamchannel', CamSelect)
 				
-		self.posecmd = {'tm': [], 'cpw':[], 'cow':[], 'dpw':[]}
 		self.justgotpose = False
-		#self.drone_pos_valid = False
 
 
 	def pc_timer_init(self):
@@ -67,13 +64,6 @@ class PositionController:
 			pass
 			print 'pc_timer_shutdown error'
 		
-		
-	def posecmd_logger(self, cpw, cow, dpw):
-		self.posecmd['tm'].append(time()-self.reftm)
-		self.posecmd['cpw'].append(cpw)
-		self.posecmd['cow'].append(cow)
-		self.posecmd['dpw'].append(dpw)
-		
 			
 	def cleartwist(self):
 		self.twist.linear.x= 0.0; self.twist.linear.y= 0.0; self.twist.linear.z= 0.0
@@ -87,20 +77,22 @@ class PositionController:
 				self.justgotpose = False
 			else:
 				dt=(msg.header.stamp - self.nd_log['nd'][-2].header.stamp).to_sec()
-				dx=(msg.vx+self.nd_log['vx'][-2])*dt/2.0/1000
-				dy=(msg.vy+self.nd_log['vy'][-2])*dt/2.0/1000
+				dx=(msg.vx+self.nd_log['vx'][-2])*dt/2.0/1000.0
+				dy=(msg.vy+self.nd_log['vy'][-2])*dt/2.0/1000.0
+				dz=(msg.altd-self.nd_log['al'][-2])/1000.0
+				#print 'dz: ', dz
 				#print msg.rotZ
 				drotZ=msg.rotZ - self.nd_log['ps'][-2]
 				if drotZ > 300:										#to account for discontinuity in yaw around 0
 					drotZ = drotZ - 360
 				elif drotZ<-300:
 					drotZ = drotZ + 360
-				psiwnew = self.nd_log['psiw'][-1] + radians(drotZ)
-				yaw=(psiwnew+self.nd_log['psiw'][-1])/2.0			#yaw refers to yaw wrt to world frame
-				du=dx*cos(yaw)-dy*sin(yaw)
+				cywnew = self.nd_log['cyw'][-1] + radians(drotZ)
+				yaw=(cywnew+self.nd_log['cyw'][-1])/2.0			#yaw refers to yaw wrt to world frame
+				du=dx*cos(yaw)-dy*sin(yaw)						#du, dv are displacement in  world frame
 				dv=dx*sin(yaw)+dy*cos(yaw)
-				self.nd_log['cpw'].append((self.nd_log['cpw'][-1][0]+du, self.nd_log['cpw'][-1][1]+dv, 0.0))
-				self.nd_log['psiw'].append(psiwnew)
+				self.nd_log['cpw'].append((self.nd_log['cpw'][-1][0]+du, self.nd_log['cpw'][-1][1]+dv, self.nd_log['cpw'][-1][2]+dz))
+				self.nd_log['cyw'].append(cywnew)
 				#print yaw
 				#print self.nd_log['cpw'][-1]
 		except:
@@ -120,32 +112,32 @@ class PositionController:
 		self.nd_log['al'].append(msg.altd)
 		
 		self.error['al'].append(self.ref['al']-msg.altd)
-		self.error['ps'].append(self.ref['ps']-msg.rotZ)
+		#self.error['ps'].append(self.ref['ps']-msg.rotZ)
 
 
 	def cmd_logger(self,twcmd):
 		self.cmd_log['tm'].append(time()-self.reftm)
 		self.cmd_log['tw'].append(twcmd)
 	
+	
+	def refal_handler(self, refal):
+		self.ref['al']=refal
+		
 
-	def pose_handler(self, cpw, cow):
-		#self.posecmd_logger(cpw, cow, dpw)
-		self.nd_log['psiw'].append(cow[2])	#pose_handler uses cow[2] (z rot, euler) to determine rot of cmd frame wrt. world frame
+	def cpw_cyw_handler(self, cpw, cyw):
+		self.nd_log['cyw'].append(cyw)	#pose_handler uses cow[2] (z rot, euler) to determine rot of cmd frame wrt. world frame
 		self.nd_log['cpw'].append(cpw)
 		self.justgotpose = True
-		print '\ngotpose - \nposition: ' + str(cpw) + '\norientation-z: ' + str(cow[2]) + '\ntime: ' + str(time()-self.reftm)
+		print '\ngotpose - \nposition: ' + str(cpw) + '\norientation-z: ' + str(cyw) + '\ntime: ' + str(time()-self.reftm)
 		#print 'gotpose'
 	
 	
 	def dpw_handler(self, dpw):
 		self.dpw = dpw
-		if dpw[2] > 0.3:
-			newz = min(dpw[2]*1000, 1700)
-			self.ref['z'] = newz
 		
 	
 	def dyw_handler(self, dyw):
-		self.ref['ps'] = dyw		#dyaww is the required euler z rot of the drone wrt. world frame, in degrees
+		self.dyw = dyw		#dyaww is the required euler z rot of the drone wrt. world frame, in degrees
 
 
 	def pc_timer_callback(self,event):
@@ -153,14 +145,16 @@ class PositionController:
 			self.landpub.publish(Empty())	#height switch
 			print 'error: altitude too high - landing'
 		
-		if self.zon == False:
+		if self.refalon == True:
 			self.twist.linear.z = max(min(0.0013*self.error['al'][-1], 1.0), -1.0)
 		else:
-			zerror = self.ref['z']-self.nd_log['cpw'][-1][2]						#zerror is in meters
+			zerror = self.dpw[2]-self.nd_log['cpw'][-1][2]						#zerror is in meters
+			#print 'zerror: ', zerror
+			#print 'dpw: ', self.dpw[2]
 			self.twist.linear.z = max(min(0.0013*zerror*1000, 1.0), -1.0)
 		
-		if self.pson == True:
-			yawwerror = -self.cyd(degrees(self.nd_log['psiw'][-1]),self.ref['ps'])		# computes error in yaw world in degrees
+		if self.yawon == True:
+			yawwerror = -self.cyd(degrees(self.nd_log['cyw'][-1]),self.dyw)		# computes error in yaw world in degrees
 			self.twist.angular.z = max(min(yawwerror/120, 1.0), -1.0)
 			#print degrees(self.nd_log['psiw'][-1]),self.ref['ps']
 			#print yawwerror
@@ -171,7 +165,7 @@ class PositionController:
 			xrw = xdw - xcw
 			yrw = ydw - ycw
 			zrw = zdw - zcw
-			psw = self.nd_log['psiw'][-1]				#psi world
+			psw = self.nd_log['cyw'][-1]				#psi world
 			
 			#print xrw, yrw
 			#print psw
@@ -191,20 +185,11 @@ class PositionController:
 			llim=0.5	#linear cmd limit
 			self.twist.linear.x=max(min(rx,llim),-llim)
 			self.twist.linear.y=max(min(ry,llim),-llim)
-			
-			'''
-			file1 = open('ssm-r-0-05','w')
-			pickle.dump([self.nd_log, self.cmd_log],file1)
-			file1.close()
-			self.main_timer.shutdown()
-			'''
 		
 		else:
 			pass
 			#print 'calculate command error'
 		
-		#if self.drone_pos_valid == False:
-		#	self.twist.linear.x = 0; self.twist.linear.y=0
 
 		self.cmdpub.publish(self.twist)
 		self.cmd_logger(self.twist)
