@@ -21,7 +21,7 @@ import pickle
 
 class PositionController:
 	
-	def __init__(self, dpw0, dyw0, cpw0, cyw0, d0=1.0/2500, d1=-0.007, d2=-0.00030):
+	def __init__(self, dpw0, dyw0, cpw0, cyw0, d0=1.0/2600, d1=-0.007, d2=-0.00030):
 		
 		self.d0=d0			#1/2600 for marker and indep modes control
 		self.d1=d1			#-0.008 for marker and indep modes control
@@ -137,7 +137,7 @@ class PositionController:
 		
 	
 	def dyw_handler(self, dyw):
-		self.dyw = dyw		#dyaww is the required euler z rot of the drone wrt. world frame, in degrees
+		self.dyw = dyw		#dyw is the required euler z rot of the drone wrt. world frame, in radians
 
 
 	def pc_timer_callback(self,event):
@@ -154,10 +154,10 @@ class PositionController:
 			self.twist.linear.z = max(min(0.0013*zerror*1000, 1.0), -1.0)
 		
 		if self.yawon == True:
-			yawwerror = -self.cyd(degrees(self.nd_log['cyw'][-1]),self.dyw)		# computes error in yaw world in degrees
-			self.twist.angular.z = max(min(yawwerror/120, 1.0), -1.0)
+			yawwerror = -self.cyd(degrees(self.nd_log['cyw'][-1]),degrees(self.dyw))		# computes error in yaw world in degrees
+			self.twist.angular.z = max(min(yawwerror/130, 0.3), -0.3)
 			#print degrees(self.nd_log['psiw'][-1]),self.ref['ps']
-			#print yawwerror
+			print yawwerror
 		
 		if True:
 			(xcw, ycw, zcw) = self.nd_log['cpw'][-1]
