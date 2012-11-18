@@ -1,3 +1,5 @@
-ardrone_autonomy/Navdata navdata
+ardrone_autonomy/Navdata       navdata
+float64                        gamma_offset
 ---
-geometry_msgs/TransformStamped transform
+geometry_msgs/TransformStamped absoluteTransform
+geometry_msgs/Vector3          relativeTranslation

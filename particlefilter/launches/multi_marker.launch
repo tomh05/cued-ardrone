@@ -9,7 +9,7 @@
         <remap from="/usb_cam/camera_info" to="ardrone/front/camera_info" />
         <remap from="/usb_cam/image_raw" to="ardrone/front/image_rect" />
         
-        <param name="marker_pattern_list" type="string" value="$(find ar_pose)/data/marker_79_only"/>
+        <param name="marker_pattern_list" type="string" value="$(find ar_pose)/data/marker_multi3"/>
 		<param name="threshold" type="int" value="100"/>
     
     </node>
