@@ -151,8 +151,13 @@ class CrudeFollower:
         self.enable = not self.enable
         if self.enable:
             print "Enabling crude follow"
+            text = "Following Template"
         else:
             print "Disabling crude follow"
+            text = "Idling"
+            
+        # Audibly notify        
+        os.system('espeak "'+text+'" --stdout | paplay')
 
     
     
