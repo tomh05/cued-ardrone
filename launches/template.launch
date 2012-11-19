@@ -1,0 +1,6 @@
+<launch>
+    <node name="joy" pkg="joy" type="joy_node" />
+    <node name="xboxcontroller" pkg="xboxcontroller" type="control.py" />
+    <node name="template_track" pkg="template_track" type="template_track.py" />
+    <node name="crude_follow" pkg="crude_follow" type="crude_follow.py" />
+</launch>
