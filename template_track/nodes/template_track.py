@@ -60,6 +60,10 @@ class FeatureTracker:
             self.preload_template(self.directory+'/templates/boxTemplate.png')
             self.template_toggle = False
             
+        
+        newPose = gm.PoseStamped()
+        newPose.header.stamp         = self.time_now
+        newPose.header.frame_id      = 'template_match'
         dummy = Path()
         dummy.poses.append(newPose)
         pathPub = rospy.Publisher('/template_toggle_dummy',Path)
