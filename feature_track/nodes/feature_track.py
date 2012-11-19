@@ -950,7 +950,7 @@ class FeatureTracker:
         
         DEF_SET_DATA = False # Switches in fixed data
         self.DEF_SET_DATA = DEF_SET_DATA
-        DEF_TEMPLATE_MATCH = True  # Switches template match - should be ROS param
+        DEF_TEMPLATE_MATCH = False  # Switches template match - should be ROS param
         DEF_THREADING = False # Enables threading of template matching
         
         # Initialise previous image buffer
