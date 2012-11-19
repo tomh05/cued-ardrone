@@ -93,7 +93,7 @@ class CrudeFollower:
         if self.found == False:
             self.found = True
             if self.swapped == True:
-                self.swapped == False
+                self.swapped = False
                 text = "New template found"
             else:
                 text = "Template found"
@@ -107,10 +107,10 @@ class CrudeFollower:
         
         if delta_yaw > 0.075:
             print "turning left"
-            t.angular.z = 0.62*delta_yaw
+            t.angular.z = 0.75*delta_yaw
         elif delta_yaw < - 0.075:
             print "turning right"
-            t.angular.z = 0.62*delta_yaw
+            t.angular.z = 0.75*delta_yaw #0.62
         
         '''    
         if position[0] < -0.05:
@@ -151,8 +151,13 @@ class CrudeFollower:
         self.enable = not self.enable
         if self.enable:
             print "Enabling crude follow"
+            text = "Following Template"
         else:
             print "Disabling crude follow"
+            text = "Idling"
+            
+        # Audibly notify        
+        os.system('espeak "'+text+'" --stdout | paplay')
 
     
     
