@@ -59,7 +59,8 @@ class FeatureTracker:
         else:
             self.preload_template(self.directory+'/templates/boxTemplate.png')
             self.template_toggle = False
-        
+        pathPub = rospy.Publisher('/template_toggle_dummy',Path)
+        pathPub.publish(dummy)
                 
     def preload_template(self, path):
         """Template features and descriptors need only be extracted once, so
@@ -642,7 +643,7 @@ class FeatureTracker:
             text = "Marker not seen"
         else:
             text = "Distance to marker is "
-        text+=trunc(self.mag_dist)
+        text+=str(round(self.mag_dist,3))
         os.system('espeak "'+text+'" --stdout | paplay')
     
 
