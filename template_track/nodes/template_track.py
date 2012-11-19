@@ -544,7 +544,7 @@ class FeatureTracker:
         
         # Write debug text
         for i, l in enumerate(self.t_debug_text):
-            cv2.putText(img2, str(l), (img2.shape[1]/2,img2.shape[0]-25*(i+1)), cv2.FONT_HERSHEY_PLAIN, 1, (63, 63, 255))
+            cv2.putText(img2, str(l), (img2.shape[1]/2,25*(i+1)), cv2.FONT_HERSHEY_PLAIN, 1, (63, 63, 255))
         
         cv2.imshow("template", img2)
         
@@ -593,53 +593,7 @@ class FeatureTracker:
             run_time = time.time()-launch
             self.avg_time = (self.avg_time*(self.accepted-1)+run_time)/self.accepted
         print "No of tracks (accepted): ", self.accepted
-        print "Average track time (accepted): ", self.avg_time
-    
-    def tf_triangulate_points(self, pts1, pts2):
-        """ Triangulates 3D points from set of matches co-ords using relative
-        camera position determined from tf"""
-        
-        print "Triangulation"
-        # For ease of reading until names are made consistent and clear
-        t = self.drone_coord_trans
-        t = np.array([[-0.235],[0],[0]])
-        print "Translation : ", t
-        
-        # Get rotation matrix for crone co-ord axis
-        # Rebuild R
-        # Flip eulers to image axis
-        angles = np.array(tf.transformations.euler_from_quaternion(self.relative_quat))        
-        angles = self.coord_drone_to_image_axis(angles)
-        R_cam1_to_cam2 = tf.transformations.euler_matrix(angles[0],angles[1],angles[2], axes='sxyz')[:3, :3]        
-        R_cam1_to_cam2 = np.diag([1,1,1])
-        R = R_cam1_to_cam2
-        #print "Rotation Matrix : ", R_cam1_to_cam2
-        P_cam1_to_cam2 = np.hstack((R_cam1_to_cam2, t))
-        T = P_cam1_to_cam2
-        print P_cam1_to_cam2
-        print self.P        
-        
-        #print self.cameraMatrix.shape
-        PP1 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
-        PP2 = self.cameraMatrix.dot(P_cam1_to_cam2)
-        points3D_image = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2)[:3]
-        
-        infront = points3D_image[2] > 0
-        #print infront
-        # Filter points
-        infront = np.array([infront]).transpose()
-        infront = np.hstack((infront, infront, infront)).transpose()
-        #print infront.shape
-        #print points3D_image
-        
-        points3D_image= np.reshape(points3D_image[infront==True], (3, -1))
-        #print points3D_image
-        
-        points3D= zip(*np.vstack((points3D_image[2], -points3D_image[0], -points3D_image[1])))
-        #print len(points3D)
-        
-        self.publish_cloud(points3D)
-        
+        print "Average track time (accepted): ", self.avg_time      
         
     
     
