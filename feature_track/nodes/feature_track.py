@@ -310,14 +310,25 @@ class FeatureTracker:
                     
         # SVD of E
         U,SIGMA,V = np.linalg.svd(E)
-        if np.linalg.det(U.dot(V))<0:
-            V = -V
         # Contruct Diagonal
         SIGMA = np.diag(SIGMA)
         # Force third eig to zero
         SIGMA[2,2] = 0
         if SIGMA[0,0] < 0.7*SIGMA[1,1] or SIGMA[1,1] < 0.7*SIGMA[0,0]:
             print "WARNING: Disparate singular values"
+            
+        """====================================================================
+        # Technically E should be reformed and the SVD taken again
+        # Otherwise there is no point in constraining SIGMA as only U and V
+        # Are used from this point
+        # In most cases this has no perceivable effect on U and V
+        ===================================================================="""    
+        E = U.dot(SIGMA.dot(V))
+        # SVD of E
+        U,SIGMA,V = np.linalg.svd(E)
+        if np.linalg.det(U.dot(V))<0:
+            V = -V 
+        
         
         # Use camera1 as origin viewpoint
         P1 = np.append(np.identity(3), [[0], [0], [0]], 1)
@@ -1086,7 +1097,7 @@ class FeatureTracker:
             times.append(time.time()-time_offset)
             return
             
-        self.debug_text.append("dr ang: "+ np_to_str(tf.transformations.euler_from_quaternion(self.relative_quat)))
+        #self.debug_text.append("dr ang: "+ np_to_str(tf.transformations.euler_from_quaternion(self.relative_quat)))
         
         times.append(time.time()-time_offset)
         
@@ -1138,6 +1149,7 @@ class FeatureTracker:
         E, i1_pts_corr, i2_pts_corr = self.extract_fundamental(i1_pts_undistorted, i2_pts_undistorted)
         '''
 
+        '''
         """============================================================
         # Examine quality of F
         # Reject if error is too high and go to next frame
@@ -1152,6 +1164,7 @@ class FeatureTracker:
             self.kp1, self.desc1 = self.kp2, self.desc2
             return
         times.append(time.time()-time_offset)
+        '''
         
         times.append(time.time()-time_offset)
             
@@ -1175,7 +1188,7 @@ class FeatureTracker:
         #self.prev_i1_pts_final = i1_pts_final
         #self.prev_i2_pts_final = i2_pts_final
         #============================================================================================================DOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOM
-        self.tf_triangulate_points(i1_pts_final, i2_pts_final)
+        #self.tf_triangulate_points(i1_pts_final, i2_pts_final)
         #if self.prev_i1_pts_final != None:
         #    self.tf_triangulate_points_3f(self.prev_i1_pts_final, self.prev_i2_pts_final, i1_pts_final, i2_pts_final)
         
@@ -1184,7 +1197,13 @@ class FeatureTracker:
         ============================================================"""                
         angles = self.update_quaternion(R) 
         times.append(time.time()-time_offset)
-        self.upper_debug_text.append("im trans: " + str(t))
+        
+        
+        self.debug_text.append("Dead         t: " + str(self.drone_coord_trans.T[0]))
+        mag = np.sqrt(self.drone_coord_trans.T.dot(self.drone_coord_trans))
+        t_scaled = -mag*t
+        self.debug_text.append("Image scaled t: " + str(t_scaled.T[0]))
+        self.debug_text.append("Image        t: " + str(t.T[0]))
         
         '''
         """====================================================================
@@ -1266,13 +1285,14 @@ class FeatureTracker:
         for i, l in enumerate(self.upper_debug_text):
             cv2.putText(img2, str(l), (25,25*(i+1)), cv2.FONT_HERSHEY_PLAIN, 1, (63, 63, 255))
             
-        # Draw framelock indicatance borders
+        # Draw framelock indication borders
         if self.frameLock == 1:
             cv2.rectangle(img2, (0,0), (grey_previous.shape[1],grey_previous.shape[0]), (255, 255, 63), 3)
         if self.frameLock == 2:
             cv2.rectangle(img2, (0,0), (grey_previous.shape[1],grey_previous.shape[0]), (63, 255, 63), 3)
             cv2.rectangle(img2, (0,imh), (grey_now.shape[1],grey_now.shape[0]+imh), (63, 255, 63), 3)
             
+        '''
         # Reproject triangulated points
         for p in self.reprojected:
             cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 63, 63), 1)
@@ -1280,6 +1300,7 @@ class FeatureTracker:
         for p in self.reprojected2:
             cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 63, 255), 1)
             #cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 63, 63), 1)
+        '''
         
         # Draw
         cv2.imshow("track", img2)
@@ -1338,7 +1359,7 @@ class FeatureTracker:
             trans = R.dot(trans)
             #self.debug_text.append("trans d : "+ str( trans))
             # Re-order axis into image co-ords
-            self.drone_coord_trans = np.array([trans[1], -trans[2], trans[0]]) # drone y should map to - image x. This suggests that this is going the wrong way ************************************************************
+            self.drone_coord_trans = np.array([-trans[1], -trans[2], trans[0]]) # drone y should map to - image x. This suggests that this is going the wrong way ************************************************************
             #self.debug_text.append("trans i : "+ str(self.drone_coord_trans))
             '''
             trans = np.array([[position[0] - self.prev_position[0]],
