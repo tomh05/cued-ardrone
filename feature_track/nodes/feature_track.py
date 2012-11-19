@@ -78,7 +78,8 @@ class FeatureTracker:
         cv2.namedWindow("track")
         self.cloud_pub = rospy.Publisher('pointCloud', PointCloud)
         self.cloud_pub2 = rospy.Publisher('pointCloud_no_floor', PointCloud)
-        self.preload_template('/home/alex/cued-ardrone/feature_track/templates/boxTemplate.png')
+        self.directory = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+        self.preload_template(self.directory+'/templates/boxTemplate.png')#/home/alex/cued-ardrone/template_track/templates/boxTemplate.png')
         self.prev_position = None
         self.prev_quat = None
         self.prev_prev_position = None
