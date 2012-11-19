@@ -13,8 +13,6 @@ from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import Vector3Stamped
 
 
-mapsize = 10
-
 class Particle:
     def __init__(self):
         x=0.0+ (random.random() * 10.0)
@@ -31,9 +29,14 @@ class Particle:
         self.gamma = 0.0
         self.orientation = tf.transformations.quaternion_from_euler(self.alpha, self.beta, self.gamma)
 
-        self.translationNoise = 0.02
-        self.rotationNoise = 0.1
-        self.markerNoise = 0.2
+        self.translationNoise       = 0.0 # 0.02
+        self.rotationNoise          = 0.0 # 0.1
+        self.markerNoise            = 0.0# 0.2 #10.0
+
+    def setNoise(self,translationNoise,rotationNoise,markerNoise):
+            self.translationNoise   = translationNoise
+            self.rotationNoise      = rotationNoise
+            self.markerNoise        = markerNoise
 
     def move(self,movement):
         # rosbag: reset if time starts again
@@ -125,13 +128,16 @@ class Particle:
             for j in range(len(worldmap.markers)):
                 if (worldmap.markers[j].id == ar_markers.markers[i].id):
                     mapPosition = worldmap.markers[j].pose.pose.position
+                    #print "I'm looking at marker " + str(worldmap.markers[j].id)
                     break
 
             conf = ar_markers.markers[i].confidence
 
             if (mapPosition is not None and conf>70):
                 error2 = (mapPosition.x-self.markerPos[0])**2 + (mapPosition.y-self.markerPos[1])**2 + (mapPosition.z-self.markerPos[2])**2
-                weight *= self.gauss(0,self.markerNoise,error2)
+                #weight *= self.gauss(0,self.markerNoise,error2) #/ (1.01-0.01*conf)
+                #print error2
+                weight *= 1.0/error2
                 #weight = 1.0
         return weight
 

@@ -24,7 +24,7 @@ m.id                        = 0  # this refers to the order in the ar_posemarker
 
 m.pose.pose.position.x      = 2.0
 m.pose.pose.position.y      = 7.0
-m.pose.pose.position.z      = 0.8
+m.pose.pose.position.z      = 0.7
 
 m.pose.pose.orientation.x   = 0.0
 m.pose.pose.orientation.y   = 2.0
@@ -40,12 +40,12 @@ m = ARMarker()
 m.header.frame_id           = "/world"
 m.id                        = 1  # this refers to the order in the ar_posemarker configuration file, not the filename of the marker
 
-m.pose.pose.position.x      = 3.0
-m.pose.pose.position.y      = 3.0
-m.pose.pose.position.z      = 1.5
+m.pose.pose.position.x      = -1.0
+m.pose.pose.position.y      = 11.0
+m.pose.pose.position.z      = 1.0
 
-m.pose.pose.orientation.x   = 0.0
-m.pose.pose.orientation.y   = 2.0
+m.pose.pose.orientation.x   = 2.0
+m.pose.pose.orientation.y   = 0.0
 m.pose.pose.orientation.z   = 0.0
 m.pose.pose.orientation.w   = 2.0
 
@@ -57,12 +57,12 @@ m = ARMarker()
 m.header.frame_id           = "/world"
 m.id                        = 2  # this refers to the order in the ar_posemarker configuration file, not the filename of the marker
 
-m.pose.pose.position.x      = -1.0
-m.pose.pose.position.y      = 11.0
-m.pose.pose.position.z      = 1.0
+m.pose.pose.position.x      = 3.0
+m.pose.pose.position.y      = 3.0
+m.pose.pose.position.z      = 1.5
 
-m.pose.pose.orientation.x   = 2.0
-m.pose.pose.orientation.y   = 0.0
+m.pose.pose.orientation.x   = 0.0
+m.pose.pose.orientation.y   = 2.0
 m.pose.pose.orientation.z   = 0.0
 m.pose.pose.orientation.w   = 2.0
 

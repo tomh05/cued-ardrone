@@ -36,9 +36,18 @@ useArrows = False
 drawTf    = True
 
 #------------------------------------------------------
+# Params setup
+transNoise = rospy.get_param("/Particle_Filter/translation_noise",0.0)
+rotNoise = rospy.get_param("/Particle_Filter/rotation_noise",0.0)
+markerNoise = rospy.get_param("/Particle_Filter/marker_noise",0.0)
+
+#------------------------------------------------------
 # Map Setup
-mapfile = open("../maps/singlemarker.map","r")
+#mapfile = open("../maps/singlemarker.map","r")
 #mapfile = open("../maps/multimarker.map","r")
+print "params"
+map_path = rospy.get_param("/Particle_Filter/map_path")
+mapfile = open(map_path,'r')
 
 worldmap = pickle.load(mapfile)
 gamma_offset = pickle.load(mapfile)
@@ -65,10 +74,10 @@ for i in range(len(worldmap.markers)):
 
 class ParticleFilter:
     def __init__(self):
-        self.N          = 100     # number of particles
+        self.N          = 60     # number of particles
         self.p          = []      # particle list
         self.ar_markers = None 
-
+        self.w = []
         # Callbacks may overlap: make sure they don't by having a 'teddy' that a callback takes and receives in turn
         #self.busy = False 
         self.lock = threading.Lock()
@@ -92,15 +101,24 @@ class ParticleFilter:
         # move particles each time navigation data arrives
         rospy.Subscriber('/ardrone/navdata',ardrone_autonomy.msg.Navdata,self.navdataCallback)
 
+
+        # reset gamma
+        rospy.Subscriber('/xboxcontroller/button_a',Empty,self.resetgammaCallback)
+
         # and compute weights each time pose data arrives
     	rospy.Subscriber('/ar_pose_marker',ARMarkers,self.markerCallback,None,1) # Queue size 1
 
         self.createParticles()
 
+    def resetgammaCallback(self,d):
+        gamma_offset = math.radians(self.navdata.rotZ)
+        print "gamma offset is now" + str(gamma_offset)
+
     def createParticles(self):
         print "creating particles"
         for i in range(self.N):
             x = particle.Particle()
+            x.setNoise(transNoise,rotNoise,markerNoise)
             self.p.append(x)
 
     def navdataCallback(self,navdata):
@@ -112,6 +130,7 @@ class ParticleFilter:
         self.busy = True
         '''
         #find change in position
+        self.navdata = navdata
         movement = self.getIMUMovement(navdata=navdata, gamma_offset=gamma_offset)
 
         for i in range(self.N):
@@ -175,6 +194,8 @@ class ParticleFilter:
                 newp.x =  self.p[i].pos[0]
                 newp.y =  self.p[i].pos[1] 
                 newp.z =  self.p[i].pos[2] 
+                #if self.ar_markers:
+                #    newp.z =  self.p[i].likelihood(worldmap,self.ar_markers)
                 pc.points.append(newp)
             self.pclPub.publish(pc)
 
@@ -226,6 +247,8 @@ class ParticleFilter:
         index = int(random.random() * self.N)
         beta = 0.0
         mw = max(self.w)
+        if mw==0.0:
+            print "all particles died"
         new_p = []
         for i in range(self.N):
             beta += random.random() * mw * 2.0
@@ -234,6 +257,7 @@ class ParticleFilter:
                 index = (index+1) % self.N # increment and wrap
 
             clonedParticle = self.p[index].clone()
+            clonedParticle.setNoise(transNoise,rotNoise,markerNoise)
             new_p.append(clonedParticle)
         self.p = new_p
 

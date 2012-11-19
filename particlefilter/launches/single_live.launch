@@ -15,7 +15,7 @@
     </node>
 
     <node name="Particle_Filter" pkg="particlefilter" type="particlefilter.py">
-        <param name="map_path" type="string" value="$(find particlefilter)/maps/singlemarker.map" />
+        <param name="map_path" type="string" value="$(find particlefilter)/maps/single_live.map" />
         <param name="translation_noise" type="double" value="0.02" />
         <param name="rotation_noise" type="double" value="0.05" />
         <param name="marker_noise" type="double" value="0.2" />
