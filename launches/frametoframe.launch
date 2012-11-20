@@ -2,5 +2,5 @@
     <node name="joy" pkg="joy" type="joy_node" />
     <node name="xboxcontroller" pkg="xboxcontroller" type="control.py" />
     <node name="feature_track" pkg="feature_track" type="feature_track.py" />
-    <node name="deadreckon" pkg="deadreckon" type="deadreckon.py" />
+    <node name="deadreckon" pkg="deadreckon" output="screen" type="deadreckon.py" />
 </launch>
