@@ -59,6 +59,8 @@ class FeatureTracker:
         else:
             self.preload_template(self.directory+'/templates/boxTemplate.png')
             self.template_toggle = False
+        text = "Switched template"
+        os.system('espeak "'+text+'" --stdout | paplay')
             
         
         newPose = gm.PoseStamped()
