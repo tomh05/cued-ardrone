@@ -41,7 +41,9 @@ class DeadReckoning:
 
     def navdataCallback(self, d):
         
-        
+        if d.batteryPercent < 25:
+            print "Warning: Battery at ", d.batteryPercent, "%"
+            
         
        
        
