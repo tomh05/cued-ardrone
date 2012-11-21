@@ -21,7 +21,7 @@ import pickle
 
 class PositionController:
 	
-	def __init__(self, dpw0, dyw0, cpw0, cyw0, d0=1.0/2600, d1=-0.007, d2=-0.00030):
+	def __init__(self, dpw0, dyw0, cpw0, cyw0, d0=1.0/2400, d1=-0.008, d2=-0.00028):
 		
 		self.d0=d0			#1/2600 for marker and indep modes control
 		self.d1=d1			#-0.008 for marker and indep modes control
@@ -33,7 +33,7 @@ class PositionController:
 		self.cmd_log = {'tm':[], 'tw':[]}
 		self.nd_log = {'tm':[], 'nd':[], 'ph':[], 'th':[], 'ps':[], 'vx':[], 'vy':[], 'vz':[], 'al':[], 'cpw':[cpw0,], 'cyw':[dyw0,]}
 		
-		self.ref = {'al':1400}	#'al' for height
+		self.ref = {'al':1500}	#'al' for height
 		self.error = {'al':[]}
 		self.refalon = True
 		self.yawon = False
@@ -157,7 +157,7 @@ class PositionController:
 			yawwerror = -self.cyd(degrees(self.nd_log['cyw'][-1]),degrees(self.dyw))		# computes error in yaw world in degrees
 			self.twist.angular.z = max(min(yawwerror/130, 0.3), -0.3)
 			#print degrees(self.nd_log['psiw'][-1]),self.ref['ps']
-			print yawwerror
+			#print yawwerror
 		
 		if True:
 			(xcw, ycw, zcw) = self.nd_log['cpw'][-1]

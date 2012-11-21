@@ -38,7 +38,7 @@ class HoverController:
 		self.gottf = False
 		self.confmarker = False
 		
-		self.dpw=(0.0, 0.0, 0.0)
+		self.dpw=(0.0, 0.0, 1.5)
 		self.dyw=0.0
 		self.cpw=self.dpw
 		self.cyw=self.dyw
@@ -57,7 +57,7 @@ class HoverController:
 
 		self.pc = PositionController(self.dpw, self.dyw, self.cpw, self.cyw)
 		self.pc.refalon = True	
-		self.pc.yawon = True
+		self.pc.yawon = False
 		
 		self.takeoffpub.publish(Empty()); print 'takeoff'; 
 		sleep(4)
@@ -67,22 +67,20 @@ class HoverController:
 		sleep(2)
 		self.pc.pc_timer_init()
 		sleep(10)
-		#self.dpw=(0.7,-0.7,1.6)
-		#self.pc.dpw_handler(self.dpw)
+		self.dpw=(0.8,0.0,1.5); self.pc.dpw_handler(self.dpw)
 		#self.pc.refal_handler(1600)
-		self.pc.dyw_handler(pi/2)
-		sleep(10)
-		#self.dpw=(-1.0,0.0,0.8)
-		#self.pc.dpw_handler(self.dpw)
+		#self.pc.dyw_handler(pi/2)
+		sleep(7)
+		self.dpw=(0.0,0.0,1.5); self.pc.dpw_handler(self.dpw)
 		#self.pc.refal_handler(800)
-		self.pc.dyw_handler(-pi/2)
-		sleep(10)
-		#self.dpw=(0.0,0.0,1.3)
+		#self.pc.dyw_handler(-pi/2)
+		sleep(7)
+		self.dpw=(-0.8,-0.4,1.5); self.pc.dpw_handler(self.dpw)
 		#self.pc.refal_handler(1300)
-		#self.pc.dpw_handler(self.dpw)
-		self.pc.dyw_handler(pi)
-		sleep(10)
-		self.landpub.publish(Empty()); print 'land'
+		#self.pc.dyw_handler(pi)
+		sleep(7)
+		self.dpw=(0.0,0.0,1.5); self.pc.dpw_handler(self.dpw)
+		#self.landpub.publish(Empty()); print 'land'
 	
 	
 	def posesub_callback(self, msg):
@@ -123,6 +121,8 @@ class HoverController:
 				#print 'error: cantransform = False'
 			
 			if self.gottf and self.confmarker == True:
+				self.pc.refalon = False
+				print '^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^'
 				ori2e = tf.transformations.euler_from_quaternion(ori)
 				self.cyw = ori2e[2]+pi	#curroriw is in euler form! And +pi to align base_link frame with marker frame
 				self.cpw = pos
