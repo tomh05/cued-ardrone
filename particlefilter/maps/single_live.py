@@ -23,8 +23,8 @@ m = ARMarker()
 m.header.frame_id           = "/world"
 m.id                        = 0  # this refers to the order in the ar_posemarker configuration file, not the filename of the marker
 
-m.pose.pose.position.x      = 0.0
-m.pose.pose.position.y      = 3.0
+m.pose.pose.position.x      = 3.0
+m.pose.pose.position.y      = 0.0
 m.pose.pose.position.z      = 1.0
 
 m.pose.pose.orientation.x   = 0.0

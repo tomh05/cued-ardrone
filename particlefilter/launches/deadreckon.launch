@@ -1,0 +1,5 @@
+<launch>
+   <node name="Dead_Reckon" pkg="deadreckon" type="deadreckon.py">
+        <param name="rotZ_offset" type="double" value="3.141" />
+    </node>
+</launch>

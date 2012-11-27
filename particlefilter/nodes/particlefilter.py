@@ -15,16 +15,15 @@ import threading # for locking
 
 from std_msgs.msg import Empty
 from nav_msgs.msg import Path
-from geometry_msgs.msg import PoseStamped
-from geometry_msgs.msg import Point
+
 from ar_pose.msg import ARMarkers
+
 from particlefilter.srv import *
 
-from sensor_msgs.msg import PointCloud
-from geometry_msgs.msg import Point32
+from sensor_msgs.msg import PointCloud, ChannelFloat32
+from geometry_msgs.msg import PoseStamped, Point32, Point
 
-from visualization_msgs.msg import Marker
-from visualization_msgs.msg import MarkerArray
+from visualization_msgs.msg import MarkerArray, Marker
 
 
 #------------------------------------------------------
@@ -33,7 +32,7 @@ from visualization_msgs.msg import MarkerArray
 # draws pointcloud if false, or arrows if true. 
 # use  less than 20 particles for arrows
 useArrows = False
-drawTf    = True
+publishTf = False
 
 #------------------------------------------------------
 # Params setup
@@ -45,7 +44,6 @@ markerNoise = rospy.get_param("/Particle_Filter/marker_noise",0.0)
 # Map Setup
 #mapfile = open("../maps/singlemarker.map","r")
 #mapfile = open("../maps/multimarker.map","r")
-print "params"
 map_path = rospy.get_param("/Particle_Filter/map_path")
 mapfile = open(map_path,'r')
 
@@ -78,17 +76,18 @@ class ParticleFilter:
         self.p          = []      # particle list
         self.ar_markers = None 
         self.w = []
+        self.gamma_offset = gamma_offset
         # Callbacks may overlap: make sure they don't by having a 'teddy' that a callback takes and receives in turn
         #self.busy = False 
         self.lock = threading.Lock()
 
         # service that handles accelerometer smoothing, integrating etc.
-        print "waiting for IMU server..."
+        rospy.loginfo("waiting for IMU server...")
         rospy.wait_for_service('get_imu_movement') 
         self.getIMUMovement = rospy.ServiceProxy('get_imu_movement',IMUMovement)
         
-
-        self.br = tf.TransformBroadcaster() #create broadcaster
+        if publishTf:
+            self.br = tf.TransformBroadcaster() #create broadcaster
 
         # visualisation publishers
         if (useArrows):
@@ -111,8 +110,10 @@ class ParticleFilter:
         self.createParticles()
 
     def resetgammaCallback(self,d):
-        gamma_offset = math.radians(self.navdata.rotZ)
-        print "gamma offset is now" + str(gamma_offset)
+        self.gamma_offset = math.radians(self.navdata.rotZ)
+        for i in range(self.N):
+            self.p[i].pos = np.array([0.0,0.0,0.0])
+        rospy.loginfo("gamma offset is now " + str(self.gamma_offset))
 
     def createParticles(self):
         print "creating particles"
@@ -131,7 +132,7 @@ class ParticleFilter:
         '''
         #find change in position
         self.navdata = navdata
-        movement = self.getIMUMovement(navdata=navdata, gamma_offset=gamma_offset)
+        movement = self.getIMUMovement(navdata=self.navdata, gamma_offset=self.gamma_offset)
 
         for i in range(self.N):
             # update particle locations
@@ -189,14 +190,19 @@ class ParticleFilter:
             #pc = PointCloud(header=navdata.header)
             pc = PointCloud()
             pc.header.frame_id = "/world"
+            weightChannel = ChannelFloat32(name="weight")
+            pc.channels.append(weightChannel)
             for i in range(self.N):
                 newp = Point32()
                 newp.x =  self.p[i].pos[0]
                 newp.y =  self.p[i].pos[1] 
                 newp.z =  self.p[i].pos[2] 
-                #if self.ar_markers:
-                #    newp.z =  self.p[i].likelihood(worldmap,self.ar_markers)
+                visualisationWeight = 1.0
+                if self.ar_markers:
+                    visualisationWeight =  self.p[i].likelihood(worldmap,self.ar_markers)
                 pc.points.append(newp)
+                pc.channels[0].values.append(visualisationWeight)
+
             self.pclPub.publish(pc)
 
     def markerCallback(self,ar_markers):
@@ -262,21 +268,13 @@ class ParticleFilter:
         self.p = new_p
 
     def broadcastTf(self,time,i):
-        '''
-        self.br.sendTransform([0.210,0.0,0.0],
-                         # translation happens first, then rotation
-                         [-0.5,0.5,-0.5,0.5],
-                         time, 
-                         "/ardrone_base_frontcam",
-                         "/ardrone_base_link")
-        '''
-        self.br.sendTransform(self.p[i].pos,
-                         # translation happens first, then rotation
-                         self.p[i].orientation,
-                         time, 
-                         "/ardrone_base_link",
-                         "/world")
-
+        if publishTf:
+            self.br.sendTransform(self.p[i].pos,
+                                  # translation happens first, then rotation
+                                  self.p[i].orientation,
+                                  time, 
+                                  "/ardrone_base_link",
+                                  "/world")
 
 if __name__ == '__main__':
     rospy.init_node('particle_filter')

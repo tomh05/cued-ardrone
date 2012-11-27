@@ -20,4 +20,8 @@
         <param name="rotation_noise" type="double" value="0.05" />
         <param name="marker_noise" type="double" value="0.2" />
     </node>
+
+   <node name="Dead_Reckon" pkg="deadreckon" type="deadreckon.py">
+        <param name="rotZ_offset" type="double" value="3.141" />
+    </node>
 </launch>

@@ -28,7 +28,6 @@ class IMUHandle:
     def handle_get_imu_movement(self,obj):
         navdata = obj.navdata
         self.rotZoffset = obj.gamma_offset
-
         # Running 10 sample median buffer (reduce noise on d.vx, d.vy)
         if len(self.v_buffer) >= 10:
             self.v_buffer.pop(0)

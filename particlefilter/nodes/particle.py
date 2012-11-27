@@ -15,9 +15,9 @@ from geometry_msgs.msg import Vector3Stamped
 
 class Particle:
     def __init__(self):
-        x=0.0+ (random.random() * 10.0)
-        y=0.0+ (random.random() * 10.0)
-        z=0.0
+        x = -5.0 + (random.random() * 10.0)
+        y = -5.0 + (random.random() * 10.0)
+        z = 0.0
         self.pos = np.array([x,y,z])
         self.prevtime = None
 
@@ -46,8 +46,8 @@ class Particle:
         deltat = (time - self.prevtime).to_sec()
         self.prevtime = time
         if (deltat < 0): # rosbag looping
-            x=0.0+ (random.random() * 10.0)
-            y=0.0+ (random.random() * 10.0)
+            x=-5.0+ (random.random() * 10.0)
+            y=-5.0+ (random.random() * 10.0)
             z=0.0
             self.pos = np.array([x,y,z])
             self.orientation = tf.transformations.quaternion_from_euler(0.0,0.0,0.0)
@@ -138,6 +138,7 @@ class Particle:
                 #weight *= self.gauss(0,self.markerNoise,error2) #/ (1.01-0.01*conf)
                 #print error2
                 weight *= 1.0/error2
+                #weight *= np.exp(-error2)
                 #weight = 1.0
         return weight
 
