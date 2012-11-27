@@ -1343,7 +1343,12 @@ class FeatureTracker:
         
         # This is world w.r.t ardrone_base_link but yields a result consistent with ardrone_base_link w.r.t world
         # Documentation, or more likely my understanding of it is wrong (the other way round gives world origin in drone coords)
-        position, self.world_to_drone_quaternion = self.tf.lookupTransform("world", "ardrone_base_link", self.time_now)        
+        position, self.world_to_drone_quaternion = self.tf.lookupTransform("world", "ardrone_base_link", self.time_now)
+        self.debug_text.append(str(position))
+        self.debug_text.append(str(tf.transformations.euler_from_quaternion(self.world_to_drone_quaternion)))
+        position, self.world_to_drone_quaternion = self.tf.lookupTransform("ardrone_base_link", "world", self.time_now)
+        self.debug_text.append(str(position))
+        self.debug_text.append(str(tf.transformations.euler_from_quaternion(self.world_to_drone_quaternion)))        
         
         self.relative_quat = None
         # Get change in position
