@@ -1186,12 +1186,12 @@ class FeatureTracker:
         times.append(time.time()-time_offset)
         
         #==========
-        #self.prev_i1_pts_final = i1_pts_final
-        #self.prev_i2_pts_final = i2_pts_final
+        self.prev_i1_pts_final = i1_pts_final
+        self.prev_i2_pts_final = i2_pts_final
         #============================================================================================================DOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOM
-        #self.tf_triangulate_points(i1_pts_final, i2_pts_final)
-        #if self.prev_i1_pts_final != None:
-        #    self.tf_triangulate_points_3f(self.prev_i1_pts_final, self.prev_i2_pts_final, i1_pts_final, i2_pts_final)
+        self.tf_triangulate_points(i1_pts_final, i2_pts_final)
+        if self.prev_i1_pts_final != None:
+            self.tf_triangulate_points_3f(self.prev_i1_pts_final, self.prev_i2_pts_final, i1_pts_final, i2_pts_final)
         
         """============================================================
         # Update cumulative orientation quaternion 
@@ -1202,7 +1202,7 @@ class FeatureTracker:
         
         self.debug_text.append("Dead         t: " + str(self.drone_coord_trans.T[0]))
         mag = np.sqrt(self.drone_coord_trans.T.dot(self.drone_coord_trans))
-        t_scaled = -mag*t
+        t_scaled = mag*t
         self.debug_text.append("Image scaled t: " + str(t_scaled.T[0]))
         self.debug_text.append("Image        t: " + str(t.T[0]))
         
@@ -1293,7 +1293,7 @@ class FeatureTracker:
             cv2.rectangle(img2, (0,0), (grey_previous.shape[1],grey_previous.shape[0]), (63, 255, 63), 3)
             cv2.rectangle(img2, (0,imh), (grey_now.shape[1],grey_now.shape[0]+imh), (63, 255, 63), 3)
             
-        '''
+        
         # Reproject triangulated points
         for p in self.reprojected:
             cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 63, 63), 1)
@@ -1301,7 +1301,7 @@ class FeatureTracker:
         for p in self.reprojected2:
             cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 63, 255), 1)
             #cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 63, 63), 1)
-        '''
+        
         
         # Draw
         cv2.imshow("track", img2)
@@ -1341,23 +1341,36 @@ class FeatureTracker:
         
         self.tf.waitForTransform("world", "ardrone_base_frontcam", self.time_now, rospy.Duration(16))
         
+        """
         # This is world w.r.t ardrone_base_link but yields a result consistent with ardrone_base_link w.r.t world
         # Documentation, or more likely my understanding of it is wrong (the other way round gives world origin in drone coords)
         position, self.world_to_drone_quaternion = self.tf.lookupTransform("world", "ardrone_base_link", self.time_now)
-        self.debug_text.append(str(position))
+        self.debug_text.append("p1" + str(position))
         self.debug_text.append(str(tf.transformations.euler_from_quaternion(self.world_to_drone_quaternion)))
         position, self.world_to_drone_quaternion = self.tf.lookupTransform("ardrone_base_link", "world", self.time_now)
-        self.debug_text.append(str(position))
-        self.debug_text.append(str(tf.transformations.euler_from_quaternion(self.world_to_drone_quaternion)))        
+        self.debug_text.append("p2" + str(position))
+        self.debug_text.append(str(tf.transformations.euler_from_quaternion(self.world_to_drone_quaternion)))
+        self.debug_text.append("in" + str(tf.transformations.euler_from_quaternion(tf.transformations.quaternion_inverse(self.world_to_drone_quaternion))))
+        """
+        
+        # Get tf lookup in reverse frame, this ensures translation is in world
+        p1, q1 = self.tf.lookupTransform( "world", "ardrone_base_link",self.time_now)
+        self.upper_debug_text.append(p1)
+        # Flip translation in world to origin-to-drone
+        position = p1
+        print position
+        # Flip quat to origin-to-drone
+        self.world_to_drone_quaternion = tf.transformations.quaternion_inverse(q1)
+        self.upper_debug_text.append(tf.transformations.euler_from_quaternion(self.world_to_drone_quaternion))
         
         self.relative_quat = None
         # Get change in position
         if self.prev_position != None:
             
             # Difference in position in world axis
-            trans = np.array(([position[0] - self.prev_position[0]],
-                              [position[1] - self.prev_position[1]],
-                              [position[2] - self.prev_position[2]]))
+            trans = np.array(([(position[0] - self.prev_position[0])],
+                              [(position[1] - self.prev_position[1])],
+                              [(position[2] - self.prev_position[2])]))
             #self.debug_text.append("trans w: " + str(trans))
             
             R = tf.transformations.quaternion_matrix(self.world_to_drone_quaternion)[:3, :3]
@@ -1365,7 +1378,7 @@ class FeatureTracker:
             trans = R.dot(trans)
             #self.debug_text.append("trans d : "+ str( trans))
             # Re-order axis into image co-ords
-            self.drone_coord_trans = np.array([-trans[1], -trans[2], trans[0]]) # drone y should map to - image x. This suggests that this is going the wrong way ************************************************************
+            self.drone_coord_trans = np.array([-trans[1], -trans[2], trans[0]])
             #self.debug_text.append("trans i : "+ str(self.drone_coord_trans))
             '''
             trans = np.array([[position[0] - self.prev_position[0]],
