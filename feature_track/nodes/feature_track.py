@@ -433,9 +433,9 @@ class FeatureTracker:
             
     def coord_image_to_drone_axis(self, angles):
         drone_angles = angles.copy()
-        drone_angles[0] = -angles[2]
-        drone_angles[1] = angles[0]
-        drone_angles[2] = angles[1]
+        drone_angles[0] = angles[2]
+        drone_angles[1] = -angles[0]
+        drone_angles[2] = -angles[1]
         return drone_angles
         
     def coord_drone_to_image_axis(self, angles): #verified
@@ -472,15 +472,12 @@ class FeatureTracker:
         success, angles = self.rotation_to_euler(R)
         angles = self.coord_image_to_drone_axis(angles)
         self.image_angle_overlay = "Image " + str(angles[0]*180/np.pi) + ", " + str(angles[1]*180/np.pi) + ", " + str(angles[2]*180/np.pi)
-        self.upper_debug_text.append("Image " + trunc(angles[0]*180/np.pi) + ", " + trunc(angles[1]*180/np.pi) + ", " + trunc(angles[2]*180/np.pi))
-        #print self.image_angle_overlay
-        
+        self.upper_debug_text.append("Image " + trunc(angles[0]*180/np.pi) + ", " + trunc(angles[1]*180/np.pi) + ", " + trunc(angles[2]*180/np.pi))     
         
         
         # [0]=roll, [1]=pitch, [2]=yaw
         angles = tf.transformations.euler_from_quaternion(self.relative_quat, axes='sxyz')
         self.upper_debug_text.append("Dead " + trunc(angles[0]*180/np.pi) + ", " + trunc(angles[1]*180/np.pi) + ", " + trunc(angles[2]*180/np.pi))
-        #print self.angle_overlay
         
         # Update Quaternion
         if abs(angles[0]) < np.pi/2 and abs(angles[1]) < np.pi/2 and abs(angles[2]) < np.pi/2:
@@ -493,10 +490,31 @@ class FeatureTracker:
         
         angles = tf.transformations.euler_from_quaternion(self.world_to_drone_quaternion, axes='sxyz')      
         
-        
         return angles
     
     def publish_cloud(self, points, timestamp):
+        cloud = PointCloud()
+        cloud.header.stamp = timestamp
+        cloud.header.frame_id = "/ardrone_base_frontcam" # Should be front camera really
+        cloud2 = PointCloud()
+        cloud2.header.stamp = timestamp
+        cloud2.header.frame_id = "/ardrone_base_frontcam" # Should be front camera really
+        
+        
+        for i, p in enumerate(points): # Ideally done without a loop
+            cloud.points.append(gm.Point32())
+            cloud.points[i].x = p[0]
+            cloud.points[i].y = p[1]
+            cloud.points[i].z = p[2]
+            if p[2] > 0: # Only points above drone image axis (crude removing of floor)
+                cloud2.points.append(gm.Point32())
+                cloud2.points[len(cloud2.points)-1].x = p[0]
+                cloud2.points[len(cloud2.points)-1].y = p[1]
+                cloud2.points[len(cloud2.points)-1].z = p[2]
+        self.cloud_pub.publish(cloud)
+        self.cloud_pub2.publish(cloud2)
+        
+    def publish_cloud_from_image_coords(self, points, timestamp):
         cloud = PointCloud()
         cloud.header.stamp = timestamp
         cloud.header.frame_id = "/ardrone_base_link" # Should be front camera really
@@ -512,9 +530,9 @@ class FeatureTracker:
             cloud.points[i].z = p[2]
             if p[2] > 0: # Only points above drone image axis (crude removing of floor)
                 cloud2.points.append(gm.Point32())
-                cloud2.points[len(cloud2.points)-1].x = p[0]
-                cloud2.points[len(cloud2.points)-1].y = p[1]
-                cloud2.points[len(cloud2.points)-1].z = p[2]
+                cloud2.points[len(cloud2.points)-1].x = p[2]
+                cloud2.points[len(cloud2.points)-1].y = -p[0]
+                cloud2.points[len(cloud2.points)-1].z = -p[1]
         self.cloud_pub.publish(cloud)
         self.cloud_pub2.publish(cloud2)
 
@@ -969,14 +987,6 @@ class FeatureTracker:
         if self.grey_previous == None:
             self.grey_previous = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             
-        
-        # Skip frames. Need to add ROS parameter to allow setting        
-        self.frameskip += 1
-        if self.frameskip < 11:
-            return            
-        self.frameskip = 0
-        
-            
         # Convert working images to monochrome
         grey_previous = self.grey_previous
         grey_now = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -1029,14 +1039,14 @@ class FeatureTracker:
                 
                 # lock tf data
                 self.tf.waitForTransform("world", "ardrone_base_link", self.time_now, rospy.Duration(16))
-                frameLock_position, self.frameLock_world_to_drone_quaternion = self.tf.lookupTransform("world", "ardrone_base_link", self.time_now)
+                frameLock_position, self.frameLock_world_to_image_quaternion = self.tf.lookupTransform("world", "ardrone_base_link", self.time_now)
                 frameLock_trans = np.array(([frameLock_position[0] - self.frameLock_prev_position[0]],
                                   [frameLock_position[1] - self.frameLock_prev_position[1]],
                                   [frameLock_position[2] - self.frameLock_prev_position[2]]))
-                frameLock_R = tf.transformations.quaternion_matrix(self.frameLock_world_to_drone_quaternion)[:3, :3]
+                frameLock_R = tf.transformations.quaternion_matrix(self.frameLock_world_to_image_quaternion)[:3, :3]
                 frameLock_trans = frameLock_R.dot(frameLock_trans)
-                self.frameLock_drone_coord_trans = np.array([frameLock_trans[1], -frameLock_trans[2], frameLock_trans[0]]) # drone y should map to - image x. This suggests that this is going the wrong way ************************************************************
-                self.frameLock_relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.frameLock_prev_quat), self.frameLock_world_to_drone_quaternion)
+                self.frameLock_image_coord_trans = np.array([frameLock_trans[1], -frameLock_trans[2], frameLock_trans[0]]) # drone y should map to - image x. This suggests that this is going the wrong way ************************************************************
+                self.frameLock_relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.frameLock_prev_quat), self.frameLock_world_to_image_quaternion)
                 
                 print "Frame 2 locked"
                 self.frameLock+=1
@@ -1052,8 +1062,8 @@ class FeatureTracker:
             self.kp1, self.desc1 = self.de.compute(grey_previous, pts1)
             
             # lock tf_data
-            self.world_to_drone_quaternion = self.frameLock_world_to_drone_quaternion
-            self.drone_coord_trans = self.frameLock_drone_coord_trans
+            self.world_to_image_quaternion = self.frameLock_world_to_image_quaternion
+            self.image_coord_trans = self.frameLock_image_coord_trans
             self.relative_quat = self.frameLock_relative_quat
                  
             
@@ -1179,19 +1189,25 @@ class FeatureTracker:
             return
         #print "No of projected points : ", len(i1_pts_final)
         
+        self.image_based_P1 = P1
+        self.image_based_P2 = P2
+        print P1, P2
+        
         R = P2[:,:3]
+        self.image_based_R2 = R
         #print "Rotation Matrix : ", R
         t = P2[:,3:4]
-        #t_scaled = t*self.drone_coord_trans[2]/t[2]
+        self.image_based_t = t
+        #t_scaled = t*self.image_coord_trans[2]/t[2]
         times.append(time.time()-time_offset)
         
         #==========
         self.prev_i1_pts_final = i1_pts_final
         self.prev_i2_pts_final = i2_pts_final
         #============================================================================================================DOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOM
-        self.tf_triangulate_points(i1_pts_final, i2_pts_final)
-        if self.prev_i1_pts_final != None:
-            self.tf_triangulate_points_3f(self.prev_i1_pts_final, self.prev_i2_pts_final, i1_pts_final, i2_pts_final)
+        self.tf_triangulate_points(i1_pts_corr, i2_pts_corr)
+        #if self.prev_i1_pts_final != None:
+        #    self.tf_triangulate_points_3f(self.prev_i1_pts_final, self.prev_i2_pts_final, i1_pts_final, i2_pts_final)
         
         """============================================================
         # Update cumulative orientation quaternion 
@@ -1200,8 +1216,8 @@ class FeatureTracker:
         times.append(time.time()-time_offset)
         
         
-        self.debug_text.append("Dead         t: " + str(self.drone_coord_trans.T[0]))
-        mag = np.sqrt(self.drone_coord_trans.T.dot(self.drone_coord_trans))
+        self.debug_text.append("Dead         t: " + str(self.image_coord_trans.T[0]))
+        mag = np.sqrt(self.image_coord_trans.T.dot(self.image_coord_trans))
         t_scaled = mag*t
         self.debug_text.append("Image scaled t: " + str(t_scaled.T[0]))
         self.debug_text.append("Image        t: " + str(t.T[0]))
@@ -1268,6 +1284,8 @@ class FeatureTracker:
         imh = grey_previous.shape[0]
         county = 0
         l = 120
+        
+        # Draw lines linking fully tracked points
         for p1, p2 in zip(self.i1_pts_draw, self.i2_pts_draw):
             county += 1
             cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
@@ -1296,11 +1314,37 @@ class FeatureTracker:
         
         # Reproject triangulated points
         for p in self.reprojected:
-            cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 63, 63), 1)
+            cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (220, 20, 60), 1)
             #cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 63, 63), 1)
         for p in self.reprojected2:
-            cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 63, 255), 1)
+            cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 182, 193), 1)
             #cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 63, 63), 1)
+          
+        '''
+        # Reproject triangulated points
+        for p in self.reprojected3:
+            cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 165, 0), 1)
+            #cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 63, 63), 1)
+        for p in self.reprojected4:
+            cv2.circle(img2, (int(p[0]),int(p[1])), 3, (139, 90, 0), 1)
+            #cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 63, 63), 1)
+            
+        # Reproject triangulated points
+        for p in self.reprojected6:
+            cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (30, 144, 255), 1)
+            #cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 63, 63), 1)
+        for p in self.reprojected5:
+            cv2.circle(img2, (int(p[0]),int(p[1])), 3, (16, 78, 139), 1)
+            #cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 63, 63), 1)
+            
+        # Reproject triangulated points
+        for p in self.reprojected8:
+            cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (0, 255, 127), 1)
+            #cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 63, 63), 1)
+        for p in self.reprojected7:
+            cv2.circle(img2, (int(p[0]),int(p[1])), 3, (0, 139, 69), 1)
+            #cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 63, 63), 1)
+        '''
         
         
         # Draw
@@ -1335,58 +1379,53 @@ class FeatureTracker:
     
     def update_tf(self):
         """Updates the cache of most recent pose information"""
-        self.latest_common_t = self.tf.getLatestCommonTime("ardrone_base_frontcam", "world")
+        #self.latest_common_t = self.tf.getLatestCommonTime("ardrone_base_frontcam", "world")
         #self.time_now = t
         #print "=================================================Update tf========================================="
         
         self.tf.waitForTransform("world", "ardrone_base_frontcam", self.time_now, rospy.Duration(16))
         
-        """
-        # This is world w.r.t ardrone_base_link but yields a result consistent with ardrone_base_link w.r.t world
-        # Documentation, or more likely my understanding of it is wrong (the other way round gives world origin in drone coords)
-        position, self.world_to_drone_quaternion = self.tf.lookupTransform("world", "ardrone_base_link", self.time_now)
-        self.debug_text.append("p1" + str(position))
-        self.debug_text.append(str(tf.transformations.euler_from_quaternion(self.world_to_drone_quaternion)))
-        position, self.world_to_drone_quaternion = self.tf.lookupTransform("ardrone_base_link", "world", self.time_now)
-        self.debug_text.append("p2" + str(position))
-        self.debug_text.append(str(tf.transformations.euler_from_quaternion(self.world_to_drone_quaternion)))
-        self.debug_text.append("in" + str(tf.transformations.euler_from_quaternion(tf.transformations.quaternion_inverse(self.world_to_drone_quaternion))))
-        """
-        
         # Get tf lookup in reverse frame, this ensures translation is in world
-        p1, q1 = self.tf.lookupTransform( "world", "ardrone_base_link",self.time_now)
+        p1, q1 = self.tf.lookupTransform( "world", "ardrone_base_frontcam",self.time_now)
         self.upper_debug_text.append(p1)
         # Flip translation in world to origin-to-drone
         position = p1
         print position
         # Flip quat to origin-to-drone
-        self.world_to_drone_quaternion = tf.transformations.quaternion_inverse(q1)
-        self.upper_debug_text.append(tf.transformations.euler_from_quaternion(self.world_to_drone_quaternion))
+        self.world_to_image_quaternion = tf.transformations.quaternion_inverse(q1)
+        self.upper_debug_text.append(tf.transformations.euler_from_quaternion(self.world_to_image_quaternion))
+        
+        # Get drone co-ordinate pose
+        p2, q2 = self.tf.lookupTransform("world", "ardrone_base_link", self.time_now)
+        self.world_to_drone_quaternion = tf.transformations.quaternion_inverse(q2)
+        
         
         self.relative_quat = None
         # Get change in position
         if self.prev_position != None:
+            self.upper_debug_text.append(tf.transformations.euler_from_quaternion(self.prev_quat))
             
-            # Difference in position in world axis
+            
+            # Difference in position in world, drone axis
             trans = np.array(([(position[0] - self.prev_position[0])],
                               [(position[1] - self.prev_position[1])],
                               [(position[2] - self.prev_position[2])]))
             #self.debug_text.append("trans w: " + str(trans))
             
-            R = tf.transformations.quaternion_matrix(self.world_to_drone_quaternion)[:3, :3]
+            R = tf.transformations.quaternion_matrix(self.world_to_image_quaternion)[:3, :3]
             # Into ardrone_base_link co-ords
             trans = R.dot(trans)
             #self.debug_text.append("trans d : "+ str( trans))
             # Re-order axis into image co-ords
-            self.drone_coord_trans = np.array([-trans[1], -trans[2], trans[0]])
-            #self.debug_text.append("trans i : "+ str(self.drone_coord_trans))
+            self.image_coord_trans = np.array([-trans[1], -trans[2], trans[0]])
+            self.image_coord_trans = np.array([trans[0], trans[1], trans[2]])
             '''
             trans = np.array([[position[0] - self.prev_position[0]],
                                             [position[1] - self.prev_position[1]],
                                             [position[2] - self.prev_position[2]],
                                             [1.]])
             # Rotate to drone axis
-            rot = tf.transformations.quaternion_matrix(self.world_to_drone_quaternion)
+            rot = tf.transformations.quaternion_matrix(self.world_to_image_quaternion)
             trans = rot.dot(trans)
             # Re-map to image axis convention
             self.tf_translation = trans[:3]
@@ -1399,8 +1438,8 @@ class FeatureTracker:
             
             # Get relative quaternion
             # qmid = qbefore-1.qafter
-            self.relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.prev_quat), self.world_to_drone_quaternion)
-            
+            self.relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.prev_quat), self.world_to_image_quaternion)
+            self.upper_debug_text.append(tf.transformations.euler_from_quaternion(self.relative_quat))
             
             '''
             if self.prev_prev_position != None:    
@@ -1413,7 +1452,7 @@ class FeatureTracker:
                 # Into ardrone_base_link co-ords
                 trans = R.dot(trans)
                 # Re-order axis into image co-ords
-                self.prev_drone_coord_trans = np.array([-trans[1], -trans[2], trans[0]])
+                self.prev_image_coord_trans = np.array([-trans[1], -trans[2], trans[0]])
                 
                 
                 # Get relative quaternion
@@ -1421,11 +1460,12 @@ class FeatureTracker:
                 self.prev_relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.prev_prev_quat), self.prev_quat)
             
             self.prev_prev_quat = self.prev_quat
-            self.prev_trans = self.drone_coord_trans
+            self.prev_trans = self.image_coord_trans
             '''
             
+            
         self.prev_position = position
-        self.prev_quat = self.world_to_drone_quaternion
+        self.prev_quat = self.world_to_image_quaternion
 
     def homography_to_pose(self, H):
         """input homography[9] - 3x3 Matrix
@@ -1489,108 +1529,161 @@ class FeatureTracker:
     def tf_triangulate_points(self, pts1, pts2):
         """ Triangulates 3D points from set of matches co-ords using relative
         camera position determined from tf"""
+        """ Continuous triangulation during normal flight appears infeasible.
+        Inertia means IMU data, whilst representative on the whole, is not
+        accurate at a given instance so only useful for steady maintained
+        motion. 
         
+        Furthermore flight will not in general produce motion that is
+        ideal for triangulation. Carrying out the SVD solution to triangulation
+        will give different results depending on the premultiplication, which
+        shows we are not getting enough information.
+        """
+        
+        # ---------------------------------------------------------------------
+        # Working in image co-ordinates throughout
+        # ---------------------------------------------------------------------
+        
+        # These are arrays of the triangulated points reprojected back to the
+        # image plane
         self.reprojected = []
         self.reprojected2 = []
         
+        
+        # Bottom out on first frame
         if self.relative_quat == None:
             return
-        
-        #print pts1
-        #print pts2
-        
-        #print "Triangulation"
-        # For ease of reading until names are made consistent and clear
-        
-        t = self.drone_coord_trans
-        self.debug_text.append("trans: "+str(t))
-        if self.DEF_SET_DATA:
-            #t = np.array([[-0.235],[0],[0]])
-            t = np.array([[1.65141756E-2],[6.43338465E-5],[-2.68414366E-2]])
-        #print "Translation : ", t
-        
-        # Get rotation matrix for drone co-ord axis
-        # Rebuild R
-        # Flip eulers to image axis
-        angles = np.array(tf.transformations.euler_from_quaternion(self.relative_quat))        
-        angles = self.coord_drone_to_image_axis(angles)
-        R_cam1_to_cam2 = tf.transformations.euler_matrix(angles[0],angles[1],angles[2], axes='sxyz')[:3, :3]      
-        if self.DEF_SET_DATA:
-            #R_cam1_to_cam2 = np.diag([1,1,1])
-            R_cam1_to_cam2 = np.array([[0.94590068, 0.1207697, 0.32423148],[-0.01332381, 0.99990991, 0.00162574],[-0.32418263, -0.00585779, 0.94597638]])
-        #print R_cam1_to_cam2
-        self.debug_text.append("rot: "+np_to_str(tf.transformations.euler_from_matrix(R_cam1_to_cam2)))  
-        
-        '''
-        # Note size is used for these operations which is the transpose of shape ([column,row])
-        R1, R2, P1, P2, Q, validPixROI1, validPixROI2 = cv2.stereoRectify(self.cameraMatrix, self.distCoeffs, self.cameraMatrix, self.distCoeffs, (self.grey_previous.shape[1],self.grey_previous.shape[0]), R_cam1_to_cam2, t)
-        # Note R1 and R2 are rectification NOT rotation matrices
-        
-        map11, map21 = cv2.initUndistortRectifyMap(self.cameraMatrix, self.distCoeffs, R1, P1, (self.grey_previous.shape[1],self.grey_previous.shape[0]), cv2.CV_16SC2)
-        map12, map22 = cv2.initUndistortRectifyMap(self.cameraMatrix, self.distCoeffs, R2, P2, (self.grey_previous.shape[1],self.grey_previous.shape[0]), cv2.CV_16SC2)
-        remapped1 = cv2.remap(self.grey_previous, map11, map21, cv2.INTER_LINEAR)
-        remapped2 = cv2.remap(self.grey_now, map12, map22, cv2.INTER_LINEAR)
-        stereo = cv2.StereoBM()
-        disp = stereo.compute(remapped1,remapped2).astype(np.float32) / 16.0
-        threeDImage = cv2.reprojectImageTo3D(disp, Q)
-        cv2.imshow('remap', remapped1)
-        print remapped1.shape
-        cv2.imshow('remap2', remapped2)
-        cv2.imshow('remap3', disp)
-        cv2.waitKey(50)
-        '''
     
-        if abs(t[1]) < 0.15 and abs(t[2]) < 0.15:
-            print t[0]
-            print t[1]
+        
+        # Get t from tf data or predefined data 
+        # For some reason t must be inverted compared to expected, it does not
+        # work to simply swap projection matrices PP1 and PP2
+        t = -self.image_coord_trans  
+        if self.DEF_SET_DATA:
+            t = np.array([[0.2],[0.],[0.]])
+        self.debug_text.append("trans: "+str(t))
+        
+        
+        # Get rotation matrix
+        R = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(self.relative_quat))[:3, :3]
+        
+        if self.DEF_SET_DATA:
+            #R = np.diag([1,1,1])
+            R = np.array([[1., 0., 0.],[0., 1., 0.],[0., 0., 1.]])
+        self.debug_text.append("rot: "+np_to_str(tf.transformations.euler_from_matrix(R)))  
+        
+    
+        # Bottom out if motion if insufficient
+        if abs(t[1]) < 0.1 and abs(t[2]) < 0.1:
             print "Motion bad for triangulation"
             return
-    
         
         
-        R = R_cam1_to_cam2
-        #print "Rotation Matrix : ", R_cam1_to_cam2
-        P_cam1_to_cam2 = np.hstack((R_cam1_to_cam2, t))
-        T = P_cam1_to_cam2
-        #print P_cam1_to_cam2
-        #print self.P
+        # Compose projection matrix
+        P_cam1_to_cam2 = np.hstack((R, t))
         
-        #print self.cameraMatrix.shape
+        
+        """
+        Triangulate using pixel co-ord and K[R t]
+        """
+        # Factor in camera calibration
         PP1 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
         PP2 = self.cameraMatrix.dot(P_cam1_to_cam2)
-        #print PP1
-        points3D_image = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2)[:3]
+        #points3D_image1 = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2)[:3]
         points4D = cv2.triangulatePoints(PP1, PP2, pts1.transpose(), pts2.transpose())
-        # normalise homogenous coords
-        points3D_image = (points4D/points4D[3])[:3]
-        #print "pts 3Di : \r\n", points3D_image
+        # Normalise homogeneous co-ords
+        points3D_image2 = (points4D/points4D[3])[:3]
+        
+        
+        """
+        Triangulating using Kinv premultiplied pixel co-ord and [R t]
+        """
+        # Pre-multiply co-ords
+        pts1_norm = self.inverseCameraMatrix.dot(self.make_homo(pts1).transpose()).transpose()[:,:2]
+        pts2_norm = self.inverseCameraMatrix.dot(self.make_homo(pts2).transpose()).transpose()[:,:2]       
+        PP1 = np.hstack((np.array([[1., 0., 0.],[0., 1., 0.],[0., 0., 1.]]), np.array([[0.],[0.],[0,]])))
+        PP2 = P_cam1_to_cam2
+        points3D_image3 = self.triangulate_points(pts1_norm.transpose(), pts2_norm.transpose(), PP1, PP2)[:3]
+        points4D = cv2.triangulatePoints(PP1, PP2, pts1_norm.transpose(), pts2_norm.transpose())
+        points3D_image4 = (points4D/points4D[3])[:3]
+        
+        
+        """
+        Filter out points that have a significant discrepancy between
+        triangulation methods. The motion has provided insufficient to get a
+        useful triangulation
+        
+        With set data and externally recorded motion a translation of 0.2m
+        produced no losses to this filtering. Resultant triangulation is good.
+        In flight however most points are removed by this filter suggesting
+        a poor basis for triangulation.
+        """
+        numeric_accuracy = abs(points3D_image4 - points3D_image2)>1. 
+        # True means inaccurate, ie. more than 1m discrepancy depending on calc method
+        numeric_accuracy = numeric_accuracy[0] | numeric_accuracy[1] | numeric_accuracy[2]
+        numeric_accuracy = np.array([numeric_accuracy]).transpose()
+        numeric_accuracy = np.hstack((numeric_accuracy, numeric_accuracy, numeric_accuracy)).transpose()        
+        points3D_image = np.reshape(points3D_image2[numeric_accuracy==False], (3, -1))
+      
+        
+        # Output number of triangulated points
         triangulated = len(points3D_image[0])+0.
         self.debug_text.append(triangulated)
         
-        infront = points3D_image[2] > 0
-        #print points3D_image[2]
-        #print infront
-        # Filter points
+        # Filter points that are behind the camera
+        infront = points3D_image[2] > 0        
         infront = np.array([infront]).transpose()
-        infront = np.hstack((infront, infront, infront)).transpose()
-        
-        #print infront.shape
-        #print points3D_image
-        
+        infront = np.hstack((infront, infront, infront)).transpose()        
         points3D_image= np.reshape(points3D_image[infront==True], (3, -1))
-        #print self.make_homo(points3D_image).T.shape
         
-
-        self.reprojected2 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, np.diag((1,1,1)), np.array([[0],[0],[0]]))
+        # Triangulated points reprojected back to the image plane
+        self.reprojected2 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, np.diag((1,1,1)), np.array([[0],[0],[0]]))        
+        self.reprojected = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, R, t)
         
-        self.reprojected = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, R_cam1_to_cam2, t)
         
+        '''
+        # Filter points
+        infront = points3D_image1[2] > 0        
+        infront = np.array([infront]).transpose()
+        infront = np.hstack((infront, infront, infront)).transpose()        
+        points3D_image1= np.reshape(points3D_image1[infront==True], (3, -1))
+        
+        self.reprojected2 = self.world_to_pixel_distorted(self.make_homo(points3D_image1.T).T, np.diag((1,1,1)), np.array([[0],[0],[0]]))        
+        self.reprojected = self.world_to_pixel_distorted(self.make_homo(points3D_image1.T).T, R, t)
+        
+        # Filter points
+        infront = points3D_image2[2] > 0        
+        infront = np.array([infront]).transpose()
+        infront = np.hstack((infront, infront, infront)).transpose()        
+        points3D_image2= np.reshape(points3D_image2[infront==True], (3, -1))
+        
+        self.reprojected4 = self.world_to_pixel_distorted(self.make_homo(points3D_image2.T).T, np.diag((1,1,1)), np.array([[0],[0],[0]]))        
+        self.reprojected3 = self.world_to_pixel_distorted(self.make_homo(points3D_image2.T).T, R, t)
+        
+        # Filter points
+        infront = points3D_image3[2] > 0        
+        infront = np.array([infront]).transpose()
+        infront = np.hstack((infront, infront, infront)).transpose()        
+        points3D_image3= np.reshape(points3D_image3[infront==True], (3, -1))
+        
+        self.reprojected6 = self.world_to_pixel_distorted(self.make_homo(points3D_image3.T).T, np.diag((1,1,1)), np.array([[0],[0],[0]]))        
+        self.reprojected5 = self.world_to_pixel_distorted(self.make_homo(points3D_image3.T).T, R, t)
+        
+        # Filter points
+        infront = points3D_image4[2] > 0        
+        infront = np.array([infront]).transpose()
+        infront = np.hstack((infront, infront, infront)).transpose()        
+        points3D_image4= np.reshape(points3D_image4[infront==True], (3, -1))
+        
+        self.reprojected8 = self.world_to_pixel_distorted(self.make_homo(points3D_image4.T).T, np.diag((1,1,1)), np.array([[0],[0],[0]]))        
+        self.reprojected7 = self.world_to_pixel_distorted(self.make_homo(points3D_image4.T).T, R, t)
+        
+        points3D_image = points3D_image1
+        '''
+        
+        # Output number of forward triangulated points
         forward_triangulated = len(points3D_image[0])+0.
         self.debug_text.append(forward_triangulated)
-        #print points3D_image
-        
-        points3D= zip(*np.vstack((points3D_image[2], -points3D_image[0], -points3D_image[1])))
-        #print "pts 3Dd : \r\n", points3D
         
         
         # Publish Cloud
@@ -1598,6 +1691,7 @@ class FeatureTracker:
         # time_now is used.        
         if (forward_triangulated/triangulated) > 0.5:
             #print "-------------\r\n-------------\r\n-------------\r\n-------------\r\n"
+            points3D= zip(*np.vstack((points3D_image[0], points3D_image[1], points3D_image[2])))
             self.publish_cloud(points3D, self.time_prev)
     
     
@@ -1620,7 +1714,7 @@ class FeatureTracker:
         
         print "Triangulation"
         # For ease of reading until names are made consistent and clear
-        t = self.drone_coord_trans
+        t = self.image_coord_trans
         #t = np.array([[-0.235],[0],[0]])
         print "Translation : ", t
         
@@ -1717,10 +1811,19 @@ class FeatureTracker:
     def imgproc(self, d):
         """Converts the ROS published image to a cv2 numpy array
         and passes to FeatureTracker"""
+        
+        # Frameskip should be here to minimise wasted processing
+        # AND this stop self.time_prev being erroneously updated
+        # Skip frames. Need to add ROS parameter to allow setting        
+        self.frameskip += 1
+        if self.frameskip < 11:
+            return            
+        self.frameskip = 0
+        
         self.time_now = d.header.stamp
         if self.time_prev == None:
             self.time_prev = self.time_now
-        #print "--------------------------------------------------------img proc -----------------------------------------------"
+        
         # ROS to cv image
         bridge = CvBridge()
         cvimg = bridge.imgmsg_to_cv(d,"bgr8")
