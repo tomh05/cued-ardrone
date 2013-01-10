@@ -1,0 +1,19 @@
+<package>
+  <description brief="scan">
+
+     scan
+
+  </description>
+  <author>Alex Karmazyn</author>
+  <license></license>
+  <review status="unreviewed" notes=""/>
+  <url>n/a</url>
+  <depend package="opencv2"/>
+  <depend package="image_transport"/>
+  <depend package="ardrone_autonomy"/>
+  <depend package="cv_bridge"/>
+  <depend package="roscpp"/>
+
+</package>
+
+
