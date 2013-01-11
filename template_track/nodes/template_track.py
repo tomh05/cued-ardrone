@@ -15,11 +15,17 @@ from mpl_toolkits.mplot3d import Axes3D
 import tf
 from sensor_msgs.msg import PointCloud
 from std_msgs.msg import Empty
+from std_msgs.msg import Float32MultiArray
 from nav_msgs.msg import Path
 import math
 import time
 import threading
 import os
+
+import pyglet, sys
+from pyglet.gl import *
+from copy import deepcopy
+
     
 def stackImagesVertically(top_image, bottom_image):
     """Takes two cv2 numpy array images top_image, bottom_image
@@ -36,6 +42,14 @@ def stackImagesVertically(top_image, bottom_image):
     stacked[h1:h1+h2, :w2] = bottom_image
     return stacked
     
+class Wall():
+    def __init__(self, texture, c1, c2, c3, c4):
+        self.c1 = c1
+        self.c2 = c2
+        self.c3 = c3
+        self.c4 = c4
+        self.texture = texture
+    
 class FeatureTracker:
     def __init__(self):
         self.frameskip = 0
@@ -51,6 +65,29 @@ class FeatureTracker:
         
         self.avg_time = 0
         self.accepted = 0
+        
+        self.img_pub = rospy.Publisher("/template_track/img",Image)
+        self.corner_pub = rospy.Publisher("/template_track/corners", Float32MultiArray)
+        self.wall_trigger_pub = rospy.Publisher("/template_track/wall_trigger", Empty)
+        
+        #pyglet_thread = threading.Thread(target = self.pyglet)
+        #pyglet_thread.start()
+        
+        self.connect()
+        
+    def connect(self):
+        rospy.init_node('Template_Tracker')
+        self.tf = tf.TransformListener()
+        rospy.Subscriber('/ardrone/front/image_raw',Image,self.imgproc)
+        rospy.Subscriber('/ardrone/front/camera_info',sensor_msgs.msg.CameraInfo, self.setCameraInfo)
+        rospy.Subscriber('/xboxcontroller/button_y',Empty,self.speakDistance)
+        rospy.Subscriber('/xboxcontroller/button_b',Empty,self.toggle_template)
+        rospy.spin()
+        
+
+        
+        
+        
         
     def toggle_template(self, d):
         if self.template_toggle == False:
@@ -303,11 +340,13 @@ class FeatureTracker:
         corners_rot= P.dot(corners)
         # Normalise
         corners_rot = corners_rot.T[:, :3]
+        self.corners_rot = corners_rot
         # Get plane normal
         AB = corners_rot[1]-corners_rot[0]
         AC = corners_rot[2]-corners_rot[0]
         #print AC
         plane_normal = np.cross(AB,AC)
+        self.plane_normal = plane_normal
         #print "plane_normal : ", plane_normal
         # Backward test
         if plane_normal[2] < 0:
@@ -339,13 +378,13 @@ class FeatureTracker:
         R4 = np.diag([0., 0., 0., 1.])
         R4[:3, :3] = R
         
-        quaternion = tf.transformations.quaternion_from_matrix(R4)
+        self.quaternion = tf.transformations.quaternion_from_matrix(R4)
         
         print "Broadcasting tf"
         br = tf.TransformBroadcaster() #create broadcaster
         br.sendTransform((t[0],t[1],t[2]), 
                          # translation happens first, then rotation
-                         quaternion,
+                         self.quaternion,
                          self.time_now, # NB: 'now' is not the same as time data was sent from drone
                          "/template_match",
                          "/ardrone_base_frontcam"
@@ -385,7 +424,170 @@ class FeatureTracker:
         ===================================================================="""
         self.template_visualise(grey_now, t_i1_pts_corr, t_i2_pts_corr, True, R, t)
         
+        self.template_wall(R, t, grey_now)
+        
         return True
+    
+    def template_wall(self, R, t, img2):
+        
+        
+        # Get plane normal
+        #AB = np.array([self.c[1]-self.c[0]])
+        #AC = np.array([self.c[2]-self.c[0]])
+        #print AC
+        #plane_normal = np.cross(AB.T, AC.T)
+        #print plane_normal
+        
+        print "\r\n\r\n"
+        #print np.array([self.corners.T[0]]).T
+        #print t
+        
+        # The corners of the template in anticlockwise convention        
+        print self.corners_rot
+        print self.plane_normal
+        
+        d = -(self.plane_normal.dot(self.corners_rot[0]))
+        print d
+        
+        
+        
+        
+        centre = np.array([[0.,0.,0.,1.]]).T
+        centre = self.world_to_pixel_distorted(centre, R, t)
+        print "Centre : ", centre
+        scale_x = (self.width/2.)/(centre-self.c[0])[0,0]
+        scale_y = (self.length/2.)/(centre-self.c[1])[0,1]
+        print scale_x
+        print scale_y
+        
+        scale = np.array([scale_x, scale_y])
+        
+        centre_x = centre[0,0]
+        centre_y = centre[0,1]
+        print centre_x
+        print centre_y
+        
+        size_x = img2.shape[1]
+        size_y = img2.shape[0]
+        
+        corners = np.array([[(0.-centre_x)*scale_x,(0.-centre_y)*scale_y,0.,1.],
+                           [(0.-centre_x)*scale_x, (size_y-centre_y)*scale_x,0.,1.],
+                           [(size_x-centre_x)*scale_x, (size_y-centre_y)*scale_x,0.,1.],
+                           [(size_x-centre_x)*scale_x, (0.-centre_y)*scale_x,0.,1.]]).T
+        
+        print corners
+        
+        # Rotate-translate                
+        P =  np.diag([1.,1.,1.,1.])
+        Pinner = np.hstack((R, t))
+        P[:3, :4] =Pinner
+        corners_rot= P.dot(corners)
+        # Normalise
+        corners_rot = corners_rot.T[:, :3].T
+        print corners_rot
+        corners_rot_drone_coords = np.array((corners_rot[2], -corners_rot[0], -corners_rot[1])).T
+        
+        
+        self.tf.waitForTransform("world", "ardrone_base_link", self.time_now, rospy.Duration(16))
+        position, self.world_to_drone_quaternion = self.tf.lookupTransform("world", "ardrone_base_link", self.time_now)
+        
+        
+        print corners_rot_drone_coords
+        
+        
+        wall = Wall(img2, corners_rot_drone_coords[0], corners_rot_drone_coords[1], corners_rot_drone_coords[2], corners_rot_drone_coords[3])
+        print wall.c1
+        float_array = []
+        float_array.append(corners_rot_drone_coords[0,0])
+        float_array.append(corners_rot_drone_coords[0,1])
+        float_array.append(corners_rot_drone_coords[0,2])
+        float_array.append(corners_rot_drone_coords[1,0])
+        float_array.append(corners_rot_drone_coords[1,1])
+        float_array.append(corners_rot_drone_coords[1,2])
+        float_array.append(corners_rot_drone_coords[2,0])
+        float_array.append(corners_rot_drone_coords[2,1])
+        float_array.append(corners_rot_drone_coords[2,2])
+        float_array.append(corners_rot_drone_coords[3,0])
+        float_array.append(corners_rot_drone_coords[3,1])
+        float_array.append(corners_rot_drone_coords[3,2])
+        print float_array
+       
+        #pub = rospy.Publisher('/ardrone/walls',Wall);
+        #pub.publish(wall)
+        #self.world.walls.append(wall)
+        #print self.world.walls
+        
+        
+        
+        # cv2 to cv to ROS image
+        bridge = CvBridge()
+        cvimg = cv.fromarray(img2)
+        imgmsg = bridge.cv_to_imgmsg(cvimg, encoding="passthrough")
+        imgmsg.header.stamp = self.time_now
+        self.img_pub.publish(imgmsg)
+        
+        # publish corners
+        corner_msg = Float32MultiArray()
+        corner_msg.data = float_array
+        self.corner_pub.publish(corner_msg)
+        
+        # publish trigger
+        self.wall_trigger_pub.publish()
+        
+        '''
+        print self.c[:4]
+                           
+       
+        src = np.array([self.c[0],self.c[1],self.c[2],self.c[3]],np.float32)
+        dst = np.array([[0.,0.],[0.,128.],[128.,128.],[128.,0.]],np.float32)
+        
+        
+        H =  cv2.getPerspectiveTransform(src, dst)
+                                       
+        c = -self.world_to_pixel_distorted(centre, R, t).T
+        print c
+        
+        T = np.array([[1., 0., c[0]],[0., 1., c[1]], [0., 0., 1.]])
+        print T
+        
+        Rshifted = np.linalg.inv(T).dot(H.dot(T))
+        print Rshifted
+        
+        point1 =  Rshifted.dot(np.array([[0.,0.,0.]]).T)
+        print point1
+        
+        image = cv2.warpPerspective(img2, Rshifted, (img2.shape[1], img2.shape[0]))
+        
+        cv2.circle(img2, (int(point1[0]), int(point1[1])), 5, (255, 0, 255), 1) 
+        
+        cv2.imshow('window', image)
+        '''
+        
+        '''
+        Rt = np.hstack((R, t))
+        KRt = self.cameraMatrix.dot(Rt)
+        KRtdashKRt = KRt.T.dot(KRt)
+        psuedo_inverse = np.linalg.inv(KRtdashKRt).dot(KRt.T)
+        #print psuedo_inverse
+        
+        corners = []
+        c1 = np.array([0., 0.])
+        c2 = np.array([0., img2.shape[0]])
+        c3 = np.array([img2.shape[1], img2.shape[0]])
+        c4 = np.array([img2.shape[1], 0.])
+        corners = np.array((c1,c2,c3,c4))
+        print corners
+        
+        corners = self.make_homo(cv2.undistortPoints(np.array([corners]), self.cameraMatrix, self.distCoeffs, P=self.P)[0])
+        print corners
+        
+        print psuedo_inverse.dot(corners)
+        
+        #corners = KRtinv.dot(corners)
+        
+        #print corners
+        '''
+        
     
     def world_to_pixel_distorted(self, pts, R, t, K=None, k=None):
         """Takes 3D world co-ord and reverse projects using K and distCoeffs"""
@@ -445,6 +647,9 @@ class FeatureTracker:
         width = length
         depth = 0.14
         
+        self.length = length
+        self.width = width
+        
         square_side = 0.1
         
         # The corners of the template 
@@ -467,7 +672,7 @@ class FeatureTracker:
                                        [+square_side, -square_side,-2*square_side,1]]).T
                                        
         c = self.world_to_pixel_distorted(self.corners, R, t)
-        
+        self.c =c
         '''
         # Set up projection from extracted R and t                   
         P =  np.diag([1.,1.,1.,1.])
@@ -614,6 +819,8 @@ class FeatureTracker:
         """Converts the ROS published image to a cv2 numpy array
         and passes to FeatureTracker"""
         self.time_now = d.header.stamp
+        
+        
         # ROS to cv image
         bridge = CvBridge()
         cvimg = bridge.imgmsg_to_cv(d,"bgr8")
@@ -636,6 +843,12 @@ class FeatureTracker:
             self.calibrated = True    
             print "Calibration Initialised"
             
+    
+    
+
+
+
+            
 def trunc(f, n=10):
     '''Truncates/pads a float f to a string of n decimal places without rounding'''
     slen = len('%.*f' % (n, f))
@@ -649,21 +862,12 @@ def np_to_str(n):
     return s
 
   
-def connect(m):
-    rospy.init_node('Template_Tracker')
-    rospy.Subscriber('/ardrone/front/image_raw',Image,m.imgproc)
-    rospy.Subscriber('/ardrone/front/camera_info',sensor_msgs.msg.CameraInfo, m.setCameraInfo)
-    rospy.Subscriber('/xboxcontroller/button_y',Empty,m.speakDistance)
-    rospy.Subscriber('/xboxcontroller/button_b',Empty,m.toggle_template)
+
 
 
 def run():
     # Initialise tracker
     m = FeatureTracker()
-    # Initialise ROS node
-    connect(m)
-    # Begin ROS loop
-    rospy.spin()
 
 if __name__ == '__main__':
     run()
