@@ -39,6 +39,8 @@ class World(pyglet.window.Window):
         self.live1 = False
         self.live2 = False
         
+        self.cross_thread_trigger = False
+        
     def connect(self):
         rospy.init_node('Renderer')
         rospy.Subscriber('/template_track/img',Image,self.texture_process)
@@ -66,9 +68,9 @@ class World(pyglet.window.Window):
         # ROS to cv image
         bridge = CvBridge()
         cvimg = bridge.imgmsg_to_cv(d,"bgr8")
-        self.texture_buffer = pyglet.image.ImageData(640,360, "BGR", cvimg.tostring()).get_texture()
-        # cv to cv2 numpy array image
-        #self.texture_buffer = np.asarray(cvimg)
+        #self.texture_buffer = pyglet.image.ImageData(640,360, "BGR", cvimg.tostring()).get_texture()
+        #cv to cv2 numpy array image
+        self.texture_buffer = np.asarray(cvimg)
         self.live1 = True
         
     def corner_process(self, d):
@@ -79,6 +81,11 @@ class World(pyglet.window.Window):
         while((not self.live1) or (not self.live2)):
             rospy.sleep(0.01)
             
+        self.cross_thread_trigger = True
+        while(self.cross_thread_trigger == True):
+            rospy.sleep(0.1)
+        
+        '''    
         c = self.corner_buffer
         c1 = np.array([c[0], c[1], c[2]])
         c2 = np.array([c[3], c[4], c[5]])
@@ -91,62 +98,73 @@ class World(pyglet.window.Window):
         #cv.CvtColor(self.raw_depth_image,contour_depth_image_bgr, cv.CV_GRAY2BGR)
 
         #cv.And(self.raw_video_image,contour_depth_image_bgr,self.raw_masked_image)
-        wall = Wall(self.texture_buffer, c1, c2, c3, c4)
+        
+        self.textures2 = self.load_nparray()
+        #self.walls[-1].texture = None
+        wall = Wall(self.textures2[0], (-1., 0., -2.), (3., 0., -2.), (3., 2.25, -2.), (-1., 2.25, -2.))
         self.walls.append(wall)
+        '''
         
         self.live1 = False
         self.live2 = False
         
         
         
+    @staticmethod
+    def load_nparray(npimage):
+        # load_nparray MUST be called in the same thread as pyglet is running
+        # gl###### texture loading commands will NOT load textures otherwise
+        # There is no visible error in this case, but textures blank white
         
-    def np_to_abstractimage(self, img):
-        # the size of our texture
-        dimensions = (640, 360)
-
-        # we need RGBA textures
-        # which has 4 channels
-        format_size = 1
-        bytes_per_channel = 1
         
-        '''
-        # populate our array with some random data
-        data = np.random.random_integers(
-            low = 0,
-            high = 1,
-            size = (dimensions[ 0 ] * dimensions[ 1 ], format_size)
-            )
-
-        # convert any 1's to 255
-        data *= 255
+        print npimage.shape
+        image = pyglet.image.ImageData(640, 360, 'BGR', npimage.tostring())
+        print image        
+        print image.pitch        
+        print image.format
         
-        #data[:, 0] = img
-
-        # set the GB channels (from RGBA) to 0
-        data[ :, 1:-1 ] = 0
-
-        # ensure alpha is always 255
-        data[ :, 3 ] = 255
         
-
-        # we need to flatten the array
-        data.shape = -1
-         
-
-        # convert to GLubytes
-        tex_data = (pyglet.gl.GLubyte * data.size)( *data.astype('uint8') )
-        '''
-
-        # create an image
-        # pitch is 'texture width * number of channels per element * per channel size in bytes'
-        return pyglet.image.ImageData(
-            dimensions[ 0 ],
-            dimensions[ 1 ],
-            "L",
-            img,
-            pitch = dimensions[ 1 ] * format_size * bytes_per_channel
-            )   
+        texture = image.get_texture()
         
+        glEnable(texture.target)
+        glBindTexture(texture.target, texture.id)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, image.width, image.height,
+                     0, GL_BGR, GL_UNSIGNED_BYTE,
+                     image.get_image_data().get_data('BGR',
+                                                     image.width * -3))
+        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR )
+        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR )
+                                                     
+        return texture
+    
+    def load_textures2(self):
+        textures = []
+        
+        cv2.namedWindow( "window" )
+    
+        npimage = cv2.imread('2.png')
+        print npimage.shape
+        image = pyglet.image.ImageData(16, 16, 'BGR', npimage.tostring())
+        print image
+        
+        print image.pitch        
+        print image.format
+        print image.get_image_data()
+        
+        #cv2.imshow('window', npimage)
+        #cv2.waitKey(0)        
+        
+        textures.append(image.get_texture())
+        
+        glEnable(textures[-1].target)
+        glBindTexture(textures[-1].target, textures[-1].id)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, image.width, image.height,
+                     0, GL_BGR, GL_UNSIGNED_BYTE,
+                     image.get_image_data().get_data('BGR',
+                                                     image.width * 3))
+        
+        
+        return textures
     
     @staticmethod
     def load_textures():
@@ -204,12 +222,30 @@ class World(pyglet.window.Window):
         self.on_draw()
         self.clock += .01
  
+    
     def on_draw(self):
+        if (self.cross_thread_trigger):
+            self.add_wall()
+            self.cross_thread_trigger = False
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glLoadIdentity()
         #self.draw_images()
         for wall in self.walls:
             self.draw_wall(wall)
+            
+    def add_wall(self):
+        c = self.corner_buffer
+        print "Corner buffer:\r\n",c
+        c1 = np.array([c[0], c[1], c[2]])
+        c2 = np.array([c[3], c[4], c[5]])
+        c3 = np.array([c[6], c[7], c[8]])
+        c4 = np.array([c[9], c[10], c[11]])
+        wall = Wall(self.load_nparray(self.texture_buffer), c1, c2, c3, c4)
+        print wall.c1
+        print wall.c2
+        print wall.c3
+        print wall.c4
+        self.walls.append(wall)
 
     def draw_wall(self, wall):        
         glPushMatrix()
