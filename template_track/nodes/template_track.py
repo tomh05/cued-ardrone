@@ -22,8 +22,6 @@ import time
 import threading
 import os
 
-import pyglet, sys
-from pyglet.gl import *
 from copy import deepcopy
 
     
@@ -41,14 +39,6 @@ def stackImagesVertically(top_image, bottom_image):
     # Drop in the bottom_image
     stacked[h1:h1+h2, :w2] = bottom_image
     return stacked
-    
-class Wall():
-    def __init__(self, texture, c1, c2, c3, c4):
-        self.c1 = c1
-        self.c2 = c2
-        self.c3 = c3
-        self.c4 = c4
-        self.texture = texture
     
 class FeatureTracker:
     def __init__(self):
@@ -72,6 +62,8 @@ class FeatureTracker:
         
         #pyglet_thread = threading.Thread(target = self.pyglet)
         #pyglet_thread.start()
+        
+        self.published_no = 0
         
         self.connect()
         
@@ -443,39 +435,48 @@ class FeatureTracker:
         #print t
         
         # The corners of the template in anticlockwise convention        
-        print self.corners_rot
-        print self.plane_normal
+        #print self.corners_rot
+        #print self.plane_normal
         
-        d = -(self.plane_normal.dot(self.corners_rot[0]))
-        print d
-        
-        
+        #d = -(self.plane_normal.dot(self.corners_rot[0]))
+        #print d
         
         
-        centre = np.array([[0.,0.,0.,1.]]).T
-        centre = self.world_to_pixel_distorted(centre, R, t)
+        
+        """
+        # Determine scale of image
+        # 
+        # Use known template size in plane to determine metres/pixel in plane
+        # Use this to determine in plane corner position
+        # Project into true 3D using R and t to get world corner positions
+        """
+        origin = np.array([[0.,0.,0.,1.]]).T
+        centre = self.world_to_pixel_distorted(origin, R, t)
         print "Centre : ", centre
-        scale_x = (self.width/2.)/(centre-self.c[0])[0,0]
-        scale_y = (self.length/2.)/(centre-self.c[1])[0,1]
-        print scale_x
-        print scale_y
+        print "self.c :", self.c
+        print "self.c :", self.c[0,0]
+        print "self.c :", self.c[2,0]
+        scale_x = (self.width)/(self.c[2,0]-self.c[0,0])
+        scale_y = (self.length/2.)/(self.c[1,1]-self.c[0,1])
+        print "Scale x :", scale_x
+        print "Scale y :", scale_y
         
         scale = np.array([scale_x, scale_y])
         
         centre_x = centre[0,0]
         centre_y = centre[0,1]
-        print centre_x
-        print centre_y
+        #print centre_x
+        #print centre_y
         
         size_x = img2.shape[1]
         size_y = img2.shape[0]
         
         corners = np.array([[(0.-centre_x)*scale_x,(0.-centre_y)*scale_y,0.,1.],
-                           [(0.-centre_x)*scale_x, (size_y-centre_y)*scale_x,0.,1.],
+                           [(size_x-centre_x)*scale_x, (0.-centre_y)*scale_x,0.,1.],
                            [(size_x-centre_x)*scale_x, (size_y-centre_y)*scale_x,0.,1.],
-                           [(size_x-centre_x)*scale_x, (0.-centre_y)*scale_x,0.,1.]]).T
+                           [(0.-centre_x)*scale_x, (size_y-centre_y)*scale_x,0.,1.]]).T
         
-        print corners
+        print "Unprojected corners :\r\n", corners
         
         # Rotate-translate                
         P =  np.diag([1.,1.,1.,1.])
@@ -484,39 +485,58 @@ class FeatureTracker:
         corners_rot= P.dot(corners)
         # Normalise
         corners_rot = corners_rot.T[:, :3].T
-        print corners_rot
-        corners_rot_drone_coords = np.array((corners_rot[2], -corners_rot[0], -corners_rot[1])).T
+        
+        print "Corners in image coordinates w.r.t drone:\r\n", corners_rot
         
         
-        self.tf.waitForTransform("world", "ardrone_base_link", self.time_now, rospy.Duration(16))
-        position, self.world_to_drone_quaternion = self.tf.lookupTransform("world", "ardrone_base_link", self.time_now)
+        
+        self.tf.waitForTransform("world", "ardrone_base_frontcam", self.time_now, rospy.Duration(16))
+        position, self.world_to_drone_quaternion = self.tf.lookupTransform("world", "ardrone_base_frontcam", self.time_now)
+        
+        position = np.array((position))
+        print "Drone position :\r\n", position
+        position = np.hstack((position, position))
+        position = np.reshape(np.hstack((position, position)), (-1, 3))
         
         
-        print corners_rot_drone_coords
+        corner_absolute_image = corners_rot.T + position
+        print "Absolute corners :\r\n", corner_absolute_image
+        
+        #corners_rot_drone_coords = np.array((corners_rot[2], -corners_rot[0], -corners_rot[1])).T
+        
+        #print corners_rot_drone_coords
         
         
-        wall = Wall(img2, corners_rot_drone_coords[0], corners_rot_drone_coords[1], corners_rot_drone_coords[2], corners_rot_drone_coords[3])
-        print wall.c1
+        #print wall.c1
         float_array = []
-        float_array.append(corners_rot_drone_coords[0,0])
-        float_array.append(corners_rot_drone_coords[0,1])
-        float_array.append(corners_rot_drone_coords[0,2])
-        float_array.append(corners_rot_drone_coords[1,0])
-        float_array.append(corners_rot_drone_coords[1,1])
-        float_array.append(corners_rot_drone_coords[1,2])
-        float_array.append(corners_rot_drone_coords[2,0])
-        float_array.append(corners_rot_drone_coords[2,1])
-        float_array.append(corners_rot_drone_coords[2,2])
-        float_array.append(corners_rot_drone_coords[3,0])
-        float_array.append(corners_rot_drone_coords[3,1])
-        float_array.append(corners_rot_drone_coords[3,2])
-        print float_array
+        float_array.append(corner_absolute_image[0,0])
+        float_array.append(corner_absolute_image[0,1])
+        float_array.append(corner_absolute_image[0,2])
+        float_array.append(corner_absolute_image[1,0])
+        float_array.append(corner_absolute_image[1,1])
+        float_array.append(corner_absolute_image[1,2])
+        float_array.append(corner_absolute_image[2,0])
+        float_array.append(corner_absolute_image[2,1])
+        float_array.append(corner_absolute_image[2,2])
+        float_array.append(corner_absolute_image[3,0])
+        float_array.append(corner_absolute_image[3,1])
+        float_array.append(corner_absolute_image[3,2])
+        print "Arrayed absolute image coordinates :\r\n", float_array
        
         #pub = rospy.Publisher('/ardrone/walls',Wall);
         #pub.publish(wall)
         #self.world.walls.append(wall)
         #print self.world.walls
         
+        '''
+        float_array.append(0)
+        float_array.append(0)
+        float_array.append(1)
+        float_array.append(0)
+        float_array.append(1)
+        float_array.append(1)
+        float_array.append(0)
+        float_array.append(1)
         
         
         # cv2 to cv to ROS image
@@ -534,15 +554,247 @@ class FeatureTracker:
         # publish trigger
         self.wall_trigger_pub.publish()
         
+        
+        cv2.waitKey(0)
         '''
+        
+        
+        
+        """
+        # Undistort image
+        """
+        
+        
+        """
+        
+        We want the image as on the actual plane (object plane)
+        _____
+        ^^^^/
+        |||/
+        ||/  We observe the imageplane and need to project it onto object plane
+        |/   (This could be done with projective texturing in pyglet)
+        /    I *think* it should be more efficient to manually precalc here
+        
+        
+        To do this projection, we use some information calculated earlier:
+        
+        1) The 3D planar positions (ie. as if observed plane was at z=0) of the
+        image corners were found, assuming entire image is planar.
+        
+        2) Applying the actual R|t to these gives the actual 3D corners
+        
+        3) We then calculate the perspective transform from these to the camera
+        image corners (ie. rectange of 640x360). 
+        Note:This is a homography matrix
+        
+        4) The homography matrix is then translated using T^(-1).H.T
+        This is necessary to keep the resultant image in the positive quadrant
+        of opencv coordinate system so no image is clipped.
+        
+        5) The shifted homography is applied, producing an image, with the size
+        specified by pre-calculated bounds. (OpenCV unhelpfully doesn't allow
+        this to be simply specified as a flag, presumably as certain cases 
+        could result in excessive image sizes. This is not the case for us as
+        we can only make a match over a limited range of angles)
+        
+        """
+        
+        c2 = self.world_to_pixel_distorted(corners, R, t)
+        print "c2 :\r\n", c2
+        print c2[0]
+        src = np.array([c2[0],c2[1],c2[2],c2[3]],np.float32)
+        dst = np.array([[0.,0.],[img2.shape[1],0.],[img2.shape[1],img2.shape[0]],[0.,img2.shape[0]]],np.float32)
+        print "src :\r\n", src
+        
+        print "dst :\r\n", dst
+        
+        #H =  cv2.getPerspectiveTransform(src, dst)
+        H =  cv2.getPerspectiveTransform(dst, src)
+        print "H :\r\n", H
+        print c2[0]
+        print np.array([[c2[0,0]],[c2[0,1]], [1]])
+        testarray = np.array([[0],[0],[1]])
+        #print "testarray: ", testarray
+        partial = H.dot(testarray)
+        #print partial
+        cc1 = partial/partial[2]
+        print cc1
+        
+        testarray = np.array([[img2.shape[1]],[0],[1]])
+        #print "testarray: ", testarray
+        partial = H.dot(testarray)
+        #print partial
+        cc2 = partial/partial[2]
+        print cc2
+        
+        testarray = np.array([[img2.shape[1]],[img2.shape[0]],[1]])
+        #print "testarray: ", testarray
+        partial = H.dot(testarray)
+        #print partial
+        cc3 = partial/partial[2]
+        print cc3
+        
+        testarray = np.array([[0],[img2.shape[0]],[1]])
+        #print "testarray: ", testarray
+        partial = H.dot(testarray)
+        #print partial
+        cc4 = partial/partial[2]
+        print cc4
+        
+        cxmin = float(min(min(min(cc1[0], cc2[0]),cc3[0]),cc4[0]))
+        cymin = float(min(min(min(cc1[1], cc2[1]),cc3[1]),cc4[1]))
+        cxmax = float(max(max(max(cc1[0], cc2[0]),cc3[0]),cc4[0]))
+        cymax = float(max(max(max(cc1[1], cc2[1]),cc3[1]),cc4[1]))
+        
+        print "x bounds : ", cxmin, ", ", cxmax
+        print "y bounds : ", cymin, ", ", cymax
+        
+        
+        
+        #image = cv2.warpPerspective(img2, H, (2*img2.shape[1], 2*img2.shape[0]))
+        
+        #cv2.circle(image, (int(cc1[0]), int(cc1[1])), 5, (255, 0, 255), 1)
+        #cv2.circle(image, (int(cc2[0]), int(cc2[1])), 5, (255, 0, 255), 1)
+        #cv2.circle(image, (int(cc3[0]), int(cc3[1])), 5, (255, 0, 255), 1)
+        #cv2.circle(image, (int(cc4[0]), int(cc4[1])), 5, (255, 0, 255), 1)
+        
+        #cv2.imshow('window', image)
+        
+        
+        # Set up translation matrix
+        T = np.array([[1., 0., -cxmin],[0., 1., -cymin], [0., 0., 1.]])
+        print T
+        
+        # Shift homography by translation of [cxmin; cymin]
+        Rshifted = np.linalg.inv(T).dot(H.dot(T))
+        Rshifted = T.dot(H)
+        print Rshifted
+        
+        # Project image plane onto object plane
+        image = cv2.warpPerspective(img2, Rshifted, (int(np.exp2(np.ceil(np.log2((cxmax-cxmin))))),int(np.exp2(np.ceil(np.log2((cymax-cymin)))))))
+        #image = cv2.warpPerspective(img2, Rshifted, (int(cxmax-cxmin),int(cymax-cymin)))
+        
+        # Draw corners to check correctly handled
+        #cv2.circle(image, (int(cc1[0]-cxmin), int(cc1[1]-cymin)), 5, (255, 0, 255), 1)
+        #cv2.circle(image, (int(cc2[0]-cxmin), int(cc2[1]-cymin)), 5, (255, 0, 255), 1)
+        #cv2.circle(image, (int(cc3[0]-cxmin), int(cc3[1]-cymin)), 5, (255, 0, 255), 1)
+        #cv2.circle(image, (int(cc4[0]-cxmin), int(cc4[1]-cymin)), 5, (255, 0, 255), 1)
+        
+        # Show for debug
+        cv2.imshow('window', img2)
+        cv2.imshow('window2', image)
+        print "Pre-shift Corners"
+        print cc1[0,0]
+        print cc1[1,0]
+        print cc2[0,0]
+        print cc2[1,0]
+        print cc3[0,0]
+        print cc3[1,0]
+        print cc4[0,0]
+        print cc4[1,0] 
+        print "Min bounds"       
+        print cxmin
+        print cymin
+        print "Dims"
+        print image.shape[1]
+        print image.shape[0]
+        corner1pos = (cc1[0,0]-cxmin)/image.shape[1]
+        print corner1pos
+        # min(.), max(.) are required to avoid numeric errors 
+        float_array.append(max(0.,min(1.,(cc1[0,0]-cxmin)/image.shape[1])))
+        float_array.append(1-max(0.,min(1.,(cc1[1,0]-cymin)/image.shape[0])))
+        float_array.append(max(0.,min(1.,(cc2[0,0]-cxmin)/image.shape[1])))
+        float_array.append(1-max(0.,min(1.,(cc2[1,0]-cymin)/image.shape[0])))
+        float_array.append(max(0.,min(1.,(cc3[0,0]-cxmin)/image.shape[1])))
+        float_array.append(1-max(0.,min(1.,(cc3[1,0]-cymin)/image.shape[0])))
+        float_array.append(max(0.,min(1.,(cc4[0,0]-cxmin)/image.shape[1])))
+        float_array.append(1-max(0.,min(1.,(cc4[1,0]-cymin)/image.shape[0])))
+        print "float array :\r\n ", float_array
+        
+        self.published_no = self.published_no+1
+        
+        
+        
+        """
+        # Publish data for renderer
+        #
+        # ROS doesn't support sending arbitrary messages, so data is passed as
+        # two separate messages. A third trigger message is sent to trigger
+        # combined proccesing of the other messages.
+        """
+        
+        
+        # cv2 to cv to ROS image
+        bridge = CvBridge()
+        cvimg = cv.fromarray(image)
+        imgmsg = bridge.cv_to_imgmsg(cvimg, encoding="passthrough")
+        imgmsg.header.stamp = self.time_now
+        self.img_pub.publish(imgmsg)
+        
+        # publish corners
+        corner_msg = Float32MultiArray()
+        corner_msg.data = float_array
+        self.corner_pub.publish(corner_msg)
+        
+        # publish trigger
+        self.wall_trigger_pub.publish()
+        
+        
+        
+        
+        
+        '''
+        c2 = self.world_to_pixel_distorted(corners, R, t)
+        print "c2 :\r\n", c2
+        print c2[0]
+        src = np.array([c2[0],c2[1],c2[2],c2[3]],np.float32)
+        dst = np.array([[0.,0.],[img2.shape[1],0.],[img2.shape[1],img2.shape[0]],[0.,img2.shape[0]]],np.float32)
+        print "src :\r\n", src
+        
         print self.c[:4]
                            
-       
+        H =  cv2.getPerspectiveTransform(src, dst)
+        print "H :\r\n", H
+        
+        #image_bounds = dst.T
+        #print "remapped corners :\r\n", H.dot(image_bounds)
+        
+        image = cv2.warpPerspective(img2, H, (2*img2.shape[1], 2*img2.shape[0]))
+        
+        
+        cv2.imshow('window', image)
+
+        c = -self.world_to_pixel_distorted(origin, R, t).T
+        print c
+        
+        T = np.array([[1., 0., -c[0]],[0., 1., -c[1]], [0., 0., 1.]])
+        print T
+        
+        Rshifted = np.linalg.inv(T).dot(H.dot(T))
+        print Rshifted
+        
+        point1 =  Rshifted.dot(np.array([[0.,0.,0.]]).T)
+        print point1
+        
+        image = cv2.warpPerspective(img2, Rshifted, (img2.shape[1], img2.shape[0]))
+        
+        cv2.circle(img2, (int(point1[0]), int(point1[1])), 5, (255, 0, 255), 1) 
+        
+        cv2.imshow('window2', image)
+        '''
+        
+        '''
         src = np.array([self.c[0],self.c[1],self.c[2],self.c[3]],np.float32)
         dst = np.array([[0.,0.],[0.,128.],[128.,128.],[128.,0.]],np.float32)
         
         
         H =  cv2.getPerspectiveTransform(src, dst)
+        
+        image = cv2.warpPerspective(img2, H, (img2.shape[1], img2.shape[0]))
+        
+        
+        cv2.imshow('window', image)
+        
                                        
         c = -self.world_to_pixel_distorted(centre, R, t).T
         print c
@@ -594,7 +846,7 @@ class FeatureTracker:
         
         if k == None:
             k = self.distCoeffs
-        print "k : \r\n", k
+        #print "k : \r\n", k
         k1 = k[0][0] # Radial coeff 1
         k2 = k[0][1] # Radial coeff 2
         p1 = k[0][2] # Tangential coeff 1
