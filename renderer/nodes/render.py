@@ -114,11 +114,13 @@ class World(pyglet.window.Window):
     def load_nparray(npimage):
         # load_nparray MUST be called in the same thread as pyglet is running
         # gl###### texture loading commands will NOT load textures otherwise
-        # There is no visible error in this case, but textures blank white
+        # There is no visible error in this case, but textures are blank white
         
+        #cv2.imshow('windowwww', npimage)
+        #cv2.waitKey(0)
         
         print npimage.shape
-        image = pyglet.image.ImageData(640, 360, 'BGR', npimage.tostring())
+        image = pyglet.image.ImageData(npimage.shape[1], npimage.shape[0], 'BGR', npimage.tostring())
         print image        
         print image.pitch        
         print image.format
@@ -134,14 +136,14 @@ class World(pyglet.window.Window):
                                                      image.width * -3))
         glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR )
         glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR )
+        #glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE )
+        #glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR )
                                                      
         return texture
     
     def load_textures2(self):
         textures = []
         
-        cv2.namedWindow( "window" )
-    
         npimage = cv2.imread('2.png')
         print npimage.shape
         image = pyglet.image.ImageData(16, 16, 'BGR', npimage.tostring())
@@ -200,17 +202,16 @@ class World(pyglet.window.Window):
         #    wall = Wall(texture, (0, 0, 0), i)
         #    walls.append(wall)
         #    i = i + 45.
-        wall = Wall(self.textures[0], (-1., 0., -3.), (3., 0., -3.), (3., 2.25, -3.), (-1., 2.25, -3.))
+        wall = Wall(self.textures[-1], (-1., 0., -3.), (3., 0., -3.), (3., 2.25, -3.), (-1., 2.25, -3.), (0,0.297), (0.625,0.297), (0.625,1), (0,1))
         walls.append(wall)
-        wall = Wall(self.textures[0], (3., 0., -3.), (3., 0., 1.), (3., 2.25, 1.), (3., 2.25, -3.))
+        wall = Wall(self.textures[0], (3., 0., -3.), (3., 0., 1.), (3., 2.25, 1.), (3., 2.25, -3.), (0,0), (1,0), (1,1), (0,1))
         walls.append(wall)
-        wall = Wall(self.textures[0], (-1., 0., 1.), (-1., 0., -3.), (-1., 2.25, -3.), (-1., 2.25, 1.))
+        wall = Wall(self.textures[0], (-1., 0., 1.), (-1., 0., -3.), (-1., 2.25, -3.), (-1., 2.25, 1.), (0,0), (1,0), (1,1), (0,1))
         walls.append(wall)
         
         return walls
  
     def update(self, _):
-        # Check if the spacebar is currently pressed:
         if self.keys[pyglet.window.key.W]:
             self.viewer_pos = self.viewer_pos[0]+.1*np.sin(self.angle[0]/180.*np.pi),self.viewer_pos[1]-.1*np.sin(self.angle[1]/180.*np.pi) ,self.viewer_pos[2]-.1*np.cos(self.angle[0]/180.*np.pi)*np.cos(self.angle[1]/180.*np.pi)
         if self.keys[pyglet.window.key.S]:
@@ -232,6 +233,7 @@ class World(pyglet.window.Window):
         #self.draw_images()
         for wall in self.walls:
             self.draw_wall(wall)
+        
             
     def add_wall(self):
         c = self.corner_buffer
@@ -240,11 +242,16 @@ class World(pyglet.window.Window):
         c2 = np.array([c[3], c[4], c[5]])
         c3 = np.array([c[6], c[7], c[8]])
         c4 = np.array([c[9], c[10], c[11]])
-        wall = Wall(self.load_nparray(self.texture_buffer), c1, c2, c3, c4)
-        print wall.c1
-        print wall.c2
-        print wall.c3
-        print wall.c4
+        t1 = np.array([c[12], c[13]])
+        t2 = np.array([c[14], c[15]])
+        t3 = np.array([c[16], c[17]])
+        t4 = np.array([c[18], c[19]])
+        wall = Wall(self.load_nparray(self.texture_buffer), c1, c2, c3, c4, t4, t3, t2, t1)
+        #wall = Wall(self.load_nparray(self.texture_buffer), c1, c2, c3, c4, (0,0), (1,0), (1,1), (0,1))
+        print wall.t1
+        print wall.t2
+        print wall.t3
+        print wall.t4
         self.walls.append(wall)
 
     def draw_wall(self, wall):        
@@ -255,10 +262,14 @@ class World(pyglet.window.Window):
         glTranslatef(-self.viewer_pos[0], -self.viewer_pos[1], -self.viewer_pos[2])        
         glBindTexture(wall.texture.target, wall.texture.id)
         glBegin(GL_QUADS)
-        glTexCoord2f(0.0, 0.0); glVertex3f( wall.c1[0], wall.c1[1], wall.c1[2])
-        glTexCoord2f(1.0, 0.0); glVertex3f( wall.c2[0], wall.c2[1], wall.c2[2])
-        glTexCoord2f(1.0, 1.0); glVertex3f( wall.c3[0], wall.c3[1], wall.c3[2])
-        glTexCoord2f(0.0, 1.0); glVertex3f( wall.c4[0], wall.c4[1], wall.c4[2])
+        glTexCoord2f(wall.t1[0], wall.t1[1]); glVertex3f( wall.c1[0], wall.c1[1], wall.c1[2])
+        glTexCoord2f(wall.t2[0], wall.t2[1]); glVertex3f( wall.c2[0], wall.c2[1], wall.c2[2])
+        glTexCoord2f(wall.t3[0], wall.t3[1]); glVertex3f( wall.c3[0], wall.c3[1], wall.c3[2])
+        glTexCoord2f(wall.t4[0], wall.t4[1]); glVertex3f( wall.c4[0], wall.c4[1], wall.c4[2])
+        #glTexCoord2f(0,0); glVertex3f( wall.c1[0], wall.c1[1], wall.c1[2])
+        #glTexCoord2f(1,0); glVertex3f( wall.c2[0], wall.c2[1], wall.c2[2])
+        #glTexCoord2f(1,1); glVertex3f( wall.c3[0], wall.c3[1], wall.c3[2])
+        #glTexCoord2f(0,1); glVertex3f( wall.c4[0], wall.c4[1], wall.c4[2])
         glEnd()
         glPopMatrix()
  
@@ -270,11 +281,15 @@ class World(pyglet.window.Window):
         glMatrixMode(GL_MODELVIEW)
         
 class Wall():
-    def __init__(self, texture, c1, c2, c3, c4):
+    def __init__(self, texture, c1, c2, c3, c4, t1, t2, t3, t4):
         self.c1 = c1
         self.c2 = c2
         self.c3 = c3
         self.c4 = c4
+        self.t1 = t1
+        self.t2 = t2
+        self.t3 = t3
+        self.t4 = t4
         self.texture = texture
         
 
