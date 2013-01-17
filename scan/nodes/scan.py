@@ -159,7 +159,7 @@ class ScanController:
         position1, quaternion1 = self.tf.lookupTransform("ardrone_base_link","world", deadreckon_common_t)     
         
         twist = gm.Twist()
-        twist.linear.z  = +0.05
+        twist.linear.z  = +0.25
         twist_pub.publish(twist)
         done = False
         
@@ -167,6 +167,7 @@ class ScanController:
             deadreckon_common_t = self.tf.getLatestCommonTime("ardrone_base_link", "world")
             self.tf.waitForTransform("ardrone_base_link","world", deadreckon_common_t, rospy.Duration(4))
             position2, quaternion2 = self.tf.lookupTransform("ardrone_base_link","world", deadreckon_common_t)
+            print "Height Change : ", position2[2]-position1[2]
             if (position2[2]-position1[2]> 0.3):
                 done = True
                 twist = gm.Twist()
@@ -204,7 +205,7 @@ class ScanController:
             self.tf.waitForTransform("ardrone_base_link","world", deadreckon_common_t, rospy.Duration(4))
             position2, quaternion2 = self.tf.lookupTransform("ardrone_base_link","world", deadreckon_common_t)
             quaternion2 = tf.transformations.quaternion_inverse(quaternion2)
-            relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.quaternion1), self.quaternion2)
+            relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(quaternion1), quaternion2)
             angles = tf.transformations.euler_from_quaternion(relative_quat)
             if (angles[2] > np.pi/2.):
                 done = True
@@ -229,7 +230,7 @@ class ScanController:
         # Descend 0.3m
         """
         twist = gm.Twist()
-        twist.linear.z  = +0.05
+        twist.linear.z  = -0.25
         twist_pub.publish(twist)
         done = False
         
@@ -656,6 +657,7 @@ class FeatureTracker:
             self.pts1 = pts
             self.kp1 = kp
             self.desc1 = desc
+            self.time_prev = self.time_now
         else:
             self.grey_now = frame
             self.pts2 = pts
