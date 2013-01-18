@@ -168,7 +168,7 @@ class ScanController:
             self.tf.waitForTransform("ardrone_base_link","world", deadreckon_common_t, rospy.Duration(4))
             position2, quaternion2 = self.tf.lookupTransform("ardrone_base_link","world", deadreckon_common_t)
             print "Height Change : ", position2[2]-position1[2]
-            if (position2[2]-position1[2]> 0.3):
+            if (position1[2]-position2[2]> 0.3):
                 done = True
                 twist = gm.Twist()
                 twist_pub.publish(twist)
@@ -961,7 +961,8 @@ class FeatureTracker:
         numeric_accuracy = np.array([numeric_accuracy]).transpose()
         numeric_accuracy = np.hstack((numeric_accuracy, numeric_accuracy, numeric_accuracy)).transpose()        
         points3D_image = np.reshape(points3D_image2[numeric_accuracy==False], (3, -1))
-      
+        
+        points3D_image = points3D_image2
         
         # Output number of triangulated points
         triangulated = len(points3D_image[0])+0.
@@ -1026,10 +1027,10 @@ class FeatureTracker:
         # Publish Cloud
         # Note: img1 camera is taken to be the origin, so time_prev NOT
         # time_now is used.        
-        if (forward_triangulated/triangulated) > 0.5:
-            #print "-------------\r\n-------------\r\n-------------\r\n-------------\r\n"
-            points3D= zip(*np.vstack((points3D_image[0], points3D_image[1], points3D_image[2])))
-            self.publish_cloud(points3D, self.time_prev)
+        #if (forward_triangulated/triangulated) > 0.5:
+        print "Publishing Point cloud"
+        points3D= zip(*np.vstack((points3D_image[0], points3D_image[1], points3D_image[2])))
+        self.publish_cloud(points3D, self.time_prev)
         
         
     def imgproc(self, d):
