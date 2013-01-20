@@ -56,6 +56,7 @@ import matplotlib.pyplot as plot
 from mpl_toolkits.mplot3d import Axes3D
 import tf
 from sensor_msgs.msg import PointCloud
+from sensor_msgs.msg import PointCloud2
 from std_msgs.msg import Empty
 from nav_msgs.msg import Path
 import math
@@ -589,6 +590,26 @@ class FeatureTracker:
         self.cloud_pub.publish(cloud)
         self.cloud_pub2.publish(cloud2)
         
+    publish_cloud2(self, points, timestamp):
+        cloud2 = PointCloud2()
+        cloud2.header = timestamp
+        cloud2.width = len(points[0])
+        cloud2.height = 1
+        cloud2.fields.resize(3)
+        cloud2.fields[0].name = 'x'
+        cloud2.fields[1].name = 'y'
+        cloud2.fields[2].name = 'z'
+        offset = 0
+        d = 0
+        # All offsets are *4, as all field data types are float32
+        for (size_t d = 0; d < output.fields.size (); ++d, offset += 4):
+            cloud2.fields[d].offset = offset
+            cloud2.fields[d].datatype = 7 # FLOAT32 datatype
+            cloud2.fields[d].count  = 1
+            offset = offset + 4
+            d = d + 1
+        
+         
         
     def world_to_pixel_distorted(self, pts, R, t, K=None, k=None):
         """Takes 3D world co-ord and reverse projects using K and distCoeffs"""
