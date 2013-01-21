@@ -1082,6 +1082,7 @@ class FeatureTracker:
         success, i1_pts, i2_pts = self.find_and_match_points(grey_now)
         self.i1_pts_draw = i1_pts
         self.i2_pts_draw = i2_pts
+        
         if not success:
             return
         #print "No of matched points : ", len(i1_pts)
@@ -1122,6 +1123,7 @@ class FeatureTracker:
         else:
             print "WARNING: No calibration info. Cannot Continue"
             return
+        
         
         times.append(time.time()-time_offset)
         
