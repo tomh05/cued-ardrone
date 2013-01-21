@@ -251,10 +251,10 @@ int main (int argc, char** argv)
     ros::NodeHandle nh;
 
     // Create a ROS subscriber for the input point cloud
-    ros::Subscriber sub = nh.subscribe ("pointCloud", 1, cloud_cb);
+    ros::Subscriber sub = nh.subscribe ("/scan/absolute_cloud", 1, cloud_cb);
 
     // Create a ROS publisher for the output point cloud
-    pub = nh.advertise<sensor_msgs::PointCloud2> ("output", 1);
+    pub = nh.advertise<sensor_msgs::PointCloud2> ("/point_handler/absolute_cloud", 1);
     
     // Create polygon publisher
     polygon_pub = nh.advertise<geometry_msgs::PolygonStamped>("/point_handler/polygons", 512);
