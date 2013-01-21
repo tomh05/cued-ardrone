@@ -1,6 +1,7 @@
 #include <iostream>
 // ROS specific includes
 #include <ros/ros.h>
+#include <std_msgs/Empty.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <sensor_msgs/PointCloud.h>
 #include <sensor_msgs/point_cloud_conversion.h>
@@ -16,17 +17,103 @@
 #include <pcl/features/normal_3d.h>
 #include <pcl/surface/gp3.h>
 
+#include <pcl/ModelCoefficients.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+
 ros::Publisher pub;
 ros::Publisher polygon_pub;
+ros::Publisher poly_clear_pub;
+sensor_msgs::PointCloud2 cloud2_buffer;
+bool first_time = true;
 
 void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
 {
     
-    // Convert to PointCloudT for pcl
-    sensor_msgs::PointCloud2 cloud2;
-    sensor_msgs::convertPointCloudToPointCloud2( *cloud1, cloud2);
+    
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
-    pcl::fromROSMsg (cloud2, *cloud);
+    
+    if (first_time)
+    {      
+        sensor_msgs::convertPointCloudToPointCloud2( *cloud1, cloud2_buffer);
+        cloud2_buffer.header.frame_id = "/world";
+        first_time = false;
+    }
+    else
+    {
+        sensor_msgs::PointCloud2 cloud2;
+        sensor_msgs::convertPointCloudToPointCloud2( *cloud1, cloud2);        
+        // Merge new cloud into old
+        /*
+        std::cout<<cloud2_buffer.height<<", "<<cloud2.height<<std::endl;
+        std::cout<<cloud2_buffer.width<<", "<<cloud2.width<<std::endl;
+        std::cout<<cloud2_buffer.fields.size()<<", "<<cloud2.fields.size()<<std::endl;
+        std::cout<<cloud2_buffer.point_step<<", "<<cloud2.point_step<<std::endl;
+        std::cout<<cloud2_buffer.row_step<<", "<<cloud2.row_step<<std::endl;
+        std::cout<<cloud2_buffer.data.size()<<", "<<cloud2.data.size()<<std::endl;
+        */
+        
+        /*
+        cloud2_buffer.data.reserve(cloud2_buffer.data.size()+cloud2.data.size());
+        // Shift existing y to start of new y section
+        cloud2_buffer.data.insert(cloud2_buffer.data[cloud2_buffer.row_step+cloud2.row_step], cloud2_buffer.data[cloud2_buffer.row_step], cloud2_buffer.data[2*cloud2_buffer.row_step]);
+        // Append new y
+        cloud2_buffer.data.insert(cloud2_buffer.data[2*cloud2_buffer.row_step+cloud2.row_step], cloud2.data[cloud2.row_step], cloud2.data[2*cloud2.row_step]);
+        // Shift existing z
+        cloud2_buffer.data.insert(cloud2_buffer.data[2*(cloud2_buffer.row_step+cloud2.row_step)], cloud2_buffer.data[2*cloud2_buffer.row_step], cloud2_buffer.data[3*cloud2_buffer.row_step]);
+        // Append new z
+        cloud2_buffer.data.insert(cloud2_buffer.data[3*cloud2_buffer.row_step+2*cloud2.row_step], cloud2.data[2*cloud2.row_step], cloud2.data[3*cloud2.row_step]);
+        // Overwrite old existing y with new extended x
+        cloud2_buffer.data.insert(cloud2_buffer.data[cloud2_buffer.row_step], cloud2.data.begin(), cloud2.data[cloud2.row_step]);
+        */
+        
+        std::vector<uint8_t> data;
+        data.reserve(cloud2_buffer.data.size()+cloud2.data.size());
+        
+        // Note: The values passed here are iterators, so the '+' is infact shifting the iterator rather than adding to it
+        
+        data.insert(data.end(), cloud2_buffer.data.begin(), cloud2_buffer.data.begin()+cloud2_buffer.row_step);
+        data.insert(data.end(), cloud2.data.begin(), cloud2.data.begin()+cloud2.row_step);
+        
+        data.insert(data.end(), cloud2_buffer.data.begin()+cloud2_buffer.row_step, cloud2_buffer.data.begin()+2*cloud2_buffer.row_step);
+        data.insert(data.end(), cloud2.data.begin()+cloud2.row_step, cloud2.data.begin()+2*cloud2.row_step);
+        
+        data.insert(data.end(), cloud2_buffer.data.begin()+2*cloud2_buffer.row_step, cloud2_buffer.data.begin()+3*cloud2_buffer.row_step);
+        data.insert(data.end(), cloud2.data.begin()+2*cloud2.row_step, cloud2.data.begin()+3*cloud2.row_step);
+        
+        cloud2_buffer.data = data;
+        
+        
+        cloud2_buffer.width += cloud2.width;
+        cloud2_buffer.row_step += cloud2.row_step;
+        
+        
+        /*
+        for (int i = 0; i< cloud2.data.size(); i++)
+        {
+            cloud2_buffer.data.push_back(cloud2.data[i]);
+        }
+        */
+        
+        
+        /*
+        
+        
+        sensor_msgs::PointCloud2 test_cloud2;
+        pcl::toROSMsg(*cloud, test_cloud2);
+        
+        sensor_msgs::PointCloud test_cloud;
+        sensor_msgs::convertPointCloud2ToPointCloud(test_cloud2, test_cloud);
+        for (int i = 0; i<test_cloud.points.size(); i++)
+        {
+          std::cout<<test_cloud.points[i].x<<", "<<test_cloud.points[i].y<<", "<<test_cloud.points[i].z<<std::endl;
+        }
+        */
+        
+    }
+    
+    pcl::fromROSMsg (cloud2_buffer, *cloud);
 
     // Normal estimation
     pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> n;
@@ -71,7 +158,13 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
     // Additional vertex information
     std::vector<int> parts = gp3.getPartIDs();
     std::vector<int> states = gp3.getPointStates();
+    
+    poly_clear_pub.publish(std_msgs::Empty());
 
+    sensor_msgs::PointCloud cloud_buffer;
+    sensor_msgs::convertPointCloud2ToPointCloud(cloud2_buffer, cloud_buffer);
+    
+    std::cout<<"Producing polygons"<<std::endl;
     for (int i = 0; i<triangles.polygons.size(); i++)
     {
         /*std::cout<<triangles.polygons[i]<<std::endl;
@@ -85,24 +178,24 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
         geometry_msgs::Polygon polygon;
         geometry_msgs::Point32 point32;
         
-        point32.x = (*cloud1).points[triangles.polygons[i].vertices[0]].x;
-        point32.y = (*cloud1).points[triangles.polygons[i].vertices[0]].y;
-        point32.z = (*cloud1).points[triangles.polygons[i].vertices[0]].z;
+        point32.x = cloud_buffer.points[triangles.polygons[i].vertices[0]].x;
+        point32.y = cloud_buffer.points[triangles.polygons[i].vertices[0]].y;
+        point32.z = cloud_buffer.points[triangles.polygons[i].vertices[0]].z;
         polygon.points.push_back(point32);
         
-        point32.x = (*cloud1).points[triangles.polygons[i].vertices[1]].x;
-        point32.y = (*cloud1).points[triangles.polygons[i].vertices[1]].y;
-        point32.z = (*cloud1).points[triangles.polygons[i].vertices[1]].z;
+        point32.x = cloud_buffer.points[triangles.polygons[i].vertices[1]].x;
+        point32.y = cloud_buffer.points[triangles.polygons[i].vertices[1]].y;
+        point32.z = cloud_buffer.points[triangles.polygons[i].vertices[1]].z;
         polygon.points.push_back(point32);
         
-        point32.x = (*cloud1).points[triangles.polygons[i].vertices[2]].x;
-        point32.y = (*cloud1).points[triangles.polygons[i].vertices[2]].y;
-        point32.z = (*cloud1).points[triangles.polygons[i].vertices[2]].z;
+        point32.x = cloud_buffer.points[triangles.polygons[i].vertices[2]].x;
+        point32.y = cloud_buffer.points[triangles.polygons[i].vertices[2]].y;
+        point32.z = cloud_buffer.points[triangles.polygons[i].vertices[2]].z;
         polygon.points.push_back(point32);
         
         polygonStamped.polygon = polygon;
         polygonStamped.header.frame_id = "/world";
-        
+        //std::cout<<i<<std::endl;
         polygon_pub.publish(polygonStamped);
     }
     
@@ -113,8 +206,42 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
     
     std::cout<<"Done"<<std::endl;
     
-    // Publish the data
-    pub.publish (cloud2);
+    // Begin plane fitting
+    
+    pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
+    pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
+    // Create the segmentation object
+    pcl::SACSegmentation<pcl::PointXYZ> seg;
+    // Optional
+    seg.setOptimizeCoefficients (true);
+    // Mandatory
+    seg.setModelType (pcl::SACMODEL_PLANE);
+    seg.setMethodType (pcl::SAC_RANSAC);
+    seg.setDistanceThreshold (0.1);
+
+    seg.setInputCloud ((*cloud).makeShared ());
+    seg.segment (*inliers, *coefficients);
+
+    if (inliers->indices.size () == 0)
+    {
+        PCL_ERROR ("Could not estimate a planar model for the given dataset.");
+        return;
+    }
+
+    std::cerr << "Model coefficients: " << coefficients->values[0] << " " 
+                                      << coefficients->values[1] << " "
+                                      << coefficients->values[2] << " " 
+                                      << coefficients->values[3] << std::endl;
+
+    std::cerr << "Model inliers: " << inliers->indices.size () << std::endl;
+    for (size_t i = 0; i < inliers->indices.size (); ++i)
+    {
+        std::cerr << inliers->indices[i] << "    " << (*cloud).points[inliers->indices[i]].x << " "
+                                                << (*cloud).points[inliers->indices[i]].y << " "
+                                                << (*cloud).points[inliers->indices[i]].z << std::endl;
+    }
+        
+    pub.publish(cloud2_buffer);
 }
 
 int main (int argc, char** argv)
@@ -130,8 +257,12 @@ int main (int argc, char** argv)
     pub = nh.advertise<sensor_msgs::PointCloud2> ("output", 1);
     
     // Create polygon publisher
-    polygon_pub = nh.advertise<geometry_msgs::PolygonStamped>("polygons", 512);
+    polygon_pub = nh.advertise<geometry_msgs::PolygonStamped>("/point_handler/polygons", 512);
+
+    // Create polygon publisher
+    poly_clear_pub = nh.advertise<std_msgs::Empty>("/point_handler/poly_clear", 512);
 
     // Spin
     ros::spin ();
 }
+
