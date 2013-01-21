@@ -214,6 +214,7 @@ class FeatureTracker:
         return drone_angles
         
     def templateTrack(self):
+        
         self.t_debug_text = []
         grey_now = self.grey_now
         
@@ -411,12 +412,14 @@ class FeatureTracker:
         t_i1_pts_corr = np.array(np.hstack((p_x, p_y)), dtype=np.float32)
         '''
         
+        
+        
         """====================================================================
         Draw Matches
         ===================================================================="""
         self.template_visualise(grey_now, t_i1_pts_corr, t_i2_pts_corr, True, R, t)
         
-        self.template_wall(R, t, grey_now)
+        
         
         return True
     
@@ -488,19 +491,26 @@ class FeatureTracker:
         
         print "Corners in image coordinates w.r.t drone:\r\n", corners_rot
         
+        self.tf.waitForTransform("ardrone_base_frontcam", "world", self.time_now, rospy.Duration(16))
+        position, quat = self.tf.lookupTransform("ardrone_base_frontcam", "world", self.time_now)
         
         
-        self.tf.waitForTransform("world", "ardrone_base_frontcam", self.time_now, rospy.Duration(16))
-        position, self.world_to_drone_quaternion = self.tf.lookupTransform("world", "ardrone_base_frontcam", self.time_now)
-        
-        position = np.array((position))
+        # Get position of drone in current image coordinates
+        position = -np.array((position))
         print "Drone position :\r\n", position
+        self.t_debug_text.append(position)
+        
+        # Form ready to add
         position = np.hstack((position, position))
         position = np.reshape(np.hstack((position, position)), (-1, 3))
         
+        # Shift to absolute image co-ords
+        corners_absolute_image = corners_rot.T + position
         
-        corner_absolute_image = corners_rot.T + position
-        print "Absolute corners :\r\n", corner_absolute_image
+        #corners_absolute_drone = tf.transformations.quaternion_matrix(quat)[:3, :3].dot(corners_absolute_image.T).T
+        corners_absolute_drone = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(quat))[:3, :3].dot(corners_absolute_image.T).T
+        
+        print "Absolute corners :\r\n", corners_absolute_drone
         
         #corners_rot_drone_coords = np.array((corners_rot[2], -corners_rot[0], -corners_rot[1])).T
         
@@ -509,18 +519,18 @@ class FeatureTracker:
         
         #print wall.c1
         float_array = []
-        float_array.append(corner_absolute_image[0,0])
-        float_array.append(corner_absolute_image[0,1])
-        float_array.append(corner_absolute_image[0,2])
-        float_array.append(corner_absolute_image[1,0])
-        float_array.append(corner_absolute_image[1,1])
-        float_array.append(corner_absolute_image[1,2])
-        float_array.append(corner_absolute_image[2,0])
-        float_array.append(corner_absolute_image[2,1])
-        float_array.append(corner_absolute_image[2,2])
-        float_array.append(corner_absolute_image[3,0])
-        float_array.append(corner_absolute_image[3,1])
-        float_array.append(corner_absolute_image[3,2])
+        float_array.append(corners_absolute_drone[0,0])
+        float_array.append(corners_absolute_drone[0,1])
+        float_array.append(corners_absolute_drone[0,2])
+        float_array.append(corners_absolute_drone[1,0])
+        float_array.append(corners_absolute_drone[1,1])
+        float_array.append(corners_absolute_drone[1,2])
+        float_array.append(corners_absolute_drone[2,0])
+        float_array.append(corners_absolute_drone[2,1])
+        float_array.append(corners_absolute_drone[2,2])
+        float_array.append(corners_absolute_drone[3,0])
+        float_array.append(corners_absolute_drone[3,1])
+        float_array.append(corners_absolute_drone[3,2])
         print "Arrayed absolute image coordinates :\r\n", float_array
        
         #pub = rospy.Publisher('/ardrone/walls',Wall);
@@ -995,6 +1005,9 @@ class FeatureTracker:
         # Draw template overlay
         if isTemplate:
             self.template_overlay(R, t, img2)
+        
+        if isTemplate:
+            self.template_wall(R, t, img)
         
         # Draw matches
         if pts1 != None and pts2 != None:
