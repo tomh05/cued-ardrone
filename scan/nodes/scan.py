@@ -157,7 +157,7 @@ class ScanController:
         """
         deadreckon_common_t = self.tf.getLatestCommonTime("ardrone_base_link", "world")
         self.tf.waitForTransform("ardrone_base_link","world", deadreckon_common_t, rospy.Duration(4))
-        position1, quaternion1 = self.tf.lookupTransform("ardrone_base_link","world", deadreckon_common_t)     
+        position1, quaternion1 = self.tf.lookupTransform("ardrone_base_link","world", deadreckon_common_t)   
         
         twist = gm.Twist()
         twist.linear.z  = +0.25
@@ -169,7 +169,7 @@ class ScanController:
             self.tf.waitForTransform("ardrone_base_link","world", deadreckon_common_t, rospy.Duration(4))
             position2, quaternion2 = self.tf.lookupTransform("ardrone_base_link","world", deadreckon_common_t)
             print "Height Change : ", position2[2]-position1[2]
-            if (position1[2]-position2[2]> 0.3):
+            if (position2[2]-position1[2]> 0.3):
                 done = True
                 twist = gm.Twist()
                 twist_pub.publish(twist)
@@ -190,7 +190,9 @@ class ScanController:
         """
         # Rotate 90 deg
         """
-        print "Rotating\r\n"
+        print "Rotating\r\n"       
+        
+        
         deadreckon_common_t = self.tf.getLatestCommonTime("ardrone_base_link", "world")
         self.tf.waitForTransform("ardrone_base_link","world", deadreckon_common_t, rospy.Duration(4))
         position1, quaternion1 = self.tf.lookupTransform("ardrone_base_link","world", deadreckon_common_t)
@@ -239,7 +241,7 @@ class ScanController:
             deadreckon_common_t = self.tf.getLatestCommonTime("ardrone_base_link", "world")
             self.tf.waitForTransform("ardrone_base_link","world", deadreckon_common_t, rospy.Duration(4))
             position2, quaternion2 = self.tf.lookupTransform("ardrone_base_link","world", deadreckon_common_t)
-            if (position1[2]-position2[2]> 0.3):
+            if (position2[2]-position1[2]< -0.3):
                 done = True
                 twist = gm.Twist()
                 twist_pub.publish(twist)
@@ -280,8 +282,8 @@ class FeatureTracker:
         self.desc1 = None
         self.kp1 = None
         cv2.namedWindow("track")
-        self.cloud_pub = rospy.Publisher('pointCloud', PointCloud)
-        self.cloud_pub2 = rospy.Publisher('pointCloud_no_floor', PointCloud)
+        self.cloud_pub = rospy.Publisher('\scan\absolute_cloud', PointCloud)
+        self.cloud_pub2 = rospy.Publisher('\scan\relative_cloud', PointCloud)
         self.prev_position = None
         self.prev_quat = None
         self.prev_prev_position = None
@@ -569,28 +571,52 @@ class FeatureTracker:
         
         
     def publish_cloud(self, points, timestamp):
+        """ Builds and publishes absolute and relative point clouds"""
+        
+        """====================================================================
+        # Absolute Point Cloud
+        ===================================================================="""
         cloud = PointCloud()
         cloud.header.stamp = timestamp
-        cloud.header.frame_id = "/ardrone_base_frontcam" # Should be front camera really
-        cloud2 = PointCloud()
-        cloud2.header.stamp = timestamp
-        cloud2.header.frame_id = "/ardrone_base_frontcam" # Should be front camera really
+        cloud.header.frame_id = "\world"
         
+        print "Pre-shift points:\r\n ", points
+        sub = np.subtract(points, self.image_position1)
+        print "Post-shift points:\r\n ", sub
         
-        for i, p in enumerate(points): # Ideally done without a loop
+        # Reshape for easy clouding
+        sub = zip(*np.vstack((sub[0], sub[1], sub[2])))
+
+        # Build absolute cloud
+        for i, p in enumerate(sub):
             cloud.points.append(gm.Point32())
             cloud.points[i].x = p[0]
             cloud.points[i].y = p[1]
             cloud.points[i].z = p[2]
-            if p[2] > 0: # Only points above drone image axis (crude removing of floor)
-                cloud2.points.append(gm.Point32())
-                cloud2.points[len(cloud2.points)-1].x = p[0]
-                cloud2.points[len(cloud2.points)-1].y = p[1]
-                cloud2.points[len(cloud2.points)-1].z = p[2]
         self.cloud_pub.publish(cloud)
-        self.cloud_pub2.publish(cloud2)
         
-    publish_cloud2(self, points, timestamp):
+        """====================================================================
+        # Relative Point Cloud
+        ===================================================================="""        
+        cloud = PointCloud()
+        cloud.header.stamp = timestamp
+        cloud.header.frame_id = "\ardrone_base_frontcam"
+        # Reshape for easy clouding
+        sub = zip(*np.vstack((points[0], points[1], points[2])))
+        
+        # Build relative cloud
+        for i, p in enumerate(sub):
+            cloud.points.append(gm.Point32())
+            cloud.points[i].x = p[0]
+            cloud.points[i].y = p[1]
+            cloud.points[i].z = p[2]
+        self.cloud_pub2.publish(cloud)
+
+        
+    def publish_cloud2(self, points, timestamp):
+        """Publishing PointCloud2 type
+        Arguable not worth it due to difficulty/speed in forming binary blob
+        in python. More efficient to convert with c++ at the other end"""
         cloud2 = PointCloud2()
         cloud2.header = timestamp
         cloud2.width = len(points[0])
@@ -693,6 +719,10 @@ class FeatureTracker:
             return
         
         rospy.sleep(0.1)
+        
+        """====================================================================
+        # World co-ordinate handling (note -p1 != pi)
+        ===================================================================="""
         self.tf.waitForTransform("world", "ardrone_base_frontcam", self.time_buffer, rospy.Duration(16))
         
         # Get tf lookup in reverse frame, this ensures translation is in world axis
@@ -701,12 +731,26 @@ class FeatureTracker:
         # Flip quat to origin-to-drone-image
         quaternion = tf.transformations.quaternion_inverse(q1)
         
+        """====================================================================
+        # Image co-ordinate handling
+        ===================================================================="""
+        
+        self.tf.waitForTransform("ardrone_base_frontcam", "world", self.time_now, rospy.Duration(16))
+        pi, qi = self.tf.lookupTransform("ardrone_base_frontcam", "world", self.time_now)
+        pi = -np.array((pi))
+        qi = tf.transformation.quaternion_inverse(qi)
+        
+        
         if frame_no == 1:
             self.position1 = position
             self.quaternion1 = quaternion
+            self.image_position1 = pi
+            self.image_quaternion1 = qi
         else:
             self.position2 = position
             self.quaternion2 = quaternion
+            self.image_position2 = pi
+            self.image_quaternion2 = qi
 
     def get_change_in_tf(self):       
         
@@ -718,7 +762,7 @@ class FeatureTracker:
         
         R = tf.transformations.quaternion_matrix(self.quaternion2)[:3, :3]
         trans = R.dot(trans)
-        # Re-order axis into image co-ords
+        # Re-order axis into image not necessary as frontcam is image co-ords
         self.image_coord_trans = np.array([trans[0], trans[1], trans[2]])
         
         # Get relative quaternion
@@ -991,8 +1035,7 @@ class FeatureTracker:
         # time_now is used.        
         #if (forward_triangulated/triangulated) > 0.5:
         print "Publishing Point cloud"
-        points3D= zip(*np.vstack((points3D_image[0], points3D_image[1], points3D_image[2])))
-        self.publish_cloud(points3D, self.time_prev)
+        self.publish_cloud(points3D_image, self.time_prev)
         
         
     def imgproc(self, d):
