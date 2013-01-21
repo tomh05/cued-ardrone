@@ -815,11 +815,11 @@ class FeatureTracker:
             cv2.putText(img2, str(l), (25,25*(i+1)), cv2.FONT_HERSHEY_PLAIN, 1, (63, 63, 255))
         
         # Reproject triangulated points
-        for p in self.reprojected:
-            cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (220, 20, 60), 1)
+        for p in self.reprojected_frame1:
+            cv2.circle(img2, (int(p[0]),int(p[1])), 3, (220, 20, 60), 1)
             #cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 63, 63), 1)
-        for p in self.reprojected2:
-            cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 182, 193), 1)
+        for p in self.reprojected_frame2:
+            cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 182, 193), 1)
             #cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 63, 63), 1)
         
         # Draw
@@ -830,65 +830,6 @@ class FeatureTracker:
         # Render Windows
         cv2.waitKey(10)
 
-    def homography_to_pose(self, H):
-        """input homography[9] - 3x3 Matrix
-        // please note that homography should be computed
-        // using centered object/reference points coordinates
-        // for example coords from [0, 0], [320, 0], [320, 240], [0, 240]
-        // should be converted to [-160, -120], [160, -120], [160, 120], [-160, 120]"""
-        print "H : \r\n", H
-        print "K : \r\n", self.cameraMatrix
-        print "K-1 : \r\n", self.inverseCameraMatrix
-        
-        '''
-        invH = np.array([[self.inverseCameraMatrix[0,0]*H[0,0]+self.inverseCameraMatrix[1,0]*H[0,1]+self.inverseCameraMatrix[2,0]*H[0,2]],
-                        [self.inverseCameraMatrix[0,1]*H[0,0]+self.inverseCameraMatrix[1,1]*H[0,1]+self.inverseCameraMatrix[2,1]*H[0,2]],
-                        [self.inverseCameraMatrix[0,2]*H[0,0]+self.inverseCameraMatrix[1,2]*H[0,1]+self.inverseCameraMatrix[2,2]*H[0,2]]])
-        print "invH man : ", invH
-        
- 
-                
-        
-        inverseCameraMatrix=self.inverseCameraMatrix.copy()
-        inverseCameraMatrix[2,0] = self.inverseCameraMatrix[0,2]
-        inverseCameraMatrix[2,1] = self.inverseCameraMatrix[1,2]
-        inverseCameraMatrix[0,2] = 0
-        inverseCameraMatrix[1,2] = 0        
-        
-        print "K-1 re : \r\n", inverseCameraMatrix
-        '''
-        
-        print "H vect : \r\n", H[:, :1]
-        invH = self.inverseCameraMatrix.dot(H[:, :1])
-        print "invH vec : \r\n", invH 
-        invH2 = self.inverseCameraMatrix.dot(H)
-        print "invh2 : \r\n", invH2
-        
-        # Get 1/mag
-        lam = 1/np.sqrt(invH.transpose().dot(invH))
-        print "lam : ", lam
-        
-        # Scale 
-        inverseCameraMatrix = self.inverseCameraMatrix.copy()*lam
-        print "Scaled : \r\n", inverseCameraMatrix
-
-        # Extract R. Force 3rd column to be orthonormal
-        R = inverseCameraMatrix.dot(H)
-        print "R before : \r\n", R
-        R[:, 2:3] = np.cross(R[:,:1].T,R[:,1:2].T).T
-        print "R : \r\n", R
-        
-        # Calc t (Scaled Kinv dot 3rd col of H)
-        t = inverseCameraMatrix.dot(H[:,2:3])
-        print "t : ", t
-        
-        # Transform T into next orthogonal matrix (Frobenius sense)
-        # Remember again that V is transpose compared to convention (R = USV)
-        U,S,V = np.linalg.svd(R)
-        
-        R = U.dot(V)
-        print "R ortho : \r\n", R
-    
     def tf_triangulate_points(self, pts1, pts2):
         """ Triangulates 3D points from set of matches co-ords using relative
         camera position determined from tf"""
@@ -909,8 +850,8 @@ class FeatureTracker:
         
         # These are arrays of the triangulated points reprojected back to the
         # image plane
-        self.reprojected = []
-        self.reprojected2 = []
+        self.reprojected_frame1 = []
+        self.reprojected_frame2 = []
         
         
         # Bottom out on first frame
@@ -996,8 +937,8 @@ class FeatureTracker:
         points3D_image= np.reshape(points3D_image[infront==True], (3, -1))
         
         # Triangulated points reprojected back to the image plane
-        self.reprojected2 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, np.diag((1,1,1)), np.array([[0],[0],[0]]))        
-        self.reprojected = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, R, t)
+        self.reprojected_frame1 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, np.diag((1,1,1)), np.array([[0],[0],[0]]))        
+        self.reprojected_frame2 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, R, t)
         
         
         '''
