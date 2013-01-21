@@ -22,15 +22,59 @@
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/segmentation/sac_segmentation.h>
 
+#include <pcl/filters/extract_indices.h>
+
 ros::Publisher pub;
 ros::Publisher polygon_pub;
 ros::Publisher poly_clear_pub;
 sensor_msgs::PointCloud2 cloud2_buffer;
 bool first_time = true;
 
+/* Note: This code makes extensive use of pcl tutorial code */
+
+void floor_plane_intersect(float a, float b, float c, float d)
+{
+    // Floor coefficients (plane at y = 0)
+    // Note: zeros skipped
+    float b_f = 1;
+    
+    // Find shared normal
+    // ie. n1 x n2
+    // Note: Cross product calc skips 0 vars
+    std::vector<float> n; // This compiler doesn't appear to support specific vector intialization
+    n.push_back(-c*b_f);
+    n.push_back(0);
+    n.push_back(a*b_f);
+    
+    // Find point on both planes
+    // We know both must have one at y=0
+    // let x = 0 or z = 0 depending on coefficients
+    // therefore cz = d or ax = d
+    std::vector<float> p;
+    if (a == 0)
+    {
+        // let x = 0        
+        p.push_back(0);
+        p.push_back(0);
+        p.push_back(d/c);
+    }   
+    else
+    {
+        // let y = 0
+        p.push_back(d/a);
+        p.push_back(0);
+        p.push_back(0);
+    }
+    std::cout<<"Line Equation of:"<<std::endl;
+    std::cout<<p[0]<<" + "<<n[0]<<"x"<<std::endl;
+    std::cout<<p[1]<<" + "<<n[1]<<"y"<<std::endl;
+    std::cout<<p[2]<<" + "<<n[2]<<"y"<<std::endl;
+}
+
+
 void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
 {
-    
+    std::cout<<"Receiving new cloud"<<std::endl;
     
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
     
@@ -110,6 +154,7 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
           std::cout<<test_cloud.points[i].x<<", "<<test_cloud.points[i].y<<", "<<test_cloud.points[i].z<<std::endl;
         }
         */
+        std::cout<<"Merged new cloud"<<std::endl;
         
     }
     
@@ -204,8 +249,10 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
     
     
     
-    std::cout<<"Done"<<std::endl;
+    std::cout<<"Done meshing"<<std::endl;
     
+    
+    std::cout<<"Plane Fitting"<<std::endl;
     // Begin plane fitting
     
     pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
@@ -217,8 +264,52 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
     // Mandatory
     seg.setModelType (pcl::SACMODEL_PLANE);
     seg.setMethodType (pcl::SAC_RANSAC);
+    seg.setMaxIterations(1000);
     seg.setDistanceThreshold (0.1);
+    
+    
+    // Prepare temporary Clouds
+    // cloud_p contains points supporting currently tested plane
+    // cloud_f contains points not yet fitted to a plane
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_p (new pcl::PointCloud<pcl::PointXYZ>), cloud_f (new pcl::PointCloud<pcl::PointXYZ>);
+    
+    // Create the filtering object
+    pcl::ExtractIndices<pcl::PointXYZ> extract;
 
+    int i = 0, nr_points = (int) (cloud)->points.size ();
+    // While 10% of the original cloud is still there
+    while (cloud->points.size () > 0.1 * nr_points)
+    {
+        // Segment the largest planar component from the remaining cloud
+        seg.setInputCloud (cloud);
+        seg.segment (*inliers, *coefficients);
+        if (inliers->indices.size () == 0)
+        {
+            std::cerr << "Could not estimate a planar model for the given dataset." << std::endl;
+            break;
+        }
+
+        // Extract the inliers
+        extract.setInputCloud (cloud);
+        extract.setIndices (inliers);
+        extract.setNegative (false);
+        extract.filter (*cloud_p);
+        std::cerr << "PointCloud representing the planar component: " << cloud_p->width * cloud_p->height << " data points." << std::endl;
+        std::cerr << "Model coefficients: " << coefficients->values[0] << " " 
+                                      << coefficients->values[1] << " "
+                                      << coefficients->values[2] << " " 
+                                      << coefficients->values[3] << std::endl;
+        floor_plane_intersect(coefficients->values[0], coefficients->values[1], coefficients->values[2], coefficients->values[3]);
+        // Create the filtering object
+        extract.setNegative (true);
+        extract.filter (*cloud_f);
+        cloud.swap (cloud_f);
+        i++;
+    }
+    
+    
+    
+    /*
     seg.setInputCloud ((*cloud).makeShared ());
     seg.segment (*inliers, *coefficients);
 
@@ -240,6 +331,7 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
                                                 << (*cloud).points[inliers->indices[i]].y << " "
                                                 << (*cloud).points[inliers->indices[i]].z << std::endl;
     }
+    */
         
     pub.publish(cloud2_buffer);
 }
