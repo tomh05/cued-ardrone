@@ -2,6 +2,7 @@
 // ROS specific includes
 #include <ros/ros.h>
 #include <std_msgs/Empty.h>
+#include <std_msgs/Float32MultiArray.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <sensor_msgs/PointCloud.h>
 #include <sensor_msgs/point_cloud_conversion.h>
@@ -24,9 +25,16 @@
 
 #include <pcl/filters/extract_indices.h>
 
+#include <pcl/filters/project_inliers.h>
+#include <pcl/surface/convex_hull.h>
+
 ros::Publisher pub;
 ros::Publisher polygon_pub;
+ros::Publisher triangle_pub;
 ros::Publisher poly_clear_pub;
+ros::Publisher line_pub;
+
+// Is declaring this globally a very bad idea? (put on stack not heap?)
 sensor_msgs::PointCloud2 cloud2_buffer;
 bool first_time = true;
 
@@ -74,10 +82,24 @@ void floor_plane_intersect(float a, float b, float c, float d, float line_coeffs
     line_coeffs[1] = n[2];
 }
 
-void get_projected_floor_ends(float line_coeffs[], pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_p, float end_xyxy[])
+void publish_floor_ends(std::vector<float> floor_lines)
+{
+    // Note ros arrays are similar to c++ vectors in functionality
+    // c++ vectors will not work as they lack ros specific functionality
+    // arrays will not work as they have no object functionality
+    std_msgs::Float32MultiArray floor_array;
+    
+    for (int i = 0; i < floor_lines.size(); i++)
+    {
+        floor_array.data.push_back(floor_lines[i]);
+    }
+    line_pub.publish(floor_array);
+}
+
 /// Returns an array of the x,y position of the projected line ends
 /// in the format {x1, y1, x2, y2}
 /// Takes line dir coefficients and pointer to relevant cloud
+void get_projected_floor_ends(float line_coeffs[], pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_p, float end_xyxy[])
 {
     float min_l = 99999; //Not sure how to lookup system dependent float max/min
     float max_l = -99999;
@@ -94,11 +116,9 @@ void get_projected_floor_ends(float line_coeffs[], pcl::PointCloud<pcl::PointXYZ
     // Find extreme points and project to 2D line
     for (int i = 0; i< cloud_p->width; i++)
     {
-        //std::cout<<"Testing point "<< i<< " : "<< (*cloud_p).points[i].x<<", "<<(*cloud_p).points[i].z<<std::endl;
         float l = (*cloud_p).points[i].x*line_coeffs_norm[0]+(*cloud_p).points[i].z*line_coeffs_norm[1];
         sum_x += (*cloud_p).points[i].x;
         sum_y += (*cloud_p).points[i].z;
-        //std::cout<<"l : "<<l<<std::endl;
         if (l > max_l)
         {
             max_l = l;
@@ -108,7 +128,7 @@ void get_projected_floor_ends(float line_coeffs[], pcl::PointCloud<pcl::PointXYZ
             min_l = l;
         }
     }
-    //std::cout<<"max_l and min_l "<<max_l<<", "<<min_l<<std::endl;
+    // Calc plane 2D centroid 
     float mid_x = sum_x/cloud_p->width;
     float mid_y = sum_y/cloud_p->width;
     
@@ -120,12 +140,13 @@ void get_projected_floor_ends(float line_coeffs[], pcl::PointCloud<pcl::PointXYZ
     std::cout<<"End points are ("<<end_xyxy[0]<<", "<<end_xyxy[1]<<") and ("
              <<end_xyxy[2]<<", "<<end_xyxy[3]<<")"<<std::endl;
     
-    
 }
 
 
 void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
 {
+    std::vector<float> floor_lines;
+    
     std::cout<<"Receiving new cloud"<<std::endl;
     
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
@@ -237,7 +258,7 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
     pcl::PolygonMesh triangles;
 
     // Set the maximum distance between connected points (maximum edge length)
-    gp3.setSearchRadius (0.5);
+    gp3.setSearchRadius (0.2);
 
     // Set typical values for the parameters
     gp3.setMu (2.5);
@@ -293,7 +314,7 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
         polygonStamped.polygon = polygon;
         polygonStamped.header.frame_id = "/world";
         //std::cout<<i<<std::endl;
-        polygon_pub.publish(polygonStamped);
+        triangle_pub.publish(polygonStamped);
     }
     
     
@@ -351,10 +372,66 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
                                       << coefficients->values[1] << " "
                                       << coefficients->values[2] << " " 
                                       << coefficients->values[3] << std::endl;
+        
+        ///====================================================================
+        /// Get floor plan
+        ///====================================================================                                      
+        // Get floor plan lines
         float line_coeffs[2];
         floor_plane_intersect(coefficients->values[0], coefficients->values[1], coefficients->values[2], coefficients->values[3], line_coeffs);
         float end_xyxy[4];
         get_projected_floor_ends(line_coeffs, cloud_p, end_xyxy);
+        for (int j = 0; j<4; j++)
+        {
+            floor_lines.push_back(end_xyxy[j]);
+        }
+        ///--------------------------------------------------------------------
+        
+        
+        
+        ///====================================================================
+        /// Get convex hull
+        ///====================================================================
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_projected (new pcl::PointCloud<pcl::PointXYZ>);
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_hull (new pcl::PointCloud<pcl::PointXYZ>);
+        pcl::ProjectInliers<pcl::PointXYZ> proj;
+        pcl::ConvexHull<pcl::PointXYZ> chull;
+        
+        // Project the model inliers         
+        proj.setModelType (pcl::SACMODEL_PLANE);
+        proj.setInputCloud (cloud_p);
+        proj.setModelCoefficients (coefficients);
+        proj.filter (*cloud_projected);
+
+        // Create a Convex Hull representation of the projected inliers
+        chull.setInputCloud (cloud_projected);
+        //chull.setAlpha (0.5);
+        chull.reconstruct (*cloud_hull);
+
+        std::cerr << "Conves hull has: " << cloud_hull->points.size () << " data points." << std::endl;
+        
+        geometry_msgs::PolygonStamped polygonStamped;
+        geometry_msgs::Polygon polygon;
+        geometry_msgs::Point32 point32;
+        
+        std::cout<<"Producing polygons"<<std::endl;
+        for (int i = 0; i<(*cloud_hull).points.size(); i++)
+        {
+            
+            
+            point32.x = (*cloud_hull).points[i].x;
+            point32.y = (*cloud_hull).points[i].y;
+            point32.z = (*cloud_hull).points[i].z;
+            polygon.points.push_back(point32);            
+            
+        }
+        
+        polygonStamped.polygon = polygon;
+        polygonStamped.header.frame_id = "/world";
+        polygon_pub.publish(polygonStamped);
+        
+        ///--------------------------------------------------------------------
+        
         // Create the filtering object
         extract.setNegative (true);
         extract.filter (*cloud_f);
@@ -362,7 +439,7 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
         i++;
     }
     
-    
+    publish_floor_ends(floor_lines);
     
     /*
     seg.setInputCloud ((*cloud).makeShared ());
@@ -387,7 +464,8 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
                                                 << (*cloud).points[inliers->indices[i]].z << std::endl;
     }
     */
-        
+    
+    
     pub.publish(cloud2_buffer);
 }
 
@@ -404,10 +482,17 @@ int main (int argc, char** argv)
     pub = nh.advertise<sensor_msgs::PointCloud2> ("/point_handler/absolute_cloud", 1);
     
     // Create polygon publisher
-    polygon_pub = nh.advertise<geometry_msgs::PolygonStamped>("/point_handler/polygons", 512);
+    polygon_pub = nh.advertise<geometry_msgs::PolygonStamped>("/point_handler/polygon", 512);
+    
+    // Create triangle publisher
+    
+    triangle_pub = nh.advertise<geometry_msgs::PolygonStamped>("/point_handler/triangle", 512);
 
-    // Create polygon publisher
+    // Create polygon clear trigger publisher
     poly_clear_pub = nh.advertise<std_msgs::Empty>("/point_handler/poly_clear", 512);
+    
+    // Create floorplan line publisher
+    line_pub = nh.advertise<std_msgs::Float32MultiArray>("/point_handler/lines", 64);
 
     // Spin
     ros::spin ();
