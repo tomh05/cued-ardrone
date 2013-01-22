@@ -32,7 +32,7 @@ bool first_time = true;
 
 /* Note: This code makes extensive use of pcl tutorial code */
 
-void floor_plane_intersect(float a, float b, float c, float d)
+void floor_plane_intersect(float a, float b, float c, float d, float line_coeffs[])
 {
     // Floor coefficients (plane at y = 0)
     // Note: zeros skipped
@@ -69,6 +69,58 @@ void floor_plane_intersect(float a, float b, float c, float d)
     std::cout<<p[0]<<" + "<<n[0]<<"x"<<std::endl;
     std::cout<<p[1]<<" + "<<n[1]<<"y"<<std::endl;
     std::cout<<p[2]<<" + "<<n[2]<<"y"<<std::endl;
+    
+    line_coeffs[0] = n[0];
+    line_coeffs[1] = n[2];
+}
+
+void get_projected_floor_ends(float line_coeffs[], pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_p, float end_xyxy[])
+/// Returns an array of the x,y position of the projected line ends
+/// in the format {x1, y1, x2, y2}
+/// Takes line dir coefficients and pointer to relevant cloud
+{
+    float min_l = 99999; //Not sure how to lookup system dependent float max/min
+    float max_l = -99999;
+    
+    //Normalise line_coeffs[]
+    float line_coeffs_norm[2];
+    float mag = std::sqrt(line_coeffs[0]*line_coeffs[0]+line_coeffs[1]*line_coeffs[1]);
+    line_coeffs_norm[0] = line_coeffs[0]/mag;
+    line_coeffs_norm[1] = line_coeffs[1]/mag;
+    std::cout<<"Normalised line dir: "<<line_coeffs_norm[0]<<", "<<line_coeffs_norm[1]<<std::endl;
+    
+    float sum_x = 0;
+    float sum_y = 0;
+    // Find extreme points and project to 2D line
+    for (int i = 0; i< cloud_p->width; i++)
+    {
+        //std::cout<<"Testing point "<< i<< " : "<< (*cloud_p).points[i].x<<", "<<(*cloud_p).points[i].z<<std::endl;
+        float l = (*cloud_p).points[i].x*line_coeffs_norm[0]+(*cloud_p).points[i].z*line_coeffs_norm[1];
+        sum_x += (*cloud_p).points[i].x;
+        sum_y += (*cloud_p).points[i].z;
+        //std::cout<<"l : "<<l<<std::endl;
+        if (l > max_l)
+        {
+            max_l = l;
+        }
+        else if (l < min_l)
+        {
+            min_l = l;
+        }
+    }
+    //std::cout<<"max_l and min_l "<<max_l<<", "<<min_l<<std::endl;
+    float mid_x = sum_x/cloud_p->width;
+    float mid_y = sum_y/cloud_p->width;
+    
+    end_xyxy[0] = min_l*line_coeffs_norm[0]+mid_x;
+    end_xyxy[1] = min_l*line_coeffs_norm[1]+mid_y;
+    end_xyxy[2] = max_l*line_coeffs_norm[0]+mid_x;
+    end_xyxy[3] = max_l*line_coeffs_norm[1]+mid_y;
+    
+    std::cout<<"End points are ("<<end_xyxy[0]<<", "<<end_xyxy[1]<<") and ("
+             <<end_xyxy[2]<<", "<<end_xyxy[3]<<")"<<std::endl;
+    
+    
 }
 
 
@@ -299,7 +351,10 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
                                       << coefficients->values[1] << " "
                                       << coefficients->values[2] << " " 
                                       << coefficients->values[3] << std::endl;
-        floor_plane_intersect(coefficients->values[0], coefficients->values[1], coefficients->values[2], coefficients->values[3]);
+        float line_coeffs[2];
+        floor_plane_intersect(coefficients->values[0], coefficients->values[1], coefficients->values[2], coefficients->values[3], line_coeffs);
+        float end_xyxy[4];
+        get_projected_floor_ends(line_coeffs, cloud_p, end_xyxy);
         // Create the filtering object
         extract.setNegative (true);
         extract.filter (*cloud_f);
