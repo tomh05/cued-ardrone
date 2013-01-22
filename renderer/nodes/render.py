@@ -30,6 +30,8 @@ class World(pyglet.window.Window):
         self.textures = self.load_textures()
         self.walls = self.load_walls()
         self.polygons = []
+        self.triangles = []
+        self.lines = []
         self.clock = 0
         pyglet.clock.schedule_interval(self.update, 1 / 60.0)
         pyglet.clock.set_fps_limit(60)
@@ -49,8 +51,10 @@ class World(pyglet.window.Window):
         rospy.Subscriber('/template_track/img',Image,self.texture_process)
         rospy.Subscriber('/template_track/corners',Float32MultiArray, self.corner_process)
         rospy.Subscriber("/template_track/wall_trigger", Empty, self.trigger_process)
-        rospy.Subscriber("/point_handler/polygons", PolygonStamped, self.on_got_polygon)
+        rospy.Subscriber("/point_handler/polygon", PolygonStamped, self.on_got_polygon)
+        rospy.Subscriber("/point_handler/triangle", PolygonStamped, self.on_got_triangle)
         rospy.Subscriber("/point_handler/poly_clear", Empty, self.on_poly_clear)
+        rospy.Subscriber("/point_handler/lines", Float32MultiArray, self.on_got_line)
         rospy_thread = threading.Thread(target = self.spin)
         rospy_thread.start()
         
@@ -85,10 +89,29 @@ class World(pyglet.window.Window):
             points.append(np.array([p.x, p.y, p.z]))
         self.polygons.append(Polygon(points))
         
+    def on_got_triangle(self, polygonStamped):
+        """Adds the receieved polygon to the draw list"""
+        points = []
+        for p in polygonStamped.polygon.points:
+            points.append(np.array([p.x, p.y, p.z]))
+        self.triangles.append(Polygon(points))
+        
+    def on_got_line(self, float32MultiArray):
+        """Adds the receieved line to the draw list"""
+        i = 0;
+        while (i < len(float32MultiArray.data)):
+            self.lines.append(Line(float32MultiArray.data[i],float32MultiArray.data[i+1],float32MultiArray.data[i+2],float32MultiArray.data[i+3]))
+            print "Added line with ends (", float32MultiArray.data[i], ", ", float32MultiArray.data[i+1], " and ", float32MultiArray.data[i+2], ", ", float32MultiArray.data[i+3]
+            i = i + 4
+        
+        
+        
     def on_poly_clear(self, d):
         """ Clears the polygon list """
         # This is not thread-safe, may need proper handling
         self.polygons = []
+        self.triangles = []
+        self.lines = []
         
     def corner_process(self, d):
         self.corner_buffer = d.data
@@ -219,11 +242,11 @@ class World(pyglet.window.Window):
         #    wall = Wall(texture, (0, 0, 0), i)
         #    walls.append(wall)
         #    i = i + 45.
-        wall = Wall(self.textures[-1], (-1., 0., -3.), (3., 0., -3.), (3., 2.25, -3.), (-1., 2.25, -3.), (0,0.297), (0.625,0.297), (0.625,1), (0,1))
+        wall = Wall(self.textures[-1], (-3., 0., -3.), (3., 0., -3.), (3., 2.25, -3.), (-3., 2.25, -3.), (0,0.297), (0.625,0.297), (0.625,1), (0,1))
         walls.append(wall)
         wall = Wall(self.textures[0], (3., 0., -3.), (3., 0., 1.), (3., 2.25, 1.), (3., 2.25, -3.), (0,0), (1,0), (1,1), (0,1))
         walls.append(wall)
-        wall = Wall(self.textures[0], (-1., 0., 1.), (-1., 0., -3.), (-1., 2.25, -3.), (-1., 2.25, 1.), (0,0), (1,0), (1,1), (0,1))
+        wall = Wall(self.textures[0], (-3., 0., 1.), (-3., 0., -3.), (-3., 2.25, -3.), (-3., 2.25, 1.), (0,0), (1,0), (1,1), (0,1))
         walls.append(wall)
         
         return walls
@@ -255,9 +278,11 @@ class World(pyglet.window.Window):
         glTranslatef(-self.viewer_pos[0], -self.viewer_pos[1], -self.viewer_pos[2])
         for wall in self.walls:
             self.draw_wall(wall)
-        #for poly in self.polygons:
-        #    self.draw_polygon(poly)
-        self.draw_triangles(self.polygons)
+        for poly in self.polygons:
+            self.draw_polygon(poly)
+        #self.draw_triangles(self.polygons)
+        
+        self.draw_lines(self.lines)
         
         glPopMatrix()
         
@@ -281,6 +306,17 @@ class World(pyglet.window.Window):
             for p in t.points:
                 glVertex3f(p[0], p[1], p[2])
         glEnd()
+        
+    def draw_lines(self, lines):
+        glBegin(GL_LINES)
+        for l in lines:
+            # Flips from image to world here (in ground plane)
+            # lines were entered as [image_x, image_z]
+            # Should probably happen elsewhere
+            glVertex3f(l.start[0], 0., l.start[1])
+            glVertex3f(l.end[0], 0., l.end[1])
+        glEnd()
+            
             
     def add_wall(self):
         c = self.corner_buffer
@@ -336,6 +372,11 @@ class Wall():
 class Polygon():
     def __init__(self, points):
         self.points = points
+        
+class Line():
+    def __init__(self, x1, y1, x2, y2):
+        self.start = np.array([x1, y1])
+        self.end = np.array([x2, y2])
         
 
 
