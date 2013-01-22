@@ -23,20 +23,24 @@ def create_dummy_cloud(event):
             cloud.points.append(gm.Point32())
             wall = np.random.randint(1, 4+1)
             if wall == 1:
-                cloud.points[-1].x = 2.*np.random.random()-1.
-                cloud.points[-1].y = 2.*np.random.random()-1.
+                # .5m gap in wall 1
+                a = 2.*np.random.random()-1.
+                while (a < .25 and a > -.25):
+                    a = 2.*np.random.random()-1.
+                cloud.points[-1].x = a
+                cloud.points[-1].y = 2.*np.random.random()+1.
                 cloud.points[-1].z = 1.
             elif wall == 2:
                 cloud.points[-1].x = -1.
-                cloud.points[-1].y = 2.*np.random.random()-1.
+                cloud.points[-1].y = 2.*np.random.random()+1.
                 cloud.points[-1].z = 2.*np.random.random()-1.
             elif wall == 3:
                 cloud.points[-1].x = 2.*np.random.random()-1.
-                cloud.points[-1].y = 2.*np.random.random()-1.
+                cloud.points[-1].y = 2.*np.random.random()+1.
                 cloud.points[-1].z = -1.
             elif wall == 4:
                 cloud.points[-1].x = 1.
-                cloud.points[-1].y = 2.*np.random.random()-1.
+                cloud.points[-1].y = 2.*np.random.random()+1.
                 cloud.points[-1].z = 2.*np.random.random()-1.
             i = i+1
         
