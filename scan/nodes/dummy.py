@@ -67,8 +67,8 @@ class WallModel():
     def sample(self):
         point = gm.Point32()
         point.x = np.random.sample()*(self.xmax-self.xmin)+self.xmin + (np.random.sample()-0.5)*0.2
-        point.z = np.random.sample()*(self.ymax-self.ymin)+self.ymin + (np.random.sample()-0.5)*0.2
-        point.y = np.random.sample()*(self.zmax-self.zmin)+self.zmin + (np.random.sample()-0.5)*0.2
+        point.y = np.random.sample()*(self.ymax-self.ymin)+self.ymin + (np.random.sample()-0.5)*0.2
+        point.z = np.random.sample()*(self.zmax-self.zmin)+self.zmin + (np.random.sample()-0.5)*0.2
         return point
 
 def run():
