@@ -507,8 +507,8 @@ class FeatureTracker:
         # Shift to absolute image co-ords
         corners_absolute_image = corners_rot.T + position
         
-        #corners_absolute_drone = tf.transformations.quaternion_matrix(quat)[:3, :3].dot(corners_absolute_image.T).T
-        corners_absolute_drone = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(quat))[:3, :3].dot(corners_absolute_image.T).T
+        corners_absolute_drone = tf.transformations.quaternion_matrix(quat)[:3, :3].dot(corners_absolute_image.T).T
+        #corners_absolute_drone = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(quat))[:3, :3].dot(corners_absolute_image.T).T
         
         print "Absolute corners :\r\n", corners_absolute_drone
         
