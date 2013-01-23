@@ -22,7 +22,7 @@ import os, pyglet, sys
 from pyglet.gl import *
 
 class World(pyglet.window.Window):
-    def __init__(self, viewer_pos=(1., 1.125, 0.), *args, **kwargs):
+    def __init__(self, viewer_pos=(0., 0., 5.), *args, **kwargs):
         super(World, self).__init__(*args, **kwargs)
         self.viewer_pos = viewer_pos
         glClearColor(1.0, 1.0, 1.0, 0.0)
@@ -251,14 +251,31 @@ class World(pyglet.window.Window):
         return walls
  
     def update(self, _):
+        #change = np.array([0,0,0])
         if self.keys[pyglet.window.key.W]:
-            self.viewer_pos = self.viewer_pos[0]+.1*np.sin(self.angle[0]/180.*np.pi),self.viewer_pos[1]-.1*np.sin(self.angle[1]/180.*np.pi) ,self.viewer_pos[2]-.1*np.cos(self.angle[0]/180.*np.pi)*np.cos(self.angle[1]/180.*np.pi)
+            #self.viewer_pos = self.viewer_pos[0]+.1*np.sin(self.angle[0]/180.*np.pi),self.viewer_pos[1]-.1*np.sin(self.angle[1]/180.*np.pi) ,self.viewer_pos[2]-.1*np.cos(self.angle[0]/180.*np.pi)*np.cos(self.angle[1]/180.*np.pi)
+            #change = change + np.array([0,0,0.1])
+            self.viewer_pos = self.viewer_pos[0], self.viewer_pos[1]+.1, self.viewer_pos[2]
         if self.keys[pyglet.window.key.S]:
-            self.viewer_pos = self.viewer_pos[0]-.1*np.sin(self.angle[0]/180.*np.pi),self.viewer_pos[1]+.1*np.sin(self.angle[1]/180.*np.pi),self.viewer_pos[2]+.1*np.cos(self.angle[0]/180.*np.pi)*np.cos(self.angle[1]/180.*np.pi)
+            #self.viewer_pos = self.viewer_pos[0]-.1*np.sin(self.angle[0]/180.*np.pi),self.viewer_pos[1]+.1*np.sin(self.angle[1]/180.*np.pi),self.viewer_pos[2]+.1*np.cos(self.angle[0]/180.*np.pi)*np.cos(self.angle[1]/180.*np.pi)
+            #change = change + np.array([0,0,-0.1])
+            self.viewer_pos = self.viewer_pos[0], self.viewer_pos[1]-.1, self.viewer_pos[2]
         if self.keys[pyglet.window.key.A]:
-            self.viewer_pos = self.viewer_pos[0]-.1*np.cos(self.angle[0]/180.*np.pi)*np.cos(self.angle[1]/180.*np.pi),self.viewer_pos[1],self.viewer_pos[2]-.1*np.sin(self.angle[0]/180.*np.pi);
+            #self.viewer_pos = self.viewer_pos[0]-.1*np.cos(self.angle[0]/180.*np.pi)*np.cos(self.angle[1]/180.*np.pi),self.viewer_pos[1]+.1*np.sin(self.angle[1]/180.*np.pi),self.viewer_pos[2]-.1*np.sin(self.angle[0]/180.*np.pi)*np.cos(self.angle[1]/180.*np.pi);
+            #change = change + np.array([0.1,0,0])
+            self.viewer_pos = self.viewer_pos[0]-.1, self.viewer_pos[1], self.viewer_pos[2]
         if self.keys[pyglet.window.key.D]:
-            self.viewer_pos = self.viewer_pos[0]+.1*np.cos(self.angle[0]/180.*np.pi)*np.cos(self.angle[1]/180.*np.pi),self.viewer_pos[1],self.viewer_pos[2]+.1*np.sin(self.angle[0]/180.*np.pi);
+            #self.viewer_pos = self.viewer_pos[0]+.1*np.cos(self.angle[0]/180.*np.pi)*np.cos(self.angle[1]/180.*np.pi),self.viewer_pos[1]-.1*np.sin(self.angle[1]/180.*np.pi),self.viewer_pos[2]+.1*np.sin(self.angle[0]/180.*np.pi)*np.cos(self.angle[1]/180.*np.pi);
+            #change = change + np.array([-0.1,0,0])
+            self.viewer_pos = self.viewer_pos[0]+.1, self.viewer_pos[1], self.viewer_pos[2]
+        if self.keys[pyglet.window.key.Q]:
+            self.viewer_pos = self.viewer_pos[0], self.viewer_pos[1], self.viewer_pos[2]+0.1
+        if self.keys[pyglet.window.key.E]:
+            self.viewer_pos = self.viewer_pos[0], self.viewer_pos[1], self.viewer_pos[2]-0.1
+        #rotated_change = tf.transformations.euler_matrix(0., self.angle[0], self.angle[1], axes='sxyz')[:3,:3].dot(change)
+        #print rotated_change
+        
+        #self.viewer_pos = self.viewer_pos[0]+rotated_change[0], self.viewer_pos[1]+rotated_change[1], self.viewer_pos[2]+rotated_change[2]
         self.on_draw()
         self.clock += .01
  
@@ -279,8 +296,8 @@ class World(pyglet.window.Window):
         
         glTranslatef(-self.viewer_pos[0], -self.viewer_pos[1], -self.viewer_pos[2])
         self.draw_grid()
-        for wall in self.walls:
-            self.draw_wall(wall)
+        #for wall in self.walls:
+        #    self.draw_wall(wall)
         for poly in self.polygons:
             self.draw_polygon(poly)
         #self.draw_triangles(self.polygons)
