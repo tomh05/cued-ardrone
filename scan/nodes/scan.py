@@ -113,10 +113,12 @@ class ScanController:
         # Initialise ROS node
         self.connect()
         
-        
+        self.frame_1_is_loaded = False
+        self.frame_2_is_loaded = False
+    
 
         
-    def manual_scan(self, event):
+    def crude_auto_scan(self, event):
         """ Carries out a single scan
         
         At present is somewhat brute force controlled and WILL lock the thread
@@ -258,15 +260,36 @@ class ScanController:
         self.feature_tracker.load_tf(2)
         
         self.feature_tracker.process_frames()
-    
-    
-    def connect(self):
         
-        rospy.Subscriber('/xboxcontroller/button_y',Empty,self.manual_scan)
+    def get_frame_1(self, empty):
+        print "Loading Frame 1\r\n"
+        self.feature_tracker.image_flip()
+        self.feature_tracker.load_frame(1)
+        self.feature_tracker.load_tf(1)
+        self.frame_1_is_loaded = True
+    
+    def get_frame_2(self, empty):
+        print "Loading Frame 2\r\n"
+        self.feature_tracker.image_flip()
+        self.feature_tracker.load_frame(2)
+        self.feature_tracker.load_tf(2)
+        self.frame_2_is_loaded = True
+        
+        if self.frame_1_is_loaded:
+            print "Processing Frames\r\n"
+            self.feature_tracker.process_frames()
+            # Shift frame2 to frame1 incase we want sequential use
+            self.load_through()
+    
+    def connect(self):     
+        
         self.feature_tracker.tf = tf.TransformListener()
         self.tf = self.feature_tracker.tf
         rospy.Subscriber('/ardrone/front/image_raw',Image,self.feature_tracker.imgproc)
         rospy.Subscriber('/ardrone/front/camera_info',sensor_msgs.msg.CameraInfo, self.feature_tracker.setCameraInfo)
+        rospy.Subscriber('/xboxcontroller/button_a',Empty,self.get_frame_1)
+        rospy.Subscriber('/xboxcontroller/button_b',Empty,self.get_frame_2)
+        rospy.Subscriber('/xboxcontroller/button_back',Empty,self.crude_auto_scan)
 
     
 
@@ -282,8 +305,8 @@ class FeatureTracker:
         self.desc1 = None
         self.kp1 = None
         cv2.namedWindow("track")
-        self.cloud_pub = rospy.Publisher('\scan\absolute_cloud', PointCloud)
-        self.cloud_pub2 = rospy.Publisher('\scan\relative_cloud', PointCloud)
+        self.cloud_pub = rospy.Publisher('/scan/absolute_cloud', PointCloud)
+        self.cloud_pub2 = rospy.Publisher('/scan/relative_cloud', PointCloud)
         self.prev_position = None
         self.prev_quat = None
         self.prev_prev_position = None
@@ -610,32 +633,7 @@ class FeatureTracker:
             cloud.points[i].x = p[0]
             cloud.points[i].y = p[1]
             cloud.points[i].z = p[2]
-        self.cloud_pub2.publish(cloud)
-
-        
-    def publish_cloud2(self, points, timestamp):
-        """Publishing PointCloud2 type
-        Arguable not worth it due to difficulty/speed in forming binary blob
-        in python. More efficient to convert with c++ at the other end"""
-        cloud2 = PointCloud2()
-        cloud2.header = timestamp
-        cloud2.width = len(points[0])
-        cloud2.height = 1
-        cloud2.fields.resize(3)
-        cloud2.fields[0].name = 'x'
-        cloud2.fields[1].name = 'y'
-        cloud2.fields[2].name = 'z'
-        offset = 0
-        d = 0
-        # All offsets are *4, as all field data types are float32
-        for (size_t d = 0; d < output.fields.size (); ++d, offset += 4):
-            cloud2.fields[d].offset = offset
-            cloud2.fields[d].datatype = 7 # FLOAT32 datatype
-            cloud2.fields[d].count  = 1
-            offset = offset + 4
-            d = d + 1
-        
-         
+        self.cloud_pub2.publish(cloud) 
         
     def world_to_pixel_distorted(self, pts, R, t, K=None, k=None):
         """Takes 3D world co-ord and reverse projects using K and distCoeffs"""
@@ -751,6 +749,21 @@ class FeatureTracker:
             self.quaternion2 = quaternion
             self.image_position2 = pi
             self.image_quaternion2 = qi
+            
+    def load_through(self):
+        """Shifts the stored frame2 data to frame1. Would typically be used in
+        sequential handing"""
+        # Shift image
+        self.grey_previous = self.grey_now
+        self.pts1 = self.pts2
+        self.kp1 = self.kp2
+        self.desc1 = self.desc2
+        self.time_prev = self.time_now
+        # Shift tf
+        self.position1 = self.position2
+        self.quaternion1 = self.quaternion2
+        self.image_position1 = self.image_position2
+        self.image_quaternion1 = self.image_quaternion2
 
     def get_change_in_tf(self):       
         
@@ -1074,7 +1087,6 @@ def run():
     rospy.init_node('Scan_Controller')
     # Initialise controller
     s = ScanController()
-    rospy.Subscriber('/xboxcontroller/button_back', Empty, s.manual_scan)
     # Begin ROS loop
     rospy.spin()
 
