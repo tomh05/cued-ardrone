@@ -1,9 +1,9 @@
 <launch>
     <arg name="camera" value="bottom" />
     <arg name="markerno" value="94" />
-    <node name="setcam" pkg="dynamics" type="setdronecamera.py">
+    <!--<node name="setcam" pkg="dynamics" type="setdronecamera.py">
         <param name="camera" type="string" value="$(arg camera)"/>
-    </node>
+    </node>-->
     <node name="imageview" pkg="image_view" type="image_view">
         <remap from="image" to="/ardrone/$(arg camera)/image_raw"/>
     </node>
