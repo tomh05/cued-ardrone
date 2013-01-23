@@ -85,6 +85,7 @@ class World(pyglet.window.Window):
     def on_got_polygon(self, polygonStamped):
         """Adds the receieved polygon to the draw list"""
         points = []
+        print "New polygon of ", len(polygonStamped.polygon.points), " points"
         for p in polygonStamped.polygon.points:
             points.append(np.array([p.x, p.y, p.z]))
         self.polygons.append(Polygon(points))
@@ -212,10 +213,7 @@ class World(pyglet.window.Window):
     def load_textures():
         img_dir = 'imgs'
         textures = []
-        if not os.path.isdir(img_dir):
-            print 'Could not find directory "%s" under "%s"' % (img_dir,
-                                                                os.getcwd())
-            sys.exit(1)
+        img_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))+'/nodes/imgs'
         for image in os.listdir(img_dir):
             try:
                 image = pyglet.image.load(os.path.join(img_dir, image))
@@ -230,6 +228,7 @@ class World(pyglet.window.Window):
                          0, GL_RGBA, GL_UNSIGNED_BYTE,
                          image.get_image_data().get_data('RGBA',
                                                          image.width * 4))
+            glDisable(textures[-1].target)
         if len(textures) == 0:
             print 'Found no textures to load. Exiting'
             sys.exit(0)
@@ -269,6 +268,9 @@ class World(pyglet.window.Window):
             self.add_wall()
             self.cross_thread_trigger = False
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        
+        glDisable(GL_TEXTURE_2D)
+        
         glLoadIdentity()
         glPushMatrix()
         
@@ -276,6 +278,7 @@ class World(pyglet.window.Window):
         glRotatef(self.angle[0], 0., 1., 0.)
         
         glTranslatef(-self.viewer_pos[0], -self.viewer_pos[1], -self.viewer_pos[2])
+        self.draw_grid()
         for wall in self.walls:
             self.draw_wall(wall)
         for poly in self.polygons:
@@ -289,16 +292,18 @@ class World(pyglet.window.Window):
         
         
     def draw_polygon(self, poly):
-        if len(poly.points) == 3:
-            glBegin(GL_TRIANGLES)
-            for p in poly.points:
-                glVertex3f( p[0], p[1], p[2])
-            glEnd()        
-        else:
-            glBegin(GL_POLYGON)
-            for p in poly.points:
-                glVertex3f( p[0], p[1], p[2] )
-            glEnd()
+        glPushAttrib(GL_CURRENT_BIT)
+        glColor3f(.5, .5, 5.)
+        glBegin(GL_POLYGON)
+        for p in poly.points:
+            glVertex3f( p[0], p[1], p[2] )
+        glEnd()
+        glColor3f(.25, .25, .25)
+        glBegin(GL_LINE_LOOP)
+        for p in poly.points:
+            glVertex3f( p[0], p[1], p[2] )
+        glEnd()
+        glPopAttrib(GL_CURRENT_BIT)
             
     def draw_triangles(self, tris):
         glBegin(GL_TRIANGLES)
@@ -308,14 +313,17 @@ class World(pyglet.window.Window):
         glEnd()
         
     def draw_lines(self, lines):
+        glPushAttrib(GL_CURRENT_BIT)
+        glColor3f(0., 0., 0.)
         glBegin(GL_LINES)
         for l in lines:
             # Flips from image to world here (in ground plane)
             # lines were entered as [image_x, image_z]
             # Should probably happen elsewhere
-            glVertex3f(l.start[0], 0., l.start[1])
-            glVertex3f(l.end[0], 0., l.end[1])
+            glVertex3f(l.start[0], l.start[1], 0.01)
+            glVertex3f(l.end[0], l.end[1], 0.01)
         glEnd()
+        glPopAttrib(GL_CURRENT_BIT)
             
             
     def add_wall(self):
@@ -337,7 +345,8 @@ class World(pyglet.window.Window):
         print wall.t4
         self.walls.append(wall)
 
-    def draw_wall(self, wall):     
+    def draw_wall(self, wall):
+        glEnable( GL_TEXTURE_2D )
         glBindTexture(wall.texture.target, wall.texture.id)
         glBegin(GL_QUADS)
         glTexCoord2f(wall.t1[0], wall.t1[1]); glVertex3f( wall.c1[0], wall.c1[1], wall.c1[2])
@@ -349,6 +358,28 @@ class World(pyglet.window.Window):
         #glTexCoord2f(1,1); glVertex3f( wall.c3[0], wall.c3[1], wall.c3[2])
         #glTexCoord2f(0,1); glVertex3f( wall.c4[0], wall.c4[1], wall.c4[2])
         glEnd()
+        glDisable( GL_TEXTURE_2D )
+    
+    def draw_grid(self):
+        glPushAttrib(GL_CURRENT_BIT)
+        glColor3f(.9, .9, .9)
+        i = -10
+        glBegin(GL_LINES)          
+        while(i<11):
+            glVertex3f(i, -10, 0)
+            glVertex3f(i, +10, 0)
+            i = i + 1
+        glEnd()
+        
+        j = -10
+        glBegin(GL_LINES)           
+        while(j<11):
+            glVertex3f(-10, j, 0)
+            glVertex3f(+10, j, 0)
+            j = j + 1
+        glEnd()
+        glPopAttrib(GL_CURRENT_BIT)
+            
  
     def on_resize(self, width, height):
         glViewport(0, 0, width, height)
