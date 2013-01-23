@@ -10,60 +10,72 @@ import os
 import geometry_msgs.msg as gm
 
 
-def create_dummy_cloud(event):
-        cloud = PointCloud()
-        cloud.header.frame_id = "/world"
-        cloud_pub = rospy.Publisher('/scan/absolute_cloud', PointCloud)
+class DummySampler():
+    def __init__(self):
         
-        point_count = np.random.randint(20, 128)
-        #point_count = 8
-        i=0
+        self.cloud_pub = rospy.Publisher('/scan/absolute_cloud', PointCloud)
+        self.walls = self.load_model_walls()
+    
+    @staticmethod
+    def load_model_walls():
+        walls = []
+        walls.append(WallModel(2,2,-2,2,1,3))
         
-        while(i < point_count):
-            cloud.points.append(gm.Point32())
-            wall = np.random.randint(1, 4+1)
-            if wall == 1:
-                # .5m gap in wall 1
-                a = 2.*np.random.random()-1.
-                while (a < .25 and a > -.25):
-                    a = 2.*np.random.random()-1.
-                cloud.points[-1].x = a
-                cloud.points[-1].y = 2.*np.random.random()+1.
-                cloud.points[-1].z = 1.
-            elif wall == 2:
-                cloud.points[-1].x = -1.
-                cloud.points[-1].y = 2.*np.random.random()+1.
-                cloud.points[-1].z = 2.*np.random.random()-1.
-            elif wall == 3:
-                cloud.points[-1].x = 2.*np.random.random()-1.
-                cloud.points[-1].y = 2.*np.random.random()+1.
-                cloud.points[-1].z = -1.
-            elif wall == 4:
-                cloud.points[-1].x = 1.
-                cloud.points[-1].y = 2.*np.random.random()+1.
-                cloud.points[-1].z = 2.*np.random.random()-1.
-            i = i+1
+        walls.append(WallModel(-2,2,2,2,1,3))
+        walls.append(WallModel(-2,2,-2,-2,1,3))
+        
+        walls.append(WallModel(-2,-2,1,2,1,3))        
+        walls.append(WallModel(-2,-2,-2,-1,1,3))
+        
+        
         
         '''
-        i = 0dw
-            cloud.points.append(gm.Point32())
-            cloud.points[i].x = int(i/9)*(2./8.)
-            cloud.points[i].y = i % 9 *(2./8.)
-            cloud.points[i].z = 2
-            i = i+1
-        
-        print cloud    
+        walls.append(WallModel(2,2,2,6,1,3))
+        walls.append(WallModel(-2,2,6,6,1,3))
+        walls.append(WallModel(-2,-2,5,6,1,3))
+        walls.append(WallModel(-2,-2,2,4,1,3))
+        walls.append(WallModel(-4,-2,-2,-2,1,3))
+        walls.append(WallModel(-4,-2,6,6,1,3))
+        walls.append(WallModel(-4,-4,-2,6,1,3))
         '''
+        return walls
         
-        cloud_pub.publish(cloud)
-        print "Done"
-        
-        
+    def create_dummy_cloud(self, event):
+            cloud = PointCloud()
+            cloud.header.frame_id = "/world"
+            
+            point_count = np.random.randint(20, 128)
+            #point_count = 8
+            i=0
+            
+            while(i < point_count):
+                cloud.points.append(self.walls[np.random.randint(0, len(self.walls))].sample())
+                i = i+1
+                            
+            self.cloud_pub.publish(cloud)
+            print "Done"
+
+class WallModel():
+    def __init__(self, xmin, xmax, ymin, ymax, zmin, zmax):
+        self.xmin = xmin
+        self.xmax = xmax
+        self.ymin = ymin
+        self.ymax = ymax
+        self.zmin = zmin
+        self.zmax = zmax
+    
+    def sample(self):
+        point = gm.Point32()
+        point.x = np.random.sample()*(self.xmax-self.xmin)+self.xmin + (np.random.sample()-0.5)*0.2
+        point.z = np.random.sample()*(self.ymax-self.ymin)+self.ymin + (np.random.sample()-0.5)*0.2
+        point.y = np.random.sample()*(self.zmax-self.zmin)+self.zmin + (np.random.sample()-0.5)*0.2
+        return point
 
 def run():
+    ds = DummySampler()
     rospy.init_node('Point_Cloud_Dummy_Generator')
     # Initialise controller
-    rospy.Timer(rospy.Duration(10), create_dummy_cloud)
+    rospy.Timer(rospy.Duration(10), ds.create_dummy_cloud)
     # Begin ROS loop
     rospy.spin()
 
