@@ -1,0 +1,19 @@
+<package>
+  <description brief="feature_track">
+
+     feature_track
+
+  </description>
+  <author>Alex Karmazyn</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>n/a</url>
+  <depend package="opencv2"/>
+  <depend package="image_transport"/>
+  <depend package="ardrone_autonomy"/>
+  <depend package="cv_bridge"/>
+  <depend package="roscpp"/>
+
+</package>
+
+
