@@ -44,166 +44,7 @@ bool first_time = true;
 
 /* Note: This code makes extensive use of pcl tutorial code */
 
-void floor_plane_intersect(float a, float b, float c, float d, float line_coeffs[])
-{
-    // Floor coefficients (plane at y = 0)
-    // Note: zeros skipped
-    float b_f = 1;
-    
-    // Find shared normal
-    // ie. n1 x n2
-    // Note: Cross product calc skips 0 vars
-    std::vector<float> n; // This compiler doesn't appear to support specific vector intialization
-    n.push_back(-c*b_f);
-    n.push_back(0);
-    n.push_back(a*b_f);
-    
-    // Find point on both planes
-    // We know both must have one at y=0
-    // let x = 0 or z = 0 depending on coefficients
-    // therefore cz = d or ax = d
-    std::vector<float> p;
-    if (a == 0)
-    {
-        // let x = 0        
-        p.push_back(0);
-        p.push_back(0);
-        p.push_back(d/c);
-    }   
-    else
-    {
-        // let y = 0
-        p.push_back(d/a);
-        p.push_back(0);
-        p.push_back(0);
-    }
-    //std::cout<<"Line Equation of:"<<std::endl;
-    //std::cout<<p[0]<<" + "<<n[0]<<"x"<<std::endl;
-    //std::cout<<p[1]<<" + "<<n[1]<<"y"<<std::endl;
-    //std::cout<<p[2]<<" + "<<n[2]<<"y"<<std::endl;
-    
-    line_coeffs[0] = n[0];
-    line_coeffs[1] = n[2];
-}
 
-/* test_ordered_convex_hull
-void test_ordered_convex_hull()
-{
-    //Enter dummy data
-    std::vector< std::vector<float> > points;
-    std::vector<float> point;
-    point.push_back(0);
-    point.push_back(10);
-    point.push_back(9);
-    points.push_back(point);
-    point[0]=(0);
-    point[1]=(8);
-    point[2]=(5);
-    points.push_back(point);
-    point[0] = (0);
-    point[1] = (5);
-    point[2] = (7);
-    points.push_back(point);
-    point[0] = (0);
-    point[1] = (8);
-    point[2] = (11);
-    points.push_back(point);
-    point[0] = (0);
-    point[1] = (11);
-    point[2] = (6);
-    points.push_back(point);
-    
-    
-    
-    // Order points
-    // 1) Create index vector
-    // 2) Find top-most point
-    std::cout<<"1"<<std::endl;
-    std::vector<int> index;
-    std::vector<int> ordered_index;
-    int current;
-    int target;
-    float max_y = -999999999;
-    ordered_index.push_back(0);
-    for (int i = 0; i<points.size(); i++)
-    {
-        std::cout<<points[i][0]<<std::endl;
-        index.push_back(i);
-        if (points[i][1] > max_y)
-        {
-            max_y = points[i][1];
-            ordered_index[ordered_index.size()-1] = index[i];
-            target = i;
-        }        
-    }
-    
-    while(index.size() > 2)
-    {
-        std::cout<<"2 ,"<<index.size()<<" | target , "<<ordered_index[ordered_index.size()-1]<<std::endl;
-        index.erase(index.begin()+target);
-        
-        
-        ordered_index.push_back(0);
-        // 3) Search for point with lowest angle
-        float min_angle = 2*3.141592654;
-        for (int i = 0; i < index.size(); i++)
-        {
-            float dxtest = 0.707106;
-            float dytest = 0;
-            float dztest = 0.707106;
-            
-            float dx = points[index[i]][0]-points[ordered_index[ordered_index.size()-2]][0];
-            float dy = points[index[i]][1]-points[ordered_index[ordered_index.size()-2]][1];
-            float dz = points[index[i]][2]-points[ordered_index[ordered_index.size()-2]][2];
-            float mag = std::sqrt(dx*dx+dy*dy+dz*dz);
-            
-                       
-            float ds = std::sqrt(dx*dx+dz*dz);
-            std::cout<<dx<<", "<<dy<<", "<<dz<<std::endl;
-            //float angle = std::atan2(-dy, dx);
-            float angle = std::acos((dxtest*dx+dztest*dz)/mag);
-            std::cout<<angle<<std::endl;
-            if (angle < 0)
-            {
-                angle += 2*3.141592654;
-            }
-            if (angle<min_angle)
-            {
-                min_angle = angle;
-                std::cout<<"2a ,"<< i <<std::endl;
-                ordered_index[ordered_index.size()-1] = index[i];
-                target = i;
-            }
-        }
-        std::cout<<"min_angle: "<<min_angle<<std::endl;
-    }
-    std::cout<<"2b"<<std::endl;
-    ordered_index.push_back(index[0]);
-    
-    
-    std::cout<<"3"<<std::endl;
-    
-    geometry_msgs::PolygonStamped polygonStamped;
-    geometry_msgs::Polygon polygon;
-    geometry_msgs::Point32 point32;
-
-    std::cout<<"            Producing polygons"<<std::endl;
-    for (int i = 0; i<ordered_index.size(); i++)
-    {
-        std::cout<<"ordered index : "<<ordered_index[i]<<std::endl; 
-        point32.x = points[ordered_index[i]][0];
-        point32.y = points[ordered_index[i]][1];
-        point32.z = points[ordered_index[i]][2];
-        std::cout<<point32.x<<", "<<point32.y<<", "<<point32.z<<std::endl;
-        polygon.points.push_back(point32);            
-        
-    }
-
-    polygonStamped.polygon = polygon;
-    polygonStamped.header.frame_id = "/world";
-    polygon_pub.publish(polygonStamped);
-}
-*/
 
 void publish_ordered_convex_hull(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_hull)
 {
@@ -215,20 +56,20 @@ void publish_ordered_convex_hull(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_hull)
     std::vector<int> ordered_index;
     int current;
     int target;
-    float max_y = -999999999;
+    float max_z = -999999999;
     ordered_index.push_back(0);
     for (int i = 0; i<cloud_hull->size(); i++)
     {
         //std::cout<<cloud_hull->points[i].x<<", "<<cloud_hull->points[i].y<<", "<<cloud_hull->points[i].z<<std::endl;
         index.push_back(i);
-        if (cloud_hull->points[i].y > max_y)
+        if (cloud_hull->points[i].z > max_z)
         {
-            max_y = cloud_hull->points[i].y;
+            max_z = cloud_hull->points[i].z;
             ordered_index[ordered_index.size()-1] = index[i];
             target = i;
         }        
     }
-    //std::cout<<"Max y picked : "<<cloud_hull->points[ordered_index[0]].x<<", "<<cloud_hull->points[ordered_index[0]].y<<", "<<cloud_hull->points[ordered_index[0]].z<<std::endl;
+    //std::cout<<"Max z picked : "<<cloud_hull->points[ordered_index[0]].x<<", "<<cloud_hull->points[ordered_index[0]].y<<", "<<cloud_hull->points[ordered_index[0]].z<<std::endl;
     
     while(index.size() > 2)
     {
@@ -245,18 +86,16 @@ void publish_ordered_convex_hull(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_hull)
             //std::cout<<cloud_hull->points[index[i]].x<<", "<<cloud_hull->points[index[i]].y<<", "<<cloud_hull->points[index[i]].z<<std::endl;
     
             float dxtest = 0.707106;
-            float dytest = 0;
-            float dztest = 0.707106;
+            float dytest = 0.707106;
+            float dztest = 0.;
             
             float dx = cloud_hull->points[index[i]].x-cloud_hull->points[ordered_index[0]].x;
             float dy = cloud_hull->points[index[i]].y-cloud_hull->points[ordered_index[0]].y;
             float dz = cloud_hull->points[index[i]].z-cloud_hull->points[ordered_index[0]].z;
             float mag = std::sqrt(dx*dx+dy*dy+dz*dz);
-            
-                       
-            float ds = std::sqrt(dx*dx+dz*dz);
+
             //std::cout<<"dx, dy, dz : "<<dx<<", "<<dy<<", "<<dz<<std::endl;
-            float angle = std::acos((dxtest*dx+dztest*dz)/mag);
+            float angle = std::acos((dxtest*dx+dytest*dy)/mag);
             //std::cout<<"angle"<<angle<<std::endl;
             if (angle < 0)
             {
@@ -310,50 +149,32 @@ void publish_floor_ends(std::vector<float> floor_lines)
     line_pub.publish(floor_array);
 }
 
-/// Returns an array of the x,y position of the projected line ends
-/// in the format {x1, y1, x2, y2}
-/// Takes line dir coefficients and pointer to relevant cloud
-void get_projected_floor_ends(float line_coeffs[], pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster, float end_xyxy[])
+
+void get_floor_ends(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_projected, float end_xyxy[])
 {
-    float min_l = 99999; //Not sure how to lookup system dependent float max/min
-    float max_l = -99999;
-    
-    //Normalise line_coeffs[]
-    float line_coeffs_norm[2];
-    float mag = std::sqrt(line_coeffs[0]*line_coeffs[0]+line_coeffs[1]*line_coeffs[1]);
-    line_coeffs_norm[0] = line_coeffs[0]/mag;
-    line_coeffs_norm[1] = line_coeffs[1]/mag;
-    //std::cout<<"Normalised line dir: "<<line_coeffs_norm[0]<<", "<<line_coeffs_norm[1]<<std::endl;
-    
-    float sum_x = 0;
-    float sum_y = 0;
-    // Find extreme points and project to 2D line
-    for (int i = 0; i< cloud_cluster->width; i++)
+    end_xyxy[0] = 9999;
+    end_xyxy[1] = 9999;
+    end_xyxy[2] = -9999;
+    end_xyxy[3] = -9999;
+    for (int i = 0; i<cloud_projected->size(); i++)
     {
-        float l = (*cloud_cluster).points[i].x*line_coeffs_norm[0]+(*cloud_cluster).points[i].z*line_coeffs_norm[1];
-        sum_x += (*cloud_cluster).points[i].x;
-        sum_y += (*cloud_cluster).points[i].z;
-        if (l > max_l)
+        if (cloud_projected->points[i].x < end_xyxy[0])
         {
-            max_l = l;
+            end_xyxy[0] = cloud_projected->points[i].x;
         }
-        else if (l < min_l)
+        if (cloud_projected->points[i].x > end_xyxy[2])
         {
-            min_l = l;
+            end_xyxy[2] = cloud_projected->points[i].x;
+        }
+        if (cloud_projected->points[i].y < end_xyxy[1])
+        {
+            end_xyxy[1] = cloud_projected->points[i].y;
+        }
+        if (cloud_projected->points[i].y > end_xyxy[3])
+        {
+            end_xyxy[3] = cloud_projected->points[i].y;
         }
     }
-    // Calc plane 2D centroid 
-    float mid_x = sum_x/cloud_cluster->width;
-    float mid_y = sum_y/cloud_cluster->width;
-    
-    end_xyxy[0] = min_l*line_coeffs_norm[0]+mid_x;
-    end_xyxy[1] = min_l*line_coeffs_norm[1]+mid_y;
-    end_xyxy[2] = max_l*line_coeffs_norm[0]+mid_x;
-    end_xyxy[3] = max_l*line_coeffs_norm[1]+mid_y;
-    
-    //std::cout<<"End points are ("<<end_xyxy[0]<<", "<<end_xyxy[1]<<") and ("
-    //         <<end_xyxy[2]<<", "<<end_xyxy[3]<<")"<<std::endl;
-    
 }
 
 
@@ -618,19 +439,7 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
 
             std::cout << "      PointCloud representing the Cluster: " << cloud_cluster->points.size () << " data points." << std::endl;
             
-            ///================================================================
-            /// Get floor plan
-            ///================================================================                                     
-            // Get floor plan lines
-            float line_coeffs[2];
-            floor_plane_intersect(coefficients->values[0], coefficients->values[1], coefficients->values[2], coefficients->values[3], line_coeffs);
-            float end_xyxy[4];
-            get_projected_floor_ends(line_coeffs, cloud_cluster, end_xyxy);
-            for (int k = 0; k<4; k++)
-            {
-                floor_lines.push_back(end_xyxy[k]);
-            }
-            ///--------------------------------------------------------------------
+            
             
             
             
@@ -664,10 +473,16 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
             
             
             
-            
-            
-            
-            
+            ///================================================================
+            /// Get floor plan
+            ///================================================================                                     
+            float end_xyxy[4];
+            get_floor_ends(cloud_projected, end_xyxy);
+            for (int k = 0; k<4; k++)
+            {
+                floor_lines.push_back(end_xyxy[k]);
+            }
+            ///----------------------------------------------------------------
             
             j++;
         }
@@ -681,30 +496,6 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
     std::cout<<"    Plane fitting complete"<<std::endl<<std::endl;
     
     publish_floor_ends(floor_lines);
-    
-    /*
-    seg.setInputCloud ((*cloud).makeShared ());
-    seg.segment (*inliers, *coefficients);
-
-    if (inliers->indices.size () == 0)
-    {
-        PCL_ERROR ("Could not estimate a planar model for the given dataset.");
-        return;
-    }
-
-    std::cerr << "Model coefficients: " << coefficients->values[0] << " " 
-                                      << coefficients->values[1] << " "
-                                      << coefficients->values[2] << " " 
-                                      << coefficients->values[3] << std::endl;
-
-    std::cerr << "Model inliers: " << inliers->indices.size () << std::endl;
-    for (size_t i = 0; i < inliers->indices.size (); ++i)
-    {
-        std::cerr << inliers->indices[i] << "    " << (*cloud).points[inliers->indices[i]].x << " "
-                                                << (*cloud).points[inliers->indices[i]].y << " "
-                                                << (*cloud).points[inliers->indices[i]].z << std::endl;
-    }
-    */
     
     
     pub.publish(cloud2_buffer);
