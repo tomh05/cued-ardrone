@@ -279,7 +279,7 @@ class ScanController:
             print "Processing Frames\r\n"
             self.feature_tracker.process_frames()
             # Shift frame2 to frame1 incase we want sequential use
-            self.load_through()
+            self.feature_tracker.load_through()
     
     def connect(self):     
         
@@ -601,10 +601,10 @@ class FeatureTracker:
         ===================================================================="""
         cloud = PointCloud()
         cloud.header.stamp = timestamp
-        cloud.header.frame_id = "\world"
+        cloud.header.frame_id = "/world"
         
         print "Pre-shift points:\r\n ", points
-        sub = np.subtract(points, self.image_position1)
+        sub = np.subtract(points.T, self.image_position1).T
         print "Post-shift points:\r\n ", sub
         
         # Reshape for easy clouding
@@ -623,7 +623,7 @@ class FeatureTracker:
         ===================================================================="""        
         cloud = PointCloud()
         cloud.header.stamp = timestamp
-        cloud.header.frame_id = "\ardrone_base_frontcam"
+        cloud.header.frame_id = "/ardrone_base_frontcam"
         # Reshape for easy clouding
         sub = zip(*np.vstack((points[0], points[1], points[2])))
         
@@ -634,6 +634,8 @@ class FeatureTracker:
             cloud.points[i].y = p[1]
             cloud.points[i].z = p[2]
         self.cloud_pub2.publish(cloud) 
+        
+        print "Cloud  of ", len(cloud.points), "Published"
         
     def world_to_pixel_distorted(self, pts, R, t, K=None, k=None):
         """Takes 3D world co-ord and reverse projects using K and distCoeffs"""
@@ -734,9 +736,9 @@ class FeatureTracker:
         ===================================================================="""
         
         self.tf.waitForTransform("ardrone_base_frontcam", "world", self.time_now, rospy.Duration(16))
-        pi, qi = self.tf.lookupTransform("ardrone_base_frontcam", "world", self.time_now)
+        pi, qi = self.tf.lookupTransform("ardrone_base_frontcam", "world", self.time_buffer)
         pi = -np.array((pi))
-        qi = tf.transformation.quaternion_inverse(qi)
+        qi = tf.transformations.quaternion_inverse(qi)
         
         
         if frame_no == 1:
