@@ -215,6 +215,11 @@ class FeatureTracker:
         
     def templateTrack(self):
         
+        
+        
+        
+        
+        
         self.t_debug_text = []
         grey_now = self.grey_now
         
@@ -366,6 +371,7 @@ class FeatureTracker:
         
         self.mag_dist = np.sqrt(t.T.dot(t)[0,0])
         self.t_debug_text.append("Dist " + str(self.mag_dist))
+        self.t_debug_text.append(t)
         
         # Make homogenous rotation matrix from R
         R4 = np.diag([0., 0., 0., 1.])
@@ -491,6 +497,8 @@ class FeatureTracker:
         
         print "Corners in image coordinates w.r.t drone:\r\n", corners_rot
         
+        # Position is the translation from the current position to the world origin in image co-ordinates
+        # quat is the rotation from the world axis to the image axis
         self.tf.waitForTransform("ardrone_base_frontcam", "world", self.time_now, rospy.Duration(16))
         position, quat = self.tf.lookupTransform("ardrone_base_frontcam", "world", self.time_now)
         
@@ -498,16 +506,21 @@ class FeatureTracker:
         # Get position of drone in current image coordinates
         position = -np.array((position))
         print "Drone position :\r\n", position
-        self.t_debug_text.append(position)
         
         # Form ready to add
         position = np.hstack((position, position))
-        position = np.reshape(np.hstack((position, position)), (-1, 3))
+        position = np.reshape(np.hstack((position, position)), (-1, 3)).T
+        print "Restacked matrix\r\n", position
+        
         
         # Shift to absolute image co-ords
-        corners_absolute_image = corners_rot.T + position
+        corners_absolute_image = corners_rot + position
         
-        corners_absolute_drone = tf.transformations.quaternion_matrix(quat)[:3, :3].dot(corners_absolute_image.T).T
+        rot_matrix = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(quat))[:3, :3]
+        
+        print "Rot matrix", rot_matrix
+        
+        corners_absolute_drone = rot_matrix.dot(corners_absolute_image).T
         #corners_absolute_drone = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(quat))[:3, :3].dot(corners_absolute_image.T).T
         
         print "Absolute corners :\r\n", corners_absolute_drone
