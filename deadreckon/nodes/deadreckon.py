@@ -156,8 +156,8 @@ class DeadReckoning:
                          # translation happens first, then rotation
                          quaternion,
                          time,
-                         "ardrone_base_link",
-                         "world")
+                         "/ardrone_base_link",
+                         "/world")
 
         '''
         # Publish path visualisation data
@@ -169,7 +169,7 @@ class DeadReckoning:
         self.trackPath.header        = d.header
         newPose = PoseStamped()
         newPose.header               = d.header
-        newPose.header.frame_id      = 'world'
+        newPose.header.frame_id      = '/world'
 
         newPose.pose.position.x      = self.x
         newPose.pose.position.y      = self.y
