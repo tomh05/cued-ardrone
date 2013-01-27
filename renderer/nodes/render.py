@@ -16,6 +16,7 @@ import cv2
 import cv
 from cv_bridge import CvBridge
 import threading
+from custom_msgs.msg import RendererPolyLineTri
 
 
 import os, pyglet, sys
@@ -51,10 +52,7 @@ class World(pyglet.window.Window):
         rospy.Subscriber('/template_track/img',Image,self.texture_process)
         rospy.Subscriber('/template_track/corners',Float32MultiArray, self.corner_process)
         rospy.Subscriber("/template_track/wall_trigger", Empty, self.trigger_process)
-        rospy.Subscriber("/point_handler/polygon", PolygonStamped, self.on_got_polygon)
-        rospy.Subscriber("/point_handler/triangle", PolygonStamped, self.on_got_triangle)
-        rospy.Subscriber("/point_handler/poly_clear", Empty, self.on_poly_clear)
-        rospy.Subscriber("/point_handler/lines", Float32MultiArray, self.on_got_line)
+        rospy.Subscriber("/point_hander/renderer_data", RendererPolyLineTri, self.on_got_renderer_data)
         rospy_thread = threading.Thread(target = self.spin)
         rospy_thread.start()
         
@@ -82,37 +80,34 @@ class World(pyglet.window.Window):
         self.texture_buffer = np.asarray(cvimg)
         self.live1 = True
         
-    def on_got_polygon(self, polygonStamped):
-        """Adds the receieved polygon to the draw list"""
-        points = []
-        print "New polygon of ", len(polygonStamped.polygon.points), " points"
-        for p in polygonStamped.polygon.points:
-            points.append(np.array([p.x, p.y, p.z]))
-        self.polygons.append(Polygon(points))
-        
-    def on_got_triangle(self, polygonStamped):
-        """Adds the receieved polygon to the draw list"""
-        points = []
-        for p in polygonStamped.polygon.points:
-            points.append(np.array([p.x, p.y, p.z]))
-        self.triangles.append(Polygon(points))
-        
-    def on_got_line(self, float32MultiArray):
-        """Adds the receieved line to the draw list"""
+    def on_got_renderer_data(self, rendererPolyLineTri):
+        """Adds new data to buffer then switches out"""
+        # Buffer triangles        
+        tris = []
+        for t in rendererPolyLineTri.triangles:
+            points = []
+            for p in t.points:
+                points.append(np.array([p.x, p.y, p.z]))
+            tris.append(Polygon(points))
+        # Buffer polygons
+        polys = []
+        for poly in rendererPolyLineTri.polygons:
+            #print "New polygon of ", len(poly.points), " points"
+            points = []
+            for p in poly.points:
+                points.append(np.array([p.x, p.y, p.z]))
+            polys.append(Polygon(points))
+        # Buffer floor lines
+        lines = []
         i = 0;
-        while (i < len(float32MultiArray.data)):
-            self.lines.append(Line(float32MultiArray.data[i],float32MultiArray.data[i+1],float32MultiArray.data[i+2],float32MultiArray.data[i+3]))
-            print "Added line with ends (", float32MultiArray.data[i], ", ", float32MultiArray.data[i+1], " and ", float32MultiArray.data[i+2], ", ", float32MultiArray.data[i+3]
+        while (i < len(rendererPolyLineTri.floorlines)):
+            self.lines.append(Line(rendererPolyLineTri.floorlines[i],rendererPolyLineTri.floorlines[i+1],rendererPolyLineTri.floorlines[i+2],rendererPolyLineTri.floorlines[i+3]))
+            #print "Added line with ends (", rendererPolyLineTri.floorlines[i], ", ", rendererPolyLineTri.floorlines[i+1], " and ", rendererPolyLineTri.floorlines[i+2], ", ", rendererPolyLineTri.floorlines[i+3]
             i = i + 4
-        
-        
-        
-    def on_poly_clear(self, d):
-        """ Clears the polygon list """
-        # This is not thread-safe, may need proper handling
-        self.polygons = []
-        self.triangles = []
-        self.lines = []
+        # Flip buffer
+        self.triangles = tris
+        self.polygons = polys
+        self.lines = lines
         
     def corner_process(self, d):
         self.corner_buffer = d.data

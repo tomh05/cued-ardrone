@@ -10,6 +10,7 @@
 #include <geometry_msgs/PolygonStamped.h>
 #include <geometry_msgs/Polygon.h>
 #include <geometry_msgs/Point32.h>
+#include <custom_msgs/RendererPolyLineTri.h>
 // PCL specific includes
 #include <pcl/ros/conversions.h>
 #include <pcl/point_cloud.h>
@@ -23,6 +24,7 @@
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/common/angles.h>
 
 #include <pcl/filters/extract_indices.h>
 
@@ -37,10 +39,15 @@ ros::Publisher polygon_pub;
 ros::Publisher triangle_pub;
 ros::Publisher poly_clear_pub;
 ros::Publisher line_pub;
+ros::Publisher render_pub;
+
+custom_msgs::RendererPolyLineTri renderer_poly_line_tri;
 
 // Is declaring this globally a very bad idea? (put on stack not heap?)
 sensor_msgs::PointCloud2 cloud2_buffer;
 bool first_time = true;
+
+
 
 /* Note: This code makes extensive use of pcl tutorial code */
 
@@ -133,6 +140,8 @@ void publish_ordered_convex_hull(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_hull)
     polygonStamped.polygon = polygon;
     polygonStamped.header.frame_id = "/world";
     polygon_pub.publish(polygonStamped);
+    
+    renderer_poly_line_tri.polygons.push_back(polygon);
 }
 
 void publish_floor_ends(std::vector<float> floor_lines)
@@ -145,6 +154,7 @@ void publish_floor_ends(std::vector<float> floor_lines)
     for (int i = 0; i < floor_lines.size(); i++)
     {
         floor_array.data.push_back(floor_lines[i]);
+        renderer_poly_line_tri.floorlines.push_back(floor_lines[i]);
     }
     line_pub.publish(floor_array);
 }
@@ -177,12 +187,102 @@ void get_floor_ends(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_projected, float e
     }
 }
 
+void triangulate_point_cloud(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
+{
+    // Normal estimation
+    pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> n;
+    pcl::PointCloud<pcl::Normal>::Ptr normals (new pcl::PointCloud<pcl::Normal>);
+    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
+    tree->setInputCloud (cloud);
+    n.setInputCloud (cloud);
+    n.setSearchMethod (tree);
+    n.setKSearch (20);
+    n.compute (*normals);
+    // normals should not contain the point normals + surface curvatures
+
+    // Concatenate the XYZ and normal fields
+    pcl::PointCloud<pcl::PointNormal>::Ptr cloud_with_normals (new pcl::PointCloud<pcl::PointNormal>);
+    pcl::concatenateFields (*cloud, *normals, *cloud_with_normals);
+    //* cloud_with_normals = cloud + normals
+
+    // Create search tree*
+    pcl::search::KdTree<pcl::PointNormal>::Ptr tree2 (new pcl::search::KdTree<pcl::PointNormal>);
+    tree2->setInputCloud (cloud_with_normals);
+
+    // Initialize objects
+    pcl::GreedyProjectionTriangulation<pcl::PointNormal> gp3;
+    pcl::PolygonMesh triangles;
+
+    // Set the maximum distance between connected points (maximum edge length)
+    gp3.setSearchRadius (0.2);
+
+    // Set typical values for the parameters
+    gp3.setMu (2.5);
+    gp3.setMaximumNearestNeighbors (100);
+    gp3.setMaximumSurfaceAngle(M_PI/4); // 45 degrees
+    gp3.setMinimumAngle(M_PI/18); // 10 degrees
+    gp3.setMaximumAngle(2*M_PI/3); // 120 degrees
+    gp3.setNormalConsistency(false);
+
+    // Get result
+    gp3.setInputCloud (cloud_with_normals);
+    gp3.setSearchMethod (tree2);
+    gp3.reconstruct (triangles);
+
+    // Additional vertex information
+    std::vector<int> parts = gp3.getPartIDs();
+    std::vector<int> states = gp3.getPointStates();
+    
+
+    sensor_msgs::PointCloud cloud_buffer;
+    sensor_msgs::convertPointCloud2ToPointCloud(cloud2_buffer, cloud_buffer);
+    
+    std::cout<<"    Producing triangles"<<std::endl;
+    for (int i = 0; i<triangles.polygons.size(); i++)
+    {
+        /*std::cout<<triangles.polygons[i]<<std::endl;
+        std::cout<<triangles.polygons[i].vertices[0]<<std::endl;
+        std::cout<<triangles.polygons[i].vertices[1]<<std::endl;
+        std::cout<<triangles.polygons[i].vertices[2]<<std::endl;
+        std::cout<<(*cloud1).points[triangles.polygons[i].vertices[0]]<<std::endl;
+        std::cout<<(*cloud1).points[triangles.polygons[i].vertices[1]]<<std::endl;
+        std::cout<<(*cloud1).points[triangles.polygons[i].vertices[2]]<<std::endl;*/
+        geometry_msgs::PolygonStamped polygonStamped;
+        geometry_msgs::Polygon polygon;
+        geometry_msgs::Point32 point32;
+        
+        point32.x = cloud_buffer.points[triangles.polygons[i].vertices[0]].x;
+        point32.y = cloud_buffer.points[triangles.polygons[i].vertices[0]].y;
+        point32.z = cloud_buffer.points[triangles.polygons[i].vertices[0]].z;
+        polygon.points.push_back(point32);
+        
+        point32.x = cloud_buffer.points[triangles.polygons[i].vertices[1]].x;
+        point32.y = cloud_buffer.points[triangles.polygons[i].vertices[1]].y;
+        point32.z = cloud_buffer.points[triangles.polygons[i].vertices[1]].z;
+        polygon.points.push_back(point32);
+        
+        point32.x = cloud_buffer.points[triangles.polygons[i].vertices[2]].x;
+        point32.y = cloud_buffer.points[triangles.polygons[i].vertices[2]].y;
+        point32.z = cloud_buffer.points[triangles.polygons[i].vertices[2]].z;
+        polygon.points.push_back(point32);
+        
+        renderer_poly_line_tri.triangles.push_back(polygon);
+        polygonStamped.polygon = polygon;
+        polygonStamped.header.frame_id = "/world";
+        
+        //std::cout<<i<<std::endl;
+        triangle_pub.publish(polygonStamped);
+    }
+}
+
 
 void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
 {
     std::vector<float> floor_lines;
+    renderer_poly_line_tri = custom_msgs::RendererPolyLineTri();
     
     std::cout<<"Receiving new cloud"<<std::endl;
+    poly_clear_pub.publish(std_msgs::Empty());
     
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
     
@@ -270,89 +370,7 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
     
     pcl::fromROSMsg (cloud2_buffer, *cloud);
 
-    // Normal estimation
-    pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> n;
-    pcl::PointCloud<pcl::Normal>::Ptr normals (new pcl::PointCloud<pcl::Normal>);
-    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
-    tree->setInputCloud (cloud);
-    n.setInputCloud (cloud);
-    n.setSearchMethod (tree);
-    n.setKSearch (20);
-    n.compute (*normals);
-    // normals should not contain the point normals + surface curvatures
-
-    // Concatenate the XYZ and normal fields
-    pcl::PointCloud<pcl::PointNormal>::Ptr cloud_with_normals (new pcl::PointCloud<pcl::PointNormal>);
-    pcl::concatenateFields (*cloud, *normals, *cloud_with_normals);
-    //* cloud_with_normals = cloud + normals
-
-    // Create search tree*
-    pcl::search::KdTree<pcl::PointNormal>::Ptr tree2 (new pcl::search::KdTree<pcl::PointNormal>);
-    tree2->setInputCloud (cloud_with_normals);
-
-    // Initialize objects
-    pcl::GreedyProjectionTriangulation<pcl::PointNormal> gp3;
-    pcl::PolygonMesh triangles;
-
-    // Set the maximum distance between connected points (maximum edge length)
-    gp3.setSearchRadius (0.2);
-
-    // Set typical values for the parameters
-    gp3.setMu (2.5);
-    gp3.setMaximumNearestNeighbors (100);
-    gp3.setMaximumSurfaceAngle(M_PI/4); // 45 degrees
-    gp3.setMinimumAngle(M_PI/18); // 10 degrees
-    gp3.setMaximumAngle(2*M_PI/3); // 120 degrees
-    gp3.setNormalConsistency(false);
-
-    // Get result
-    gp3.setInputCloud (cloud_with_normals);
-    gp3.setSearchMethod (tree2);
-    gp3.reconstruct (triangles);
-
-    // Additional vertex information
-    std::vector<int> parts = gp3.getPartIDs();
-    std::vector<int> states = gp3.getPointStates();
     
-    poly_clear_pub.publish(std_msgs::Empty());
-
-    sensor_msgs::PointCloud cloud_buffer;
-    sensor_msgs::convertPointCloud2ToPointCloud(cloud2_buffer, cloud_buffer);
-    
-    std::cout<<"    Producing triangles"<<std::endl;
-    for (int i = 0; i<triangles.polygons.size(); i++)
-    {
-        /*std::cout<<triangles.polygons[i]<<std::endl;
-        std::cout<<triangles.polygons[i].vertices[0]<<std::endl;
-        std::cout<<triangles.polygons[i].vertices[1]<<std::endl;
-        std::cout<<triangles.polygons[i].vertices[2]<<std::endl;
-        std::cout<<(*cloud1).points[triangles.polygons[i].vertices[0]]<<std::endl;
-        std::cout<<(*cloud1).points[triangles.polygons[i].vertices[1]]<<std::endl;
-        std::cout<<(*cloud1).points[triangles.polygons[i].vertices[2]]<<std::endl;*/
-        geometry_msgs::PolygonStamped polygonStamped;
-        geometry_msgs::Polygon polygon;
-        geometry_msgs::Point32 point32;
-        
-        point32.x = cloud_buffer.points[triangles.polygons[i].vertices[0]].x;
-        point32.y = cloud_buffer.points[triangles.polygons[i].vertices[0]].y;
-        point32.z = cloud_buffer.points[triangles.polygons[i].vertices[0]].z;
-        polygon.points.push_back(point32);
-        
-        point32.x = cloud_buffer.points[triangles.polygons[i].vertices[1]].x;
-        point32.y = cloud_buffer.points[triangles.polygons[i].vertices[1]].y;
-        point32.z = cloud_buffer.points[triangles.polygons[i].vertices[1]].z;
-        polygon.points.push_back(point32);
-        
-        point32.x = cloud_buffer.points[triangles.polygons[i].vertices[2]].x;
-        point32.y = cloud_buffer.points[triangles.polygons[i].vertices[2]].y;
-        point32.z = cloud_buffer.points[triangles.polygons[i].vertices[2]].z;
-        polygon.points.push_back(point32);
-        
-        polygonStamped.polygon = polygon;
-        polygonStamped.header.frame_id = "/world";
-        //std::cout<<i<<std::endl;
-        triangle_pub.publish(polygonStamped);
-    }
     
     
     
@@ -372,7 +390,10 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
     // Optional
     seg.setOptimizeCoefficients (true);
     // Mandatory
-    seg.setModelType (pcl::SACMODEL_PLANE);
+    //seg.setModelType (pcl::SACMODEL_PLANE);
+    seg.setModelType (pcl::SACMODEL_PARALLEL_PLANE);
+    seg.setAxis (Eigen::Vector3f (1.0, 1.0, 0.0));
+    seg.setEpsAngle (pcl::deg2rad (10.));
     seg.setMethodType (pcl::SAC_RANSAC);
     seg.setMaxIterations(1000);
     seg.setDistanceThreshold (0.1);
@@ -497,6 +518,7 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
     
     publish_floor_ends(floor_lines);
     
+    render_pub.publish(renderer_poly_line_tri);
     
     pub.publish(cloud2_buffer);
     
@@ -526,6 +548,9 @@ int main (int argc, char** argv)
     
     // Create floorplan line publisher
     line_pub = nh.advertise<std_msgs::Float32MultiArray>("/point_handler/lines", 64);
+    
+    // Create render publisher
+    render_pub = nh.advertise<custom_msgs::RendererPolyLineTri>("/point_hander/renderer_data", 16);
 
     // Spin
     ros::spin ();
