@@ -1,0 +1,16 @@
+<package>
+  <description brief="floor_gridder">
+
+     floor_gridder
+
+  </description>
+  <author>Alex</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/floor_gridder</url>
+  <depend package="opencv2"/>
+  <depend package="custom_msgs"/>
+
+</package>
+
+
