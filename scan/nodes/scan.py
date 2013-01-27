@@ -64,6 +64,8 @@ import time
 import threading
 import os
 from copy import deepcopy
+from custom_msgs.msg import StampedMatchesWithImages
+
     
 def stackImagesVertically(top_image, bottom_image):
     """Takes two cv2 numpy array images top_image, bottom_image

@@ -1,0 +1,15 @@
+<package>
+  <description brief="custom_msgs">
+
+     custom_msgs
+
+  </description>
+  <author>Alex</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/custom_msgs</url>
+  <depend package="image_transport"/>
+
+</package>
+
+
