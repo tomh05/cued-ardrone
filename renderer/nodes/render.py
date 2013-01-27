@@ -23,7 +23,7 @@ import os, pyglet, sys
 from pyglet.gl import *
 
 class World(pyglet.window.Window):
-    def __init__(self, viewer_pos=(0., 0., 5.), *args, **kwargs):
+    def __init__(self, viewer_pos=(0., 0., 10.), *args, **kwargs):
         super(World, self).__init__(*args, **kwargs)
         self.viewer_pos = viewer_pos
         glClearColor(1.0, 1.0, 1.0, 0.0)
@@ -101,7 +101,7 @@ class World(pyglet.window.Window):
         lines = []
         i = 0;
         while (i < len(rendererPolyLineTri.floorlines)):
-            self.lines.append(Line(rendererPolyLineTri.floorlines[i],rendererPolyLineTri.floorlines[i+1],rendererPolyLineTri.floorlines[i+2],rendererPolyLineTri.floorlines[i+3]))
+            lines.append(Line(rendererPolyLineTri.floorlines[i],rendererPolyLineTri.floorlines[i+1],rendererPolyLineTri.floorlines[i+2],rendererPolyLineTri.floorlines[i+3]))
             #print "Added line with ends (", rendererPolyLineTri.floorlines[i], ", ", rendererPolyLineTri.floorlines[i+1], " and ", rendererPolyLineTri.floorlines[i+2], ", ", rendererPolyLineTri.floorlines[i+3]
             i = i + 4
         # Flip buffer
