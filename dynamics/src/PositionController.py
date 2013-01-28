@@ -33,7 +33,7 @@ class PositionController:
 		self.cmd_log = {'tm':[], 'tw':[]}
 		self.nd_log = {'tm':[], 'nd':[], 'ph':[], 'th':[], 'ps':[], 'vx':[], 'vy':[], 'vz':[], 'al':[], 'cpw':[cpw0,], 'cyw':[dyw0,]}
 		
-		self.ref = {'al':1500}	#'al' for height
+		self.ref = {'al':800}	#'al' for height
 		self.error = {'al':[]}
 		self.refalon = True
 		self.yawon = False
@@ -83,21 +83,24 @@ class PositionController:
 				#print 'dz: ', dz
 				#print msg.rotZ
 				drotZ=msg.rotZ - self.nd_log['ps'][-2]
-				if drotZ > 300:										#to account for discontinuity in yaw around 0
-					drotZ = drotZ - 360
-				elif drotZ<-300:
-					drotZ = drotZ + 360
-				cywnew = self.nd_log['cyw'][-1] + radians(drotZ)
+				#if drotZ > 300:										#to account for discontinuity in yaw around 0
+					#drotZ = drotZ - 360
+				#elif drotZ<-300:
+					#drotZ = drotZ + 360
+				#cywnew = self.nd_log['cyw'][-1] + radians(drotZ)
+				cywnew = degrees(self.nd_log['cyw'][-1]) + drotZ
+				cywnew = self.cyd(cywnew,0.0)					#centers the new cyw around 0
+				cywnew = radians(cywnew)
 				yaw=(cywnew+self.nd_log['cyw'][-1])/2.0			#yaw refers to yaw wrt to world frame
 				du=dx*cos(yaw)-dy*sin(yaw)						#du, dv are displacement in  world frame
 				dv=dx*sin(yaw)+dy*cos(yaw)
 				self.nd_log['cpw'].append((self.nd_log['cpw'][-1][0]+du, self.nd_log['cpw'][-1][1]+dv, self.nd_log['cpw'][-1][2]+dz))
 				self.nd_log['cyw'].append(cywnew)
-				#print yaw
+				print yaw
 				#print self.nd_log['cpw'][-1]
 		except:
 			#self.drone_pos_valid = False
-			print 'navdata callback error'
+			print 'PositionController.py: navdata callback error'
 			
 
 	def nd_logger(self,msg):
@@ -134,16 +137,17 @@ class PositionController:
 	
 	def dpw_handler(self, dpw):
 		self.dpw = dpw
-		
+		print 'PositionController.py: set dpw = ', dpw
 	
 	def dyw_handler(self, dyw):
 		self.dyw = dyw		#dyw is the required euler z rot of the drone wrt. world frame, in radians
+		print 'PositionController.py: set dyw = ', dyw
 
 
 	def pc_timer_callback(self,event):
 		if (self.nd_log['al'][-1]>(2000)):
 			self.landpub.publish(Empty())	#height switch
-			print 'error: altitude too high - landing'
+			print 'PositionController: Error: altitude too high - landing'
 		
 		if self.refalon == True:
 			self.twist.linear.z = max(min(0.0013*self.error['al'][-1], 1.0), -1.0)
