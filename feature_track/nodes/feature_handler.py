@@ -14,28 +14,30 @@ import std_msgs.msg
 from rospy.numpy_msg import numpy_msg
 from custom_msgs.msg import StampedFrames
 from custom_msgs.msg import StampedMatchesWithImage
+from copy import deepcopy
 
 class FeatureInstance():
-    def __init___ (self, target):
+    def __init__ (self, target):
         self.loaded = False
         self.loading = False
-        self.match_pub = rospy.Publisher('/feature_matcher/matches', StampedFrames)
         self.desc1 = None
-        self.kp1 = None
-        self.header1 = None
-        self.pts1 = None
-        self.img1 = None
+        self.desc2 = None
         self.subscription = rospy.Subscriber(target, Image, self.image_proc)
         
         self.fd = cv2.FeatureDetector_create('SIFT')
         self.de = cv2.DescriptorExtractor_create('SIFT')
         
-    def img_proc(self, d):
+    def image_proc(self, d):
         """Converts the ROS published image to a cv2 numpy array
         and passes to FeatureTracker"""        
         
+        
         if self.loading == True:
-            self.loading = False
+            print "Loading frame..."
+            self.loading = False   
+            if self.desc1 != None:         
+                self.img2 = deepcopy(self.img1)
+                self.header2 = deepcopy(self.header1)
             self.img1 = d
             self.header1 = d.header            
             # ROS to cv image
@@ -55,10 +57,10 @@ class FeatureInstance():
         # Convert to monochrome
         grey_now = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         
-        self.pts2 = self.pts1
-        self.kp2 = self.kp1
-        self.img2 = self.img1
-        self.header2 = self.header1
+        if self.desc1 != None:            
+            self.pts2 = self.pts1
+            self.kp2 = self.kp1
+            self.desc2 = self.desc1
         
         # Extract features and descriptors
         self.pts1 = self.fd.detect(grey_now)
@@ -71,31 +73,42 @@ class FeatureInstance():
 class FeatureHandler():
     def __init__(self):
         rospy.init_node('Feature_Matcher')
-        self.load_sub = rospy.Subscriber('/feature_matcher/load', std_msgs.msg.String, self.load_features)
-        self.match_sub = rospy.Subscriber('/feature_matcher/process', std_msgs.msg.String, self.match_images)
-        self.init_sub = rospy.Subscriber('/feature_matcher/init', std_msgs.msg.String, self.init_instance)
-        self.lookup = { 'null', -1}
+        rospy.Subscriber('/feature_matcher/load', std_msgs.msg.String, self.load_features)
+        rospy.Subscriber('/feature_matcher/process', std_msgs.msg.String, self.match_images)
+        self.match_pub = rospy.Publisher('/feature_matcher/matches', StampedFrames)
+        self.lookup = { 'null': -1}
         self.instances = []
-        self.dm = cv2.DescriptorMatcher_create('BruteForce') #'BruteForce-Hamming' for binary
-        
-    def init_instance(self, target):
-        self.lookup[target] = len(self.instances)
-        self.instances.append(FeatureInstance(target))
+        self.dm = cv2.DescriptorMatcher_create('BruteForce') #'BruteForce-Hamming' for binary 
         
     def load_features(self, target):
+        target = str(target).split(' ')[1]
+        if not target in self.lookup:
+            self.lookup[target] = len(self.instances)
+            self.instances.append(FeatureInstance(target))
         self.instances[self.lookup[target]].loading = True
         
     def match_images(self, targets):
-        targets = target.split(',')
+        targets = str(targets).split(' ')[1]
+        targets = targets.split(',')
+        if (not targets[0] in self.lookup) or (not targets[1] in self.lookup):
+            print "Frames not initialised"
+            return
         if targets[0] == targets[1]:
-            a = instances[lookup[targets[0]]]
+            a = self.instances[self.lookup[targets[0]]]
+            if (a.desc2 == None):
+                print "Frames not loaded"
+                return
             a_img = a.img1
             b_img = a.img2
             header = a.header1
             matches_pts1, matches_pts2 = self.match_points(a.kp1, a.kp2, a.desc1, a.desc2)
+            
         else:
-            a = instances[lookup[targets[0]]]
-            b = instances[lookup[targets[1]]]
+            a = self.instances[self.lookup[targets[0]]]
+            b = self.instances[self.lookup[targets[1]]]
+            if (a.desc1 == None or b.desc1 == None):
+                print "Frames not loaded"
+                return
             a_img = a.img1
             b_img = b.img1
             if (a.header1.stamp > b.header1.stamp):
@@ -112,7 +125,7 @@ class FeatureHandler():
         smwi.pts = matches_pts1.reshape(-1,).tolist()
         smwi.image = a_img
         
-        stamped_frames.frame1 = smwi
+        stamped_frames.frame1 = deepcopy(smwi)
         
         smwi.header = b_img.header
         smwi.pts = matches_pts2.reshape(-1,).tolist()
@@ -121,13 +134,13 @@ class FeatureHandler():
         stamped_frames.frame2 = smwi
         
         stamped_frames.header = header
-        stamped_frames.header.frame_id = targets
+        stamped_frames.header.frame_id = targets[0]+","+targets[1]
         
         self.match_pub.publish(stamped_frames)
         
     
     def match_points(self, kp1, kp2, desc1, desc2):
-        """Matches the two points. There appears to be no wat to specify match
+        """Matches the two points. There appears to be no way to specify match
         paramaters from python, so crossCheck is implemented manually"""
         # Match features        
         matches = self.dm.match(desc1, desc2)
@@ -154,7 +167,7 @@ class FeatureHandler():
         i1_pts = kp1_array[i1_indices,:]
         i2_pts = kp2_array[i2_indices,:]
         
-        return i1_pts, i2_pts   
+        return i1_pts, i2_pts 
 
 
 

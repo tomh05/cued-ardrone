@@ -50,6 +50,8 @@ import rospy
 import ardrone_autonomy.msg
 from sensor_msgs.msg import Image
 import cv2
+import cv
+from cv_bridge import CvBridge
 import numpy as np
 import sensor_msgs.msg
 import geometry_msgs.msg as gm
@@ -65,14 +67,33 @@ from custom_msgs.msg import StampedFrames
 def make_homo(pts):
     pts = np.append(pts,np.array([np.ones(pts.shape[0])]).T, 1)
     return pts
+    
+def stackImagesVertically(top_image, bottom_image):
+    """Takes two cv2 numpy array images top_image, bottom_image
+       Returns a cv2 numpy array image of the two stacked vertically
+       Image dimensions need not match, output it left aligned"""
+    # Get image dimensions
+    h1, w1 = top_image.shape[:2]
+    h2, w2 = bottom_image.shape[:2]
+    # Create an empty array that is bounding box size of image stack
+    stacked = np.zeros((h1+h2, max(w1,w2)), np.uint8)
+    # Drop in the top_image
+    stacked[:h1, :w1] = top_image
+    # Drop in the bottom_image
+    stacked[h1:h1+h2, :w2] = bottom_image
+    return stacked
 
 class Triangulator:
     def __init__(self):
-        self.tf = tf.TransformListener()
+        self.tf = tf.TransformListener()        
+        self.calibrated = False
+        self.connect()
         
     def connect(self):
         rospy.Subscriber('/feature_matcher/matches', StampedFrames ,self.process)
         rospy.Subscriber('/ardrone/front/camera_info',sensor_msgs.msg.CameraInfo, self.set_camera_info)
+        self.cloud_pub = rospy.Publisher('/scan/absolute_cloud', PointCloud)
+        self.cloud_pub2 = rospy.Publisher('/scan/relative_cloud', PointCloud)
         
     def extract_fundamental(self, i1_pts_undistorted, i2_pts_undistorted, i1_pts_draw, i2_pts_draw):
         """
@@ -80,9 +101,7 @@ class Triangulator:
         FM_RANSAC should be good with lowish outliers
         FM_LMEDS may be more robust in some cases
         """
-        temp_time = time.time()
         F, mask = cv2.findFundamentalMat(i1_pts_undistorted, i2_pts_undistorted, cv2.FM_RANSAC, param1 = 3, param2 = 0.99)
-        #print "F time : ", time.time()-temp_time
         # Expand mask for easy filtering
         mask_prepped = np.append(mask, mask, 1.)
         # Efficient np-style filtering, then reform
@@ -206,7 +225,7 @@ class Triangulator:
             print "==================================================="
             print "P2 not extracted"
             print "==================================================="
-            return False, None, None, None, None            
+            return False, None, None, None, None, None, None            
         
         #print "P2"
         #print projections[ind]
@@ -331,6 +350,8 @@ class Triangulator:
         self.position_w1 = np.array((p))
         self.quat_i_to_w_w1 = tf.transformations.quaternion_inverse(q)
         
+        print time1
+        print time2
         
         """====================================================================
         # Image co-ordinate handling
@@ -352,13 +373,15 @@ class Triangulator:
         # Difference in position in world co-ordinates
         trans = np.array(([(self.position_w2[0] - self.position_w1[0])],
                           [(self.position_w2[1] - self.position_w1[1])],
-                          [(self.position_w2[2] - self.position_w1[2])]))        
+                          [(self.position_w2[2] - self.position_w1[2])]))
+        print trans        
         R = tf.transformations.quaternion_matrix(self.quat_i_to_w_w1)[:3, :3]
+        print R
         # Get difference in position in image co-ordinates
         trans = R.dot(trans)
         self.image_coord_trans = -np.array([trans[0], trans[1], trans[2]])        
         # Get relative quaternion using qmid = (qbefore^-1).qafter
-        self.relative_quat = tf.transformations.quaternion_(
+        self.relative_quat = tf.transformations.quaternion_inverse(
                                 tf.transformations.quaternion_multiply(
                                     tf.transformations.quaternion_inverse(
                                         self.quat_w_to_i_i1), 
@@ -367,6 +390,8 @@ class Triangulator:
     
     def process(self, stampedFrames):
         """Takes matched points. Filters points prior to triangulation"""
+        print "Receiving data"
+        
         self.debug_text = []
         self.upper_debug_text = []
         
@@ -375,6 +400,10 @@ class Triangulator:
         
         i1_pts = np.reshape(np.array(stampedFrames.frame1.pts), (-1, 2))
         i2_pts = np.reshape(np.array(stampedFrames.frame2.pts), (-1, 2))
+        
+        print i1_pts
+        print i2_pts
+        
         i1_pts_draw = i1_pts
         i2_pts_draw = i2_pts
         
@@ -443,6 +472,16 @@ class Triangulator:
         # Only that fit with the calculated geometry are plotted
         # Note: This plots undistorted points on the distorted image
         ===================================================================="""
+         # ROS to cv image
+        bridge = CvBridge()
+        cvimg = bridge.imgmsg_to_cv(stampedFrames.frame1.image,"bgr8")
+        # cv to cv2 numpy array image
+        grey_previous = cv2.cvtColor(np.asarray(cvimg), cv2.COLOR_BGR2GRAY)
+        cvimg = bridge.imgmsg_to_cv(stampedFrames.frame2.image,"bgr8")
+        # cv to cv2 numpy array image
+        grey_now = cv2.cvtColor(np.asarray(cvimg), cv2.COLOR_BGR2GRAY)
+        
+        
         img2 = stackImagesVertically(grey_previous, grey_now)
         img2 = cv2.cvtColor(img2, cv2.COLOR_GRAY2BGR)
         imh = grey_previous.shape[0]
@@ -450,7 +489,7 @@ class Triangulator:
         l = 120
         
         # Draw lines linking fully tracked points
-        for p1, p2 in zip(self.i1_pts_draw, self.i2_pts_draw):
+        for p1, p2 in zip(i1_pts_draw_corr, i2_pts_draw_corr):
             county += 1
             cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
         
@@ -489,13 +528,13 @@ class Triangulator:
         
         # Pull tf data
         t = self.image_coord_trans
-        self.debug_text.append("trans: "+t) 
+        self.debug_text.append("trans: "+str(t))
         R = tf.transformations.quaternion_matrix(self.relative_quat)[:3, :3]
         
         # Debug
         angles = np.array(tf.transformations.euler_from_quaternion(self.relative_quat))
         angles = angles*180./np.pi        
-        self.debug_text.append("rot: "+angles)  
+        self.debug_text.append("rot: "+str(angles)) 
         
         """
         Triangulating using Kinv premultiplied pixel co-ord and [R t]
@@ -505,6 +544,7 @@ class Triangulator:
         pts2_norm = self.inverseCameraMatrix.dot(make_homo(pts2).transpose()).transpose()[:,:2]       
         P1 = np.hstack((np.array([[1., 0., 0.],[0., 1., 0.],[0., 0., 1.]]), np.array([[0.],[0.],[0,]])))
         P2 = np.hstack((R, t))
+        print pts2_norm
         points4D = cv2.triangulatePoints(P1, P2, pts1_norm.transpose(), pts2_norm.transpose())
         points3D_image = (points4D/points4D[3])[:3]
         
@@ -562,16 +602,18 @@ class ScanController:
         
     def get_frame(self, empty):
         print "Loading Frame\r\n"
-        self.capture_pub('/ardrone/front/image_raw')
+        self.capture_pub.publish('/ardrone/front/image_raw')
         
         
     def process_frames(self, empty):
         print "Processing Frames\r\n"
-        self.process_pub('/ardrone/front/image_raw,/ardrone/front/image_raw')
+        self.process_pub.publish('/ardrone/front/image_raw,/ardrone/front/image_raw')
     
     def connect(self):
         self.capture_pub = rospy.Publisher('/feature_matcher/load', std_msgs.msg.String)
         self.process_pub = rospy.Publisher('/feature_matcher/process', std_msgs.msg.String)
+        rospy.Subscriber('/xboxcontroller/button_a',Empty,self.get_frame)
+        rospy.Subscriber('/xboxcontroller/button_b',Empty,self.process_frames)
         
 
 
