@@ -18,7 +18,7 @@ class FeatureInstance():
     def __init___ (self, target):
         self.loaded = False
         self.loading = False
-        self.match_pub = rospy.Publisher('/feature_match/matches', StampedMatchesWithImages)
+        self.match_pub = rospy.Publisher('/feature_matcher/matches', StampedMatchesWithImages)
         self.desc1 = None
         self.kp1 = None
         self.header1 = None
