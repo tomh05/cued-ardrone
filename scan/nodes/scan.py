@@ -396,7 +396,7 @@ class FeatureTracker:
         FM_LMEDS may be more robust in some cases
         """
         temp_time = time.time()
-        F, mask = cv2.findFundamentalMat(i1_pts_undistorted, i2_pts_undistorted, cv2.FM_RANSAC, param1 = 1, param2 = 0.99)
+        F, mask = cv2.findFundamentalMat(i1_pts_undistorted, i2_pts_undistorted, cv2.FM_RANSAC, param1 = 3, param2 = 0.99)
         #print "F time : ", time.time()-temp_time
         # Expand mask for easy filtering
         mask_prepped = np.append(mask, mask, 1.)
@@ -605,7 +605,8 @@ class FeatureTracker:
         cloud.header.frame_id = "/world"
         
         print "Pre-shift points:\r\n ", points
-        sub = np.subtract(points.T, self.image_position1).T
+        sub = np.add(points.T, self.image_position1).T
+        sub = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(self.quaternion1))[:3,:3].dot(sub)
         print "Post-shift points:\r\n ", sub
         
         # Reshape for easy clouding
@@ -617,7 +618,7 @@ class FeatureTracker:
             cloud.points[i].x = p[0]
             cloud.points[i].y = p[1]
             cloud.points[i].z = p[2]
-        #self.cloud_pub.publish(cloud)
+        self.cloud_pub.publish(cloud)
         
         """====================================================================
         # Relative Point Cloud
@@ -638,8 +639,9 @@ class FeatureTracker:
         
         print "Cloud  of ", len(cloud.points), "Published"
         
-        self.tf.transformPointCloud('/world', cloud)
-        self.cloud_pub.publish(cloud)
+        #cloud = self.tf.transformPointCloud('/world', cloud)
+        #print cloud.header.frame_id
+        #self.cloud_pub.publish(cloud)
         
     def world_to_pixel_distorted(self, pts, R, t, K=None, k=None):
         """Takes 3D world co-ord and reverse projects using K and distCoeffs"""
@@ -700,6 +702,11 @@ class FeatureTracker:
         
         
         frame = cv2.cvtColor(self.image_buffer, cv2.COLOR_BGR2GRAY)
+        # There appears to be no way to specify the bound on no of 
+        # features detected. May be able increase no by running four
+        # times; once on each quadrant either by masking (supported by
+        # cv2 as an additional parameter) or by actually splitting the
+        # image
         pts = self.fd.detect(frame)
         kp, desc = self.de.compute(frame, pts)
         
@@ -779,16 +786,20 @@ class FeatureTracker:
                           [(self.position2[1] - self.position1[1])],
                           [(self.position2[2] - self.position1[2])]))
         
-        R = tf.transformations.quaternion_matrix(self.quaternion2)[:3, :3]
+        R = tf.transformations.quaternion_matrix(self.quaternion1)[:3, :3]
         trans = R.dot(trans)
         # Re-order axis into image not necessary as frontcam is image co-ords
         self.image_coord_trans = np.array([trans[0], trans[1], trans[2]])
-        self.image_coord_trans = np.array([0., trans[1], 0.])
+        #.image_coord_trans = np.array([[0.], trans[1], [0.]])
         
         # Get relative quaternion
         # qmid = qbefore-1.qafter
         self.relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.quaternion1), self.quaternion2)
-        self.realative_quat = tf.transformations.quaternion_from_matrix(np.diag((0., 0., 0., 0.))
+        #self.relative_quat = tf.transformations.quaternion_from_matrix(np.diag((1., 1., 1., 1.)))
+        angles = np.array(tf.transformations.euler_from_quaternion(tf.transformations.quaternion_inverse(self.relative_quat)))
+        angles = angles*180./np.pi
+        print angles
+        self.relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.image_quaternion1), self.image_quaternion2)
         
    
     def process_frames(self):
@@ -817,7 +828,8 @@ class FeatureTracker:
         if not success:
             return
     
-        
+        print len(i1_pts), " matched points"
+
         """====================================================================
         Undistort points using known camera calibration
         ==================================================================="""
@@ -838,6 +850,7 @@ class FeatureTracker:
             print "No inliers consistent with F"
             return        
             
+        print len(i1_pts_corr), " F fitted points"
             
         """============================================================
         # Extract P1 and P2 via E
@@ -856,6 +869,8 @@ class FeatureTracker:
         
         #self.tf_triangulate_points(i1_pts_final, i2_pts_final)
         self.tf_triangulate_points(i1_pts_corr, i2_pts_corr)
+        
+        print len(i1_pts_final), " E fitted points"
         
         
         """====================================================================
@@ -935,13 +950,17 @@ class FeatureTracker:
         # Get rotation matrix
         R = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(self.relative_quat))[:3, :3]
         
-        self.debug_text.append("rot: "+np_to_str(tf.transformations.euler_from_matrix(R)))  
+        angles = np.array(tf.transformations.euler_from_quaternion(tf.transformations.quaternion_inverse(self.relative_quat)))
+        angles = angles*180./np.pi
+        print angles
+        #angles[0]= angles[0]*180/np.pi
+        #angles[1]= angles[1]*180/np.pi
+        #angles[2]= angles[2]*180/np.pi
+        
+        self.debug_text.append("rot: "+np_to_str(angles))  
         
     
-        # Bottom out if motion if insufficient
-        if abs(t[1]) < 0.1 and abs(t[2]) < 0.1:
-            print "Motion bad for triangulation"
-            return
+        
         
         
         # Compose projection matrix
@@ -952,12 +971,12 @@ class FeatureTracker:
         Triangulate using pixel co-ord and K[R t]
         """
         # Factor in camera calibration
-        PP1 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
-        PP2 = self.cameraMatrix.dot(P_cam1_to_cam2)
+        #PP1 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
+        #PP2 = self.cameraMatrix.dot(P_cam1_to_cam2)
         #points3D_image1 = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2)[:3]
-        points4D = cv2.triangulatePoints(PP1, PP2, pts1.transpose(), pts2.transpose())
+        #points4D = cv2.triangulatePoints(PP1, PP2, pts1.transpose(), pts2.transpose())
         # Normalise homogeneous co-ords
-        points3D_image2 = (points4D/points4D[3])[:3]
+        #points3D_image2 = (points4D/points4D[3])[:3]
         
         
         """
@@ -983,14 +1002,14 @@ class FeatureTracker:
         In flight however most points are removed by this filter suggesting
         a poor basis for triangulation.
         """
-        numeric_accuracy = abs(points3D_image4 - points3D_image2)>1. 
+        #numeric_accuracy = abs(points3D_image4 - points3D_image2)>1. 
         # True means inaccurate, ie. more than 1m discrepancy depending on calc method
-        numeric_accuracy = numeric_accuracy[0] | numeric_accuracy[1] | numeric_accuracy[2]
-        numeric_accuracy = np.array([numeric_accuracy]).transpose()
-        numeric_accuracy = np.hstack((numeric_accuracy, numeric_accuracy, numeric_accuracy)).transpose()        
-        points3D_image = np.reshape(points3D_image2[numeric_accuracy==False], (3, -1))
+        #numeric_accuracy = numeric_accuracy[0] | numeric_accuracy[1] | numeric_accuracy[2]
+        #numeric_accuracy = np.array([numeric_accuracy]).transpose()
+        #numeric_accuracy = np.hstack((numeric_accuracy, numeric_accuracy, numeric_accuracy)).transpose()        
+        #points3D_image = np.reshape(points3D_image2[numeric_accuracy==False], (3, -1))
         
-        points3D_image = points3D_image2
+        points3D_image = points3D_image4
         
         # Output number of triangulated points
         triangulated = len(points3D_image[0])+0.
@@ -1058,6 +1077,34 @@ class FeatureTracker:
         #if (forward_triangulated/triangulated) > 0.5:
         print "Publishing Point cloud"
         self.publish_cloud(points3D_image, self.time_prev)
+        
+    def triangulate_point(self, x1,x2,P1,P2): 
+        """ Point pair triangulation from
+        least squares solution. """
+        # Compose matrix representing simultaneous equations
+        M = np.zeros((6,6))
+        M[:3,:4] = P1
+        M[3:,:4] = P2
+        M[:3,4] = -x1
+        M[3:,5] = -x2
+        # Compute SVD
+        U,S,V = np.linalg.svd(M)
+        # numpy SVD is ordered from largest to smallest (for S)
+        # so least squares solution will always lie in the last column of V
+        # BUT since numpy SVD returns V transpose not V, it is the last row
+        X = V[-1,:4]
+        return X / X[3]
+        
+    def triangulate_points(self, x1,x2,P1,P2):
+        """ Two-view triangulation of points in
+        x1,x2 (2*n coordingates)"""
+        n = x1.shape[1]
+        # Make homogenous
+        x1 = np.append(x1, np.array([np.ones(x1.shape[1])]), 0)
+        x2 = np.append(x2, np.array([np.ones(x2.shape[1])]), 0)
+        # Triangulate for each pair
+        X = [ self.triangulate_point(x1[:,i],x2[:,i],P1,P2) for i in range(n)] # Looping here is probably unavoidable
+        return np.array(X).T
         
         
     def imgproc(self, d):
