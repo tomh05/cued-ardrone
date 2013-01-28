@@ -617,7 +617,7 @@ class FeatureTracker:
             cloud.points[i].x = p[0]
             cloud.points[i].y = p[1]
             cloud.points[i].z = p[2]
-        self.cloud_pub.publish(cloud)
+        #self.cloud_pub.publish(cloud)
         
         """====================================================================
         # Relative Point Cloud
@@ -637,6 +637,9 @@ class FeatureTracker:
         self.cloud_pub2.publish(cloud) 
         
         print "Cloud  of ", len(cloud.points), "Published"
+        
+        self.tf.transformPointCloud('/world', cloud)
+        self.cloud_pub.publish(cloud)
         
     def world_to_pixel_distorted(self, pts, R, t, K=None, k=None):
         """Takes 3D world co-ord and reverse projects using K and distCoeffs"""
