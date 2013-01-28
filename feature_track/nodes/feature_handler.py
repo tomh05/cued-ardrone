@@ -12,13 +12,14 @@ import sensor_msgs.msg
 from std_msgs.msg import Empty
 import std_msgs.msg
 from rospy.numpy_msg import numpy_msg
-from custom_msgs.msg import StampedMatchesWithImages
+from custom_msgs.msg import StampedFrames
+from custom_msgs.msg import StampedMatchesWithImage
 
 class FeatureInstance():
     def __init___ (self, target):
         self.loaded = False
         self.loading = False
-        self.match_pub = rospy.Publisher('/feature_matcher/matches', StampedMatchesWithImages)
+        self.match_pub = rospy.Publisher('/feature_matcher/matches', StampedFrames)
         self.desc1 = None
         self.kp1 = None
         self.header1 = None
@@ -104,15 +105,25 @@ class FeatureHandler():
             matches_pts1, matches_pts2 = self.match_points(a.kp1, b.kp1, a.desc1, b.desc1)
             
         # Publish matches and images
-        smwi = StampedMatchesWithImages()
-        smwi.header = header
-        smwi.header.frame_id = targets
-        smwi.matches_pts1 = numpy_msg(matches_pts1)
-        smwi.matches_pts2 = numpy_msg(matches_pts2)
-        smwi.image1 = a_img
-        smwi.image2 = b_img
+        stamped_frames = StampedFrames()
         
-        self.match_pub.publish(smwi)
+        smwi = StampedMatchesWithImage()
+        smwi.header = a_img.header
+        smwi.pts = matches_pts1.reshape(-1,).tolist()
+        smwi.image = a_img
+        
+        stamped_frames.frame1 = smwi
+        
+        smwi.header = b_img.header
+        smwi.pts = matches_pts2.reshape(-1,).tolist()
+        smwi.image = b_img
+        
+        stamped_frames.frame2 = smwi
+        
+        stamped_frames.header = header
+        stamped_frames.header.frame_id = targets
+        
+        self.match_pub.publish(stamped_frames)
         
     
     def match_points(self, kp1, kp2, desc1, desc2):

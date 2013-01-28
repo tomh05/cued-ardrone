@@ -75,7 +75,7 @@ class DummySampler():
                 cloud.points.append(self.walls[np.random.randint(0, len(self.walls))].sample())
                 i = i+1
             
-            '''
+            
             # Add entirely random noise (vaguely bounded by outer walls)
             i=0
             point_count = np.random.randint(0, 64)
@@ -86,7 +86,7 @@ class DummySampler():
                 point.z = np.random.sample()*(self.zmax - self.zmin)+self.zmin
                 cloud.points.append(point)
                 i = i+1
-            '''
+            
                             
             self.cloud_pub.publish(cloud)
             print "Done"
