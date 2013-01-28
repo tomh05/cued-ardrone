@@ -34,6 +34,8 @@
 #include <pcl/kdtree/kdtree.h>
 #include <pcl/segmentation/extract_clusters.h>
 
+#include <pcl/filters/statistical_outlier_removal.h>
+
 ros::Publisher pub;
 ros::Publisher render_pub;
 
@@ -314,10 +316,33 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
     pcl::fromROSMsg (cloud2_buffer, *cloud);
     triangulate_point_cloud(cloud);
     
-    std::cout<<"Done meshing"<<std::endl;
+    std::cout<<"Done meshing"<<std::endl<<std::endl;
     
+    std::cout<<"Removing statistical outliers"<<std::endl;
+    // At present points are just removed from the analysis cycle
+    // It is unclear whether it will be feasible to remove permanently as this
+    // may remove too much 'good' data as out data set it very sparse
+
+
     
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZ>);
+
+
+    std::cerr << "  Cloud before filtering: "<<cloud->points.size () << std::endl;
+
+    // Create the filtering object
+    pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor;
+    sor.setInputCloud (cloud);
+    // Consider 50 nearest neighbours
+    sor.setMeanK (50);
+    // Filter those at > 3 standard deviations above the mean sparseness
+    sor.setStddevMulThresh (3.0);
+    sor.filter (*cloud_filtered);
     
+    std::cerr << "  Cloud after filtering: "<<cloud_filtered->points.size () << std::endl;
+    cloud = cloud_filtered;
+    
+    std::cout<<"Done Cleaning"<<std::endl<<std::endl;
     
     std::cout<<"Beginning Plane Fitting"<<std::endl<<std::endl;
     // Begin plane fitting/segmentation routine:
