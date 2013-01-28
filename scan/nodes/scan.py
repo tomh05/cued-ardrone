@@ -780,10 +780,12 @@ class FeatureTracker:
         trans = R.dot(trans)
         # Re-order axis into image not necessary as frontcam is image co-ords
         self.image_coord_trans = np.array([trans[0], trans[1], trans[2]])
+        self.image_coord_trans = np.array([0., trans[1], 0.])
         
         # Get relative quaternion
         # qmid = qbefore-1.qafter
         self.relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.quaternion1), self.quaternion2)
+        self.realative_quat = tf.transformations.quaternion_from_matrix(np.diag((0., 0., 0., 0.))
         
    
     def process_frames(self):
@@ -849,7 +851,8 @@ class FeatureTracker:
         self.prev_i1_pts_final = i1_pts_final
         self.prev_i2_pts_final = i2_pts_final
         
-        self.tf_triangulate_points(i1_pts_final, i2_pts_final)
+        #self.tf_triangulate_points(i1_pts_final, i2_pts_final)
+        self.tf_triangulate_points(i1_pts_corr, i2_pts_corr)
         
         
         """====================================================================
@@ -922,7 +925,7 @@ class FeatureTracker:
         # Get t from tf data or predefined data 
         # For some reason t must be inverted compared to expected, it does not
         # work to simply swap projection matrices PP1 and PP2
-        t = -self.image_coord_trans  
+        t = -self.image_coord_trans
         self.debug_text.append("trans: "+str(t))
         
         
