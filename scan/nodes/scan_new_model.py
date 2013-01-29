@@ -251,7 +251,7 @@ class Triangulator:
         cloud.header.frame_id = "/world"
         
         sub = np.add(points.T, self.position_i1).T
-        sub = tf.transformations.quaternion_matrix(self.quat_i_to_w_w1)[:3,:3].dot(sub)
+        sub = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(self.quat_i_to_w_w1))[:3,:3].dot(sub)
         
         # Reshape for easy clouding
         sub = zip(*np.vstack((sub[0], sub[1], sub[2])))

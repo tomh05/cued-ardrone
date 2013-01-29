@@ -491,24 +491,29 @@ class FeatureTracker:
         
         print "Corners in image coordinates w.r.t drone:\r\n", corners_rot
         
-        self.tf.waitForTransform("ardrone_base_frontcam", "world", self.time_now, rospy.Duration(16))
-        position, quat = self.tf.lookupTransform("ardrone_base_frontcam", "world", self.time_now)
+        """====================================================================
+        # World co-ordinate handling (note -p1 != pi)
+        ===================================================================="""
+        self.tf.waitForTransform("world", "ardrone_base_frontcam", self.time_now, rospy.Duration(4.))        
+        # Get tf lookup in reverse frame, this ensures translation is in world axis
+        p, q = self.tf.lookupTransform( "world", "ardrone_base_frontcam",self.time_now)
+        self.position_w = np.array((p))
         
+        """====================================================================
+        # Image co-ordinate handling
+        ===================================================================="""
         
-        # Get position of drone in current image coordinates
-        position = -np.array((position))
-        print "Drone position :\r\n", position
-        self.t_debug_text.append(position)
+        pi, qi = self.tf.lookupTransform("ardrone_base_frontcam", "world", self.time_now)
+        self.position_i = -np.array((p))
         
-        # Form ready to add
-        position = np.hstack((position, position))
-        position = np.reshape(np.hstack((position, position)), (-1, 3))
+        print "Drone position :\r\n", position_i
+        self.t_debug_text.append(position_i)
         
-        # Shift to absolute image co-ords
-        corners_absolute_image = corners_rot.T + position
+        # Shift to absolute image co-ords        
+        corners_absolute_image = np.add(corners_rot.T, self.position_i).T
         
-        #corners_absolute_drone = tf.transformations.quaternion_matrix(quat)[:3, :3].dot(corners_absolute_image.T).T
-        corners_absolute_drone = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(quat))[:3, :3].dot(corners_absolute_image.T).T
+        # Rotate to absolute world
+        corners_absolute_drone = tf.transformations.quaternion_matrix(q)[:3,:3].dot(corners_absolute_image)
         
         print "Absolute corners :\r\n", corners_absolute_drone
         
