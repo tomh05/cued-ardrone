@@ -803,31 +803,6 @@ class FeatureTracker:
         
    
     def process_frames(self):
-        """====================================================================
-        # World co-ordinate handling (note -p1 != pi)
-        ===================================================================="""
-        self.tf.waitForTransform("world", "ardrone_base_frontcam", self.time_buffer, rospy.Duration(16))
-        
-        # Get tf lookup in reverse frame, this ensures translation is in world axis
-        p1, q1 = self.tf.lookupTransform( "world", "ardrone_base_frontcam",self.time_buffer)
-        position = np.array((p1))
-        
-        # Flip quat to origin-to-drone-image
-        print "q1", tf.transformations.quaternion_matrix(q1)
-        quaternion = tf.transformations.quaternion_inverse(q1)
-        print "inverse q1", tf.transformations.quaternion_matrix(quaternion)
-        
-        print tf.transformations.quaternion_matrix(q1)[:3, :3].dot(position)
-        
-        """====================================================================
-        # Image co-ordinate handling
-        ===================================================================="""
-        pi, qi = self.tf.lookupTransform("ardrone_base_frontcam", "world", self.time_buffer)
-        pi = -np.array((pi))
-        print str(pi)
-        print "qi", tf.transformations.quaternion_matrix(qi)
-        qi = tf.transformations.quaternion_inverse(qi)
-        return
         
         
         """Takes a cv2 numpy array image and compared to a previously
@@ -862,8 +837,8 @@ class FeatureTracker:
         ==================================================================="""
         if self.calibrated:
             # Undistort points using calibration data    
-            i1_pts_undistorted = cv2.undistortPoints(np.array([i1_pts]), self.cameraMatrix, self.distCoeffs, P=self.P)[0]
-            i2_pts_undistorted = cv2.undistortPoints(np.array([i2_pts]), self.cameraMatrix, self.distCoeffs, P=self.P)[0]
+            i1_pts_undistorted = cv2.undistortPoints(np.array([i1_pts]), self.cameraMatrix, self.distCoeffs, P=self.cameraMatrix)[0]
+            i2_pts_undistorted = cv2.undistortPoints(np.array([i2_pts]), self.cameraMatrix, self.distCoeffs, P=self.cameraMatrix)[0]
         else:
             print "WARNING: No calibration info. Cannot Continue"
             return       
@@ -927,7 +902,13 @@ class FeatureTracker:
             cv2.circle(img2, (int(p[0]),int(p[1])), 3, (220, 20, 60), 1)
             #cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 63, 63), 1)
         for p in self.reprojected_frame2:
+            cv2.circle(img2, (int(p[0]),int(p[1])), 3, (0, 255, 0), 1)
+            #cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 63, 63), 1)
+            
+        for p in self.reprojected_frame2:
             cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 182, 193), 1)
+        for p in self.reprojected_frame4:
+            cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (0, 0, 255), 1)
             #cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 63, 63), 1)
         
         # Draw
@@ -960,6 +941,8 @@ class FeatureTracker:
         # image plane
         self.reprojected_frame1 = []
         self.reprojected_frame2 = []
+        self.reprojected_frame3 = []
+        self.reprojected_frame4 = []
         
         
         # Bottom out on first frame
@@ -987,7 +970,16 @@ class FeatureTracker:
         self.debug_text.append("rot: "+np_to_str(angles))  
         
     
-        R1, R2, P1, P2, Q = cv2.stereoRectify(self.cameraMatrix, self.cameraMatrix, self.distCoeffs, self.distCoeffs, (self.grey_now.size[1], self.grey_now.size[0]), R, t)
+        
+        
+        '''
+        cholesky = np.linalg.cholesky(R)
+        R1 = np.linalg.inv(cholesky.T)
+        R2 = cholesky
+        print "Cholesky : ", cholesky
+        t1 = -0.5*t
+        t2 = 0.5*t
+        '''
         
         
         # Compose projection matrix
@@ -998,13 +990,18 @@ class FeatureTracker:
         Triangulate using pixel co-ord and K[R t]
         """
         # Factor in camera calibration
-        #PP1 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
-        #PP2 = self.cameraMatrix.dot(P_cam1_to_cam2)
-        #points3D_image1 = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2)[:3]
-        #points4D = cv2.triangulatePoints(PP1, PP2, pts1.transpose(), pts2.transpose())
+        PP1 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
+        PP2 = self.cameraMatrix.dot(P_cam1_to_cam2)        
+        points3D_image1 = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2)[:3]
+        points4D = cv2.triangulatePoints(PP1, PP2, pts1.transpose(), pts2.transpose())
         # Normalise homogeneous co-ords
-        #points3D_image2 = (points4D/points4D[3])[:3]
+        points3D_image2 = (points4D/points4D[3])[:3]
         
+        '''
+        R1a, R2b, P1, P2, Q, validROI1, validROI2 = cv2.stereoRectify(self.cameraMatrix, self.distCoeffs, self.cameraMatrix, self.distCoeffs, (self.grey_now.shape[1], self.grey_now.shape[0]), R, t)
+        print P1
+        print P2
+        '''
         
         """
         Triangulating using Kinv premultiplied pixel co-ord and [R t]
@@ -1014,7 +1011,7 @@ class FeatureTracker:
         pts2_norm = self.inverseCameraMatrix.dot(self.make_homo(pts2).transpose()).transpose()[:,:2]       
         PP1 = np.hstack((np.array([[1., 0., 0.],[0., 1., 0.],[0., 0., 1.]]), np.array([[0.],[0.],[0,]])))
         PP2 = P_cam1_to_cam2
-        #points3D_image3 = self.triangulate_points(pts1_norm.transpose(), pts2_norm.transpose(), PP1, PP2)[:3]
+        points3D_image3 = self.triangulate_points(pts1_norm.transpose(), pts2_norm.transpose(), PP1, PP2)[:3]
         points4D = cv2.triangulatePoints(PP1, PP2, pts1_norm.transpose(), pts2_norm.transpose())
         points3D_image4 = (points4D/points4D[3])[:3]
         
@@ -1049,8 +1046,10 @@ class FeatureTracker:
         points3D_image= np.reshape(points3D_image[infront==True], (3, -1))
         
         # Triangulated points reprojected back to the image plane
-        self.reprojected_frame1 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, np.diag((1,1,1)), np.array([[0],[0],[0]]))        
-        self.reprojected_frame2 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, R, t)
+        self.reprojected_frame1 = self.world_to_pixel_distorted(self.make_homo(points3D_image1.T).T, np.diag((1.,1.,1.)), np.array([[0.,0.,0.]]).T)        
+        self.reprojected_frame2 = self.world_to_pixel_distorted(self.make_homo(points3D_image1.T).T, R, t)
+        self.reprojected_frame3 = self.world_to_pixel_distorted(self.make_homo(points3D_image2.T).T, np.diag((1.,1.,1.)), np.array([[0.,0.,0.]]).T)        
+        self.reprojected_frame4 = self.world_to_pixel_distorted(self.make_homo(points3D_image2.T).T, R, t)
         
         
         '''
@@ -1120,6 +1119,7 @@ class FeatureTracker:
         # so least squares solution will always lie in the last column of V
         # BUT since numpy SVD returns V transpose not V, it is the last row
         X = V[-1,:4]
+        print V
         return X / X[3]
         
     def triangulate_points(self, x1,x2,P1,P2):
