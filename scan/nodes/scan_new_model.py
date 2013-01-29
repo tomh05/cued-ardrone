@@ -531,6 +531,11 @@ class Triangulator:
         self.debug_text.append("trans: "+str(t))
         R = tf.transformations.quaternion_matrix(self.relative_quat)[:3, :3]
         
+        # Bottom out if motion is insufficient
+        if abs(t[0]) < 0.1 and abs(t[1]) < 0.1:
+            print "Motion bad for triangulation"
+            return None
+        
         # Debug
         angles = np.array(tf.transformations.euler_from_quaternion(self.relative_quat))
         angles = angles*180./np.pi        

@@ -38,6 +38,7 @@
 
 ros::Publisher pub;
 ros::Publisher render_pub;
+ros::Publisher clean_pub;
 
 custom_msgs::RendererPolyLineTri renderer_poly_line_tri;
 
@@ -342,6 +343,12 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
     std::cerr << "  Cloud after filtering: "<<cloud_filtered->points.size () << std::endl;
     cloud = cloud_filtered;
     
+    sensor_msgs::PointCloud2 temp_cloud2;
+    sensor_msgs::PointCloud temp_cloud;
+    pcl::toROSMsg(*cloud, temp_cloud2);
+    sensor_msgs::convertPointCloud2ToPointCloud(temp_cloud2, temp_cloud);
+    clean_pub.publish(temp_cloud);
+    
     std::cout<<"Done Cleaning"<<std::endl<<std::endl;
     
     std::cout<<"Beginning Plane Fitting"<<std::endl<<std::endl;
@@ -505,6 +512,8 @@ int main (int argc, char** argv)
 
     // Create a ROS publisher for the output point cloud
     pub = nh.advertise<sensor_msgs::PointCloud2> ("/point_handler/absolute_cloud", 1);
+    
+    clean_pub = nh.advertise<sensor_msgs::PointCloud>("/point_handler/clean_absolute_cloud", 1);
     
     // Create render publisher
     render_pub = nh.advertise<custom_msgs::RendererPolyLineTri>("/point_hander/renderer_data", 16);

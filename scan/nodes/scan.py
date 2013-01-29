@@ -803,6 +803,33 @@ class FeatureTracker:
         
    
     def process_frames(self):
+        """====================================================================
+        # World co-ordinate handling (note -p1 != pi)
+        ===================================================================="""
+        self.tf.waitForTransform("world", "ardrone_base_frontcam", self.time_buffer, rospy.Duration(16))
+        
+        # Get tf lookup in reverse frame, this ensures translation is in world axis
+        p1, q1 = self.tf.lookupTransform( "world", "ardrone_base_frontcam",self.time_buffer)
+        position = np.array((p1))
+        
+        # Flip quat to origin-to-drone-image
+        print "q1", tf.transformations.quaternion_matrix(q1)
+        quaternion = tf.transformations.quaternion_inverse(q1)
+        print "inverse q1", tf.transformations.quaternion_matrix(quaternion)
+        
+        print tf.transformations.quaternion_matrix(q1)[:3, :3].dot(position)
+        
+        """====================================================================
+        # Image co-ordinate handling
+        ===================================================================="""
+        pi, qi = self.tf.lookupTransform("ardrone_base_frontcam", "world", self.time_buffer)
+        pi = -np.array((pi))
+        print str(pi)
+        print "qi", tf.transformations.quaternion_matrix(qi)
+        qi = tf.transformations.quaternion_inverse(qi)
+        return
+        
+        
         """Takes a cv2 numpy array image and compared to a previously
         buffered image. Features are extracted from each frame, 
         undistorted and matched. The matches are then triangulated"""

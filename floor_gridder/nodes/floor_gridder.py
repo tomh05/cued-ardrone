@@ -10,12 +10,14 @@ from rospy.numpy_msg import numpy_msg
 from std_msgs.msg import Float32MultiArray
 from std_msgs.msg import Int16MultiArray
 from std_msgs.msg import MultiArrayDimension
+from sensor_msgs.msg import PointCloud
 from custom_msgs.msg import RendererPolyLineTri
 
 class FloorGridder():
     def __init__(self):        
         self.connect()
         self.clear_maps()
+        cv2.namedWindow('test')
         
         
         
@@ -23,6 +25,7 @@ class FloorGridder():
     def connect(self):
         rospy.init_node('Floor_Gridder')
         rospy.Subscriber('/point_hander/renderer_data', RendererPolyLineTri, self.on_got_renderer_data)
+        rospy.Subscriber('/point_handler/clean_absolute_cloud', PointCloud, self.on_got_clean_cloud)
         self.gridded_map_pub = rospy.Publisher('/floor_gridder/gridded_map', Int16MultiArray)
         self.nav_map_pub = rospy.Publisher('/floor_gridder/nav_map', Int16MultiArray)
         
@@ -38,6 +41,7 @@ class FloorGridder():
                                        self.gridded_map.shape[0]/2])
         
     def on_got_renderer_data(self, renderer_poly_line_tri):
+        self.clear_maps()
         # end_xyxy is an array in the pattern {x1, y1, x2, y2, x3, y3 ... }
         # where each pair of x1y1 and x2y2 are the end points of a line
         end_xyxy = renderer_poly_line_tri.floorlines
@@ -64,6 +68,17 @@ class FloorGridder():
         
         
         self.gridded_map_pub.publish(send_gridded_map)
+        
+    def on_got_clean_cloud(self, point_cloud):        
+        # Nav map is a map of valid drone centre positions
+        self.nav_map_coarse = np.ones(shape=(1024,1024), dtype = np.uint8)
+        self.nav_map_coarse = 255*self.gridded_map
+        for p in point_cloud.points:
+            cv2.circle(self.nav_map_coarse, (int(p.x)+self.centre_offset[0], int(p.y)+self.centre_offset[1]), 3, (0,0,0), -1)
+        cv2.imwrite('test2.png', self.nav_map_coarse)
+            
+        
+        
 
 def run():    
     fg = FloorGridder()
