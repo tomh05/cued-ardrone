@@ -987,7 +987,7 @@ class FeatureTracker:
         self.debug_text.append("rot: "+np_to_str(angles))  
         
     
-        
+        R1, R2, P1, P2, Q = cv2.stereoRectify(self.cameraMatrix, self.cameraMatrix, self.distCoeffs, self.distCoeffs, (self.grey_now.size[1], self.grey_now.size[0]), R, t)
         
         
         # Compose projection matrix
