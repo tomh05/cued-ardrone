@@ -604,10 +604,10 @@ class FeatureTracker:
         cloud.header.stamp = timestamp
         cloud.header.frame_id = "/world"
         
-        print "Pre-shift points:\r\n ", points
+        #print "Pre-shift points:\r\n ", points
         sub = np.add(points.T, self.image_position1).T
         sub = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(self.quaternion1))[:3,:3].dot(sub)
-        print "Post-shift points:\r\n ", sub
+        #print "Post-shift points:\r\n ", sub
         
         # Reshape for easy clouding
         sub = zip(*np.vstack((sub[0], sub[1], sub[2])))
@@ -902,14 +902,8 @@ class FeatureTracker:
             cv2.circle(img2, (int(p[0]),int(p[1])), 3, (220, 20, 60), 1)
             #cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 63, 63), 1)
         for p in self.reprojected_frame2:
-            cv2.circle(img2, (int(p[0]),int(p[1])), 3, (0, 255, 0), 1)
+            cv2.circle(img2, (int(p[0]),int(p[1]+imh)), 3, (0, 255, 0), 1)
             #cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 63, 63), 1)
-            
-        for p in self.reprojected_frame2:
-            cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 182, 193), 1)
-        for p in self.reprojected_frame4:
-            cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (0, 0, 255), 1)
-            #cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 63, 63), 1)
         
         # Draw
         cv2.imshow("track", img2)
@@ -941,8 +935,6 @@ class FeatureTracker:
         # image plane
         self.reprojected_frame1 = []
         self.reprojected_frame2 = []
-        self.reprojected_frame3 = []
-        self.reprojected_frame4 = []
         
         
         # Bottom out on first frame
@@ -972,14 +964,6 @@ class FeatureTracker:
     
         
         
-        '''
-        cholesky = np.linalg.cholesky(R)
-        R1 = np.linalg.inv(cholesky.T)
-        R2 = cholesky
-        print "Cholesky : ", cholesky
-        t1 = -0.5*t
-        t2 = 0.5*t
-        '''
         
         
         # Compose projection matrix
@@ -991,49 +975,18 @@ class FeatureTracker:
         """
         # Factor in camera calibration
         PP1 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
-        PP2 = self.cameraMatrix.dot(P_cam1_to_cam2)        
-        points3D_image1 = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2)[:3]
-        points4D = cv2.triangulatePoints(PP1, PP2, pts1.transpose(), pts2.transpose())
-        # Normalise homogeneous co-ords
-        points3D_image2 = (points4D/points4D[3])[:3]
-        
-        '''
-        R1a, R2b, P1, P2, Q, validROI1, validROI2 = cv2.stereoRectify(self.cameraMatrix, self.distCoeffs, self.cameraMatrix, self.distCoeffs, (self.grey_now.shape[1], self.grey_now.shape[0]), R, t)
-        print P1
-        print P2
-        '''
-        
-        """
-        Triangulating using Kinv premultiplied pixel co-ord and [R t]
-        """
-        # Pre-multiply co-ords
-        pts1_norm = self.inverseCameraMatrix.dot(self.make_homo(pts1).transpose()).transpose()[:,:2]
-        pts2_norm = self.inverseCameraMatrix.dot(self.make_homo(pts2).transpose()).transpose()[:,:2]       
-        PP1 = np.hstack((np.array([[1., 0., 0.],[0., 1., 0.],[0., 0., 1.]]), np.array([[0.],[0.],[0,]])))
-        PP2 = P_cam1_to_cam2
-        points3D_image3 = self.triangulate_points(pts1_norm.transpose(), pts2_norm.transpose(), PP1, PP2)[:3]
-        points4D = cv2.triangulatePoints(PP1, PP2, pts1_norm.transpose(), pts2_norm.transpose())
-        points3D_image4 = (points4D/points4D[3])[:3]
-        
-        
-        """
-        Filter out points that have a significant discrepancy between
-        triangulation methods. The motion has provided insufficient to get a
-        useful triangulation
-        
-        With set data and externally recorded motion a translation of 0.2m
-        produced no losses to this filtering. Resultant triangulation is good.
-        In flight however most points are removed by this filter suggesting
-        a poor basis for triangulation.
-        """
-        #numeric_accuracy = abs(points3D_image4 - points3D_image2)>1. 
-        # True means inaccurate, ie. more than 1m discrepancy depending on calc method
-        #numeric_accuracy = numeric_accuracy[0] | numeric_accuracy[1] | numeric_accuracy[2]
-        #numeric_accuracy = np.array([numeric_accuracy]).transpose()
-        #numeric_accuracy = np.hstack((numeric_accuracy, numeric_accuracy, numeric_accuracy)).transpose()        
-        #points3D_image = np.reshape(points3D_image2[numeric_accuracy==False], (3, -1))
-        
-        points3D_image = points3D_image4
+        PP2 = self.cameraMatrix.dot(P_cam1_to_cam2)
+        points3D_image, accepted = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2)
+        points3D_image = points3D_image[:3]
+        #print points3D_image
+        accepted = np.array([accepted]).T
+        #print accepted
+        accepted = np.hstack((accepted, accepted, accepted)).T
+        #print accepted
+        points3D_image = np.reshape(points3D_image[accepted==True], (3, -1))
+        #print points3D_image
+
+
         
         # Output number of triangulated points
         triangulated = len(points3D_image[0])+0.
@@ -1046,51 +999,10 @@ class FeatureTracker:
         points3D_image= np.reshape(points3D_image[infront==True], (3, -1))
         
         # Triangulated points reprojected back to the image plane
-        self.reprojected_frame1 = self.world_to_pixel_distorted(self.make_homo(points3D_image1.T).T, np.diag((1.,1.,1.)), np.array([[0.,0.,0.]]).T)        
-        self.reprojected_frame2 = self.world_to_pixel_distorted(self.make_homo(points3D_image1.T).T, R, t)
-        self.reprojected_frame3 = self.world_to_pixel_distorted(self.make_homo(points3D_image2.T).T, np.diag((1.,1.,1.)), np.array([[0.,0.,0.]]).T)        
-        self.reprojected_frame4 = self.world_to_pixel_distorted(self.make_homo(points3D_image2.T).T, R, t)
+        self.reprojected_frame1 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, np.diag((1.,1.,1.)), np.array([[0.,0.,0.]]).T)        
+        self.reprojected_frame2 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, R, t)
         
         
-        '''
-        # Filter points
-        infront = points3D_image1[2] > 0        
-        infront = np.array([infront]).transpose()
-        infront = np.hstack((infront, infront, infront)).transpose()        
-        points3D_image1= np.reshape(points3D_image1[infront==True], (3, -1))
-        
-        self.reprojected2 = self.world_to_pixel_distorted(self.make_homo(points3D_image1.T).T, np.diag((1,1,1)), np.array([[0],[0],[0]]))        
-        self.reprojected = self.world_to_pixel_distorted(self.make_homo(points3D_image1.T).T, R, t)
-        
-        # Filter points
-        infront = points3D_image2[2] > 0        
-        infront = np.array([infront]).transpose()
-        infront = np.hstack((infront, infront, infront)).transpose()        
-        points3D_image2= np.reshape(points3D_image2[infront==True], (3, -1))
-        
-        self.reprojected4 = self.world_to_pixel_distorted(self.make_homo(points3D_image2.T).T, np.diag((1,1,1)), np.array([[0],[0],[0]]))        
-        self.reprojected3 = self.world_to_pixel_distorted(self.make_homo(points3D_image2.T).T, R, t)
-        
-        # Filter points
-        infront = points3D_image3[2] > 0        
-        infront = np.array([infront]).transpose()
-        infront = np.hstack((infront, infront, infront)).transpose()        
-        points3D_image3= np.reshape(points3D_image3[infront==True], (3, -1))
-        
-        self.reprojected6 = self.world_to_pixel_distorted(self.make_homo(points3D_image3.T).T, np.diag((1,1,1)), np.array([[0],[0],[0]]))        
-        self.reprojected5 = self.world_to_pixel_distorted(self.make_homo(points3D_image3.T).T, R, t)
-        
-        # Filter points
-        infront = points3D_image4[2] > 0        
-        infront = np.array([infront]).transpose()
-        infront = np.hstack((infront, infront, infront)).transpose()        
-        points3D_image4= np.reshape(points3D_image4[infront==True], (3, -1))
-        
-        self.reprojected8 = self.world_to_pixel_distorted(self.make_homo(points3D_image4.T).T, np.diag((1,1,1)), np.array([[0],[0],[0]]))        
-        self.reprojected7 = self.world_to_pixel_distorted(self.make_homo(points3D_image4.T).T, R, t)
-        
-        points3D_image = points3D_image1
-        '''
         
         # Output number of forward triangulated points
         forward_triangulated = len(points3D_image[0])+0.
@@ -1119,10 +1031,53 @@ class FeatureTracker:
         # so least squares solution will always lie in the last column of V
         # BUT since numpy SVD returns V transpose not V, it is the last row
         X = V[-1,:4]
-        print V
-        return X / X[3]
         
-    def triangulate_points(self, x1,x2,P1,P2):
+        # Calculate error
+        # M.dot(solution) should = vector of 6 zeros
+        # as such we get: [w1*x1 error
+        #                  w1*y1 error
+        #                  w1
+        #                  w2*x2 error
+        #                  w2*y2 error
+        #                  w2]
+        
+        
+        # Get projected pixel co-ords
+        projected_pixels_homo = P1.dot(V[-1,:4])
+        projected_pixels = (projected_pixels_homo/projected_pixels_homo[2])[:2]
+        # Get dif between proj and image
+        error = projected_pixels-x1[:2]
+        error_mag1 = np.sqrt(error[0]*error[0]+ error[1]*error[1])
+        
+        projected_pixels_homo = P2.dot(V[-1,:4])
+        projected_pixels = (projected_pixels_homo/projected_pixels_homo[2])[:2]
+        print x2[:2]
+        error = projected_pixels-x2[:2]
+        error_mag2 = np.sqrt(error[0]*error[0]+ error[1]*error[1])
+        
+        # max is more useful than average as we want a good fit to both
+        error_max = max(error_mag1, error_mag2)
+        
+        '''
+        # Get error vector
+        error_homo = M.dot(V[-1,:])
+        print "error_homo: ", error_homo
+        # Split into frame 1 and frame 2 and convert from homogeneous
+        error_homo = np.reshape(error_homo, (2, 3)).T
+        print "error_homo: ", error_homo
+        error = (error_homo/error_homo[2])[:2]
+        print "error: ", error
+        # Get magnitude of error for each frame
+        error_sq = error*error
+        error_mag = np.sqrt(error_sq[0]+error_sq[1])
+        # error_max is the maximum radial reprojection error across both frames
+        
+        error_max = max(error_mag[0], error_mag[1])
+        '''
+        
+        return np.hstack((X / X[3], error_max))
+        
+    def triangulate_points(self, x1,x2,P1,P2, max_error = 10.):
         """ Two-view triangulation of points in
         x1,x2 (2*n coordingates)"""
         n = x1.shape[1]
@@ -1130,8 +1085,15 @@ class FeatureTracker:
         x1 = np.append(x1, np.array([np.ones(x1.shape[1])]), 0)
         x2 = np.append(x2, np.array([np.ones(x2.shape[1])]), 0)
         # Triangulate for each pair
-        X = [ self.triangulate_point(x1[:,i],x2[:,i],P1,P2) for i in range(n)] # Looping here is probably unavoidable
-        return np.array(X).T
+        Combi = np.array([self.triangulate_point(x1[:,i],x2[:,i],P1,P2) for i in range(n)]) # Looping here is probably unavoidable
+        X = Combi[:,:4]
+        #print Combi
+        #print "errors : ", Combi[:, 4]
+        accepted = Combi[:, 4]<max_error
+        #print accepted
+        #accepted = [error_max<max_error]
+        #print accepted
+        return X.T, accepted
         
         
     def imgproc(self, d):
