@@ -5,4 +5,4 @@ simpledrone/build
 *.pyc
 /build/
 drone_demo/
-
+*.bag

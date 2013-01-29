@@ -33,7 +33,7 @@ class PositionController:
 		self.cmd_log = {'tm':[], 'tw':[]}
 		self.nd_log = {'tm':[], 'nd':[], 'ph':[], 'th':[], 'ps':[], 'vx':[], 'vy':[], 'vz':[], 'al':[], 'cpw':[cpw0,], 'cyw':[dyw0,]}
 		
-		self.ref = {'al':800}	#'al' for height
+		self.ref = {'al':1000}	#'al' for height
 		self.error = {'al':[]}
 		self.refalon = True
 		self.yawon = False
@@ -60,6 +60,9 @@ class PositionController:
 	def pc_timer_shutdown(self):
 		try:
 			self.pc_timer.shutdown()
+			sleep(0.2)
+			self.cmdpub.publish(Twist())
+			print 'PositionController.py: shut down pc timer, zero twist'
 		except:
 			pass
 			print 'pc_timer_shutdown error'
@@ -96,7 +99,7 @@ class PositionController:
 				dv=dx*sin(yaw)+dy*cos(yaw)
 				self.nd_log['cpw'].append((self.nd_log['cpw'][-1][0]+du, self.nd_log['cpw'][-1][1]+dv, self.nd_log['cpw'][-1][2]+dz))
 				self.nd_log['cyw'].append(cywnew)
-				print yaw
+				#print yaw
 				#print self.nd_log['cpw'][-1]
 		except:
 			#self.drone_pos_valid = False
