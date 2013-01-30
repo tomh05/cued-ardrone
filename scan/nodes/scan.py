@@ -961,7 +961,10 @@ class FeatureTracker:
         
         self.debug_text.append("rot: "+np_to_str(angles))  
         
-    
+        # Bottom out if motion is insufficient
+        if abs(t[0]) < 0.1 and abs(t[1]) < 0.1:
+            print "Motion bad for triangulation"
+            return None
         
         
         
