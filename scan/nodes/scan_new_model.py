@@ -336,7 +336,7 @@ class Triangulator:
     def get_change_in_tf(self, time1, time2):       
         
         """====================================================================
-        # World co-ordinate handling (note -p1 != pi)
+        # World co-ordinate handling (note -pw != pi, but qw^-1 = qi)
         ===================================================================="""
         self.tf.waitForTransform("world", "ardrone_base_frontcam", time2, rospy.Duration(4.))        
         # Get tf lookup in reverse frame, this ensures translation is in world axis
@@ -421,8 +421,8 @@ class Triangulator:
         ==================================================================="""
         if self.calibrated:
             # Undistort points using calibration data    
-            i1_pts_undistorted = cv2.undistortPoints(np.array([i1_pts]), self.cameraMatrix, self.distCoeffs, P=self.P)[0]
-            i2_pts_undistorted = cv2.undistortPoints(np.array([i2_pts]), self.cameraMatrix, self.distCoeffs, P=self.P)[0]
+            i1_pts_undistorted = cv2.undistortPoints(np.array([i1_pts]), self.cameraMatrix, self.distCoeffs, P=self.cameraMatrix)[0]
+            i2_pts_undistorted = cv2.undistortPoints(np.array([i2_pts]), self.cameraMatrix, self.distCoeffs, P=self.cameraMatrix)[0]
         else:
             print "WARNING: No calibration info. Cannot Continue"
             return       
@@ -431,7 +431,7 @@ class Triangulator:
         """============================================================
         Extract F and filter outliers
         ============================================================"""
-        E, i1_pts_corr, i2_pts_corr, i1_pts_draw_corr, i2_pts_draw_corr= self.extract_fundamental(i1_pts_undistorted, i2_pts_undistorted, i1_pts_draw, i2_pts_draw)
+        F, i1_pts_corr, i2_pts_corr, i1_pts_draw_corr, i2_pts_draw_corr= self.extract_fundamental(i1_pts_undistorted, i2_pts_undistorted, i1_pts_draw, i2_pts_draw)
         if (i1_pts_corr == None or len(i1_pts_corr) < 1):
             print "No inliers consistent with F"
             return        
@@ -441,7 +441,7 @@ class Triangulator:
         """============================================================
         # Extract P1 and P2 via E
         ============================================================"""
-        success, P1, P2, i1_pts_final, i2_pts_final, i1_pts_draw_final, i2_pts_draw_final = self.extract_projections(E, i1_pts_corr, i2_pts_corr, i1_pts_draw_corr, i2_pts_draw_corr)
+        success, P1, P2, i1_pts_final, i2_pts_final, i1_pts_draw_final, i2_pts_draw_final = self.extract_projections(F, i1_pts_corr, i2_pts_corr, i1_pts_draw_corr, i2_pts_draw_corr)
         if not success: # Bottom out on fail
             return
         
@@ -501,9 +501,9 @@ class Triangulator:
         
         # Reproject triangulated points
         for p in self.reprojected_frame1:
-            cv2.circle(img2, (int(p[0]),int(p[1])), 3, (220, 20, 60), 1)
+            cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 0, 0), 1)
         for p in self.reprojected_frame2:
-            cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 182, 193), 1)
+            cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (0, 255, 0), 1)
         
         # Draw
         cv2.imshow("track", img2)
@@ -531,8 +531,10 @@ class Triangulator:
         self.debug_text.append("trans: "+str(t))
         R = tf.transformations.quaternion_matrix(self.relative_quat)[:3, :3]
         
+        
+        
         # Bottom out if motion is insufficient
-        if abs(t[0]) < 0.1 and abs(t[1]) < 0.1:
+        if abs(t[0]) < 0.15 and abs(t[1]) < 0.15:
             print "Motion bad for triangulation"
             return None
         
@@ -542,30 +544,39 @@ class Triangulator:
         self.debug_text.append("rot: "+str(angles)) 
         
         """
-        Triangulating using Kinv premultiplied pixel co-ord and [R t]
+        Triangulate using pixel co-ord and K[R t]
         """
-        # Pre-multiply co-ords
-        pts1_norm = self.inverseCameraMatrix.dot(make_homo(pts1).transpose()).transpose()[:,:2]
-        pts2_norm = self.inverseCameraMatrix.dot(make_homo(pts2).transpose()).transpose()[:,:2]       
-        P1 = np.hstack((np.array([[1., 0., 0.],[0., 1., 0.],[0., 0., 1.]]), np.array([[0.],[0.],[0,]])))
-        P2 = np.hstack((R, t))
-        print pts2_norm
-        points4D = cv2.triangulatePoints(P1, P2, pts1_norm.transpose(), pts2_norm.transpose())
-        points3D_image = (points4D/points4D[3])[:3]
+        # Compose projection matrix
+        P_cam1_to_cam2 = np.hstack((R, t))
+        # Factor in camera calibration
+        PP1 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
+        PP2 = self.cameraMatrix.dot(P_cam1_to_cam2)
+        points3D_image, accepted = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2, max_error = 5.)
+        points3D_image = points3D_image[:3]
         
         # Output number of triangulated points
         triangulated = len(points3D_image[0])+0.
         self.debug_text.append(triangulated)
         
+        # Filter points with too low accuracy (reprojected to actual image)
+        accepted = np.array([accepted]).T
+        accepted = np.hstack((accepted, accepted, accepted)).T
+        points3D_image = np.reshape(points3D_image[accepted==True], (3, -1))
+        
+        # Output number of forward triangulated points
+        accept_triangulated = len(points3D_image[0])+0.
+        self.debug_text.append(accept_triangulated)
+        
+        
         # Filter points that are behind the camera
-        infront = points3D_image[2] > 0.        
+        infront = points3D_image[2] > 0        
         infront = np.array([infront]).transpose()
         infront = np.hstack((infront, infront, infront)).transpose()        
         points3D_image= np.reshape(points3D_image[infront==True], (3, -1))
         
         # Triangulated points reprojected back to the image plane
-        self.reprojected_frame1 = self.world_to_pixel_distorted(make_homo(points3D_image.T).T, np.diag((1,1,1)), np.array([[0],[0],[0]]))        
-        self.reprojected_frame2 = self.world_to_pixel_distorted(make_homo(points3D_image.T).T, R, t)
+        self.reprojected_frame1 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, np.diag((1.,1.,1.)), np.array([[0.,0.,0.]]).T)        
+        self.reprojected_frame2 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, R, t)
         
         # Output number of forward triangulated points
         forward_triangulated = len(points3D_image[0])+0.
@@ -580,6 +591,58 @@ class Triangulator:
         else:
             print "Poor triangulation"
             return None
+            
+            
+    
+        
+    def triangulate_point(self, x1,x2,P1,P2): 
+        """ Point pair triangulation from
+        least squares solution. """
+        # Compose matrix representing simultaneous equations
+        M = np.zeros((6,6))
+        M[:3,:4] = P1
+        M[3:,:4] = P2
+        M[:3,4] = -x1
+        M[3:,5] = -x2
+        # Compute SVD
+        U,S,V = np.linalg.svd(M)
+        # numpy SVD is ordered from largest to smallest (for S)
+        # so least squares solution will always lie in the last column of V
+        # BUT since numpy SVD returns V transpose not V, it is the last row
+        X = V[-1,:4]
+        
+        # Get projected pixel co-ords
+        projected_pixels_homo = P1.dot(V[-1,:4])
+        projected_pixels = (projected_pixels_homo/projected_pixels_homo[2])[:2]
+        # Get dif between proj and image
+        error = projected_pixels-x1[:2]
+        error_mag1 = np.sqrt(error[0]*error[0]+ error[1]*error[1])
+        
+        # Same for frame 2
+        projected_pixels_homo = P2.dot(V[-1,:4])
+        projected_pixels = (projected_pixels_homo/projected_pixels_homo[2])[:2]
+        error = projected_pixels-x2[:2]
+        error_mag2 = np.sqrt(error[0]*error[0]+ error[1]*error[1])
+        
+        # max is more useful than average as we want a good fit to both
+        error_max = max(error_mag1, error_mag2)        
+        
+        return np.hstack((X / X[3], error_max))
+        
+    def triangulate_points(self, x1,x2,P1,P2, max_error = 10.):
+        """ Two-view triangulation of points in
+        x1,x2 (2*n coordingates)"""
+        n = x1.shape[1]
+        # Make homogenous
+        x1 = np.append(x1, np.array([np.ones(x1.shape[1])]), 0)
+        x2 = np.append(x2, np.array([np.ones(x2.shape[1])]), 0)
+        # Triangulate for each pair
+        Combi = np.array([self.triangulate_point(x1[:,i],x2[:,i],P1,P2) for i in range(n)]) # Looping here is probably unavoidable
+        # Extract 4D points
+        X = Combi[:,:4]        
+        # Create mask
+        accepted = Combi[:, 4]<max_error
+        return X.T, accepted
     
     def set_camera_info(self, ci):
         """Converts the ROS published camera info into numpy arrays and 

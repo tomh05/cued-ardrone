@@ -389,15 +389,13 @@ class FeatureTracker:
         return pts
         
         
-    def extract_fundamental(self, i1_pts_undistorted, i2_pts_undistorted):
+    def extract_fundamental(self, i1_pts_undistorted, i2_pts_undistorted, i1_pts_draw, i2_pts_draw):
         """
         Extract fundamental matrix and then remove outliers
         FM_RANSAC should be good with lowish outliers
         FM_LMEDS may be more robust in some cases
         """
-        temp_time = time.time()
         F, mask = cv2.findFundamentalMat(i1_pts_undistorted, i2_pts_undistorted, cv2.FM_RANSAC, param1 = 3, param2 = 0.99)
-        #print "F time : ", time.time()-temp_time
         # Expand mask for easy filtering
         mask_prepped = np.append(mask, mask, 1.)
         # Efficient np-style filtering, then reform
@@ -406,10 +404,10 @@ class FeatureTracker:
         i1_pts_undistorted = np.array([i1_pts_masked])
         i2_pts_undistorted = np.array([i2_pts_masked])
         
-        i1_pts_masked = np.reshape(self.i1_pts_draw[mask_prepped==1], (-1, 2))
-        i2_pts_masked = np.reshape(self.i2_pts_draw[mask_prepped==1], (-1, 2))
-        self.i1_pts_draw = np.array([i1_pts_masked])
-        self.i2_pts_draw = np.array([i2_pts_masked])
+        i1_pts_masked = np.reshape(i1_pts_draw[mask_prepped==1], (-1, 2))
+        i2_pts_masked = np.reshape(i2_pts_draw[mask_prepped==1], (-1, 2))
+        i1_pts_draw_corr = np.array([i1_pts_masked])
+        i2_pts_draw_corr = np.array([i2_pts_masked])
         
         """============================================================
         # Filter points that fit F using cv2.correctMatches
@@ -422,12 +420,12 @@ class FeatureTracker:
         mask_nan = np.isnan(i1_pts_corr[0])
         i1_pts_corr = np.reshape(i1_pts_corr[0][mask_nan == False], (-1, 2))
         i2_pts_corr = np.reshape(i2_pts_corr[0][mask_nan == False], (-1, 2))
-        self.i1_pts_draw = np.reshape(self.i1_pts_draw[0][mask_nan == False], (-1, 2))
-        self.i2_pts_draw = np.reshape(self.i2_pts_draw[0][mask_nan == False], (-1, 2))
+        i1_pts_draw_corr = np.reshape(i1_pts_draw_corr[0][mask_nan == False], (-1, 2))
+        i2_pts_draw_corr = np.reshape(i2_pts_draw_corr[0][mask_nan == False], (-1, 2))
         
-        return F, i1_pts_corr, i2_pts_corr
+        return F, i1_pts_corr, i2_pts_corr, i1_pts_draw_corr, i2_pts_draw_corr
         
-    def extract_projections(self, F, i1_pts_corr, i2_pts_corr):
+    def extract_projections(self, F, i1_pts_corr, i2_pts_corr, i1_pts_draw_corr, i2_pts_draw_corr):
         """
         Uses known camera calibration to extract E
         Produces 4 possible P2 via linear algebra
@@ -494,8 +492,8 @@ class FeatureTracker:
         ============================================================"""  
         
         # First must normalise co-ords
-        i1_pts_corr_norm = self.inverseCameraMatrix.dot(self.make_homo(i1_pts_corr).transpose()).transpose()[:,:2]
-        i2_pts_corr_norm = self.inverseCameraMatrix.dot(self.make_homo(i2_pts_corr).transpose()).transpose()[:,:2]
+        i1_pts_corr_norm = self.inverseCameraMatrix.dot(make_homo(i1_pts_corr).transpose()).transpose()[:,:2]
+        i2_pts_corr_norm = self.inverseCameraMatrix.dot(make_homo(i2_pts_corr).transpose()).transpose()[:,:2]
                               
         ind = 0
         maxfit = 0
@@ -521,7 +519,7 @@ class FeatureTracker:
             print "==================================================="
             print "P2 not extracted"
             print "==================================================="
-            return False, None, None, None, None            
+            return False, None, None, None, None, None, None            
         
         #print "P2"
         #print projections[ind]
@@ -529,12 +527,12 @@ class FeatureTracker:
         # Filter points
         infront = np.array([infront]).transpose()
         infront = np.append(infront, infront, 1)
-        i1_pts_corr = np.reshape(i1_pts_corr[infront==True], (-1, 2))
-        i2_pts_corr = np.reshape(i2_pts_corr[infront==True], (-1, 2))
-        self.i1_pts_draw = np.reshape(self.i1_pts_draw[infront==True], (-1, 2))
-        self.i2_pts_draw = np.reshape(self.i2_pts_draw[infront==True], (-1, 2))
+        i1_pts_final = np.reshape(i1_pts_corr[infront==True], (-1, 2))
+        i2_pts_final = np.reshape(i2_pts_corr[infront==True], (-1, 2))
+        i1_pts_draw_final = np.reshape(i1_pts_draw_corr[infront==True], (-1, 2))
+        i2_pts_draw_final = np.reshape(i2_pts_draw_corr[infront==True], (-1, 2))
         
-        return True, P1, projections[ind], i1_pts_corr, i2_pts_corr
+        return True, P1, projections[ind], i1_pts_final, i2_pts_final, i1_pts_draw_final, i2_pts_draw_final
     
     
     def filter_correct_matches(self, i1_pts_undistorted, i2_pts_undistorted): # not used
@@ -825,8 +823,8 @@ class FeatureTracker:
         Find matched points in both images
         ===================================================================="""
         success, i1_pts, i2_pts = self.find_and_match_points(self.grey_now)
-        self.i1_pts_draw = i1_pts
-        self.i2_pts_draw = i2_pts
+        i1_pts_draw = i1_pts
+        i2_pts_draw = i2_pts
         if not success:
             return
     
@@ -847,7 +845,7 @@ class FeatureTracker:
         """============================================================
         Extract F and filter outliers
         ============================================================"""
-        E, i1_pts_corr, i2_pts_corr= self.extract_fundamental(i1_pts_undistorted, i2_pts_undistorted)
+        F, i1_pts_corr, i2_pts_corr, i1_pts_draw_corr, i2_pts_draw_corr= self.extract_fundamental(i1_pts_undistorted, i2_pts_undistorted, i1_pts_draw, i2_pts_draw)
         if (i1_pts_corr == None or len(i1_pts_corr) < 1):
             print "No inliers consistent with F"
             return        
@@ -857,7 +855,7 @@ class FeatureTracker:
         """============================================================
         # Extract P1 and P2 via E
         ============================================================"""
-        success, P1, P2, i1_pts_final, i2_pts_final = self.extract_projections(E, i1_pts_corr, i2_pts_corr)
+        success, P1, P2, i1_pts_final, i2_pts_final, i1_pts_draw_final, i2_pts_draw_final = self.extract_projections(F, i1_pts_corr, i2_pts_corr, i1_pts_draw_corr, i2_pts_draw_corr)
         if not success: # Bottom out on fail
             return
         
@@ -887,7 +885,7 @@ class FeatureTracker:
         l = 120
         
         # Draw lines linking fully tracked points
-        for p1, p2 in zip(self.i1_pts_draw, self.i2_pts_draw):
+        for p1, p2 in zip(i1_pts_draw_corr, i2_pts_draw_corr):
             county += 1
             cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
         
@@ -899,7 +897,7 @@ class FeatureTracker:
         
         # Reproject triangulated points
         for p in self.reprojected_frame1:
-            cv2.circle(img2, (int(p[0]),int(p[1])), 3, (220, 20, 60), 1)
+            cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 0, 0), 1)
             #cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 63, 63), 1)
         for p in self.reprojected_frame2:
             cv2.circle(img2, (int(p[0]),int(p[1]+imh)), 3, (0, 255, 0), 1)
@@ -916,16 +914,6 @@ class FeatureTracker:
     def tf_triangulate_points(self, pts1, pts2):
         """ Triangulates 3D points from set of matches co-ords using relative
         camera position determined from tf"""
-        """ Continuous triangulation during normal flight appears infeasible.
-        Inertia means IMU data, whilst representative on the whole, is not
-        accurate at a given instance so only useful for steady maintained
-        motion. 
-        
-        Furthermore flight will not in general produce motion that is
-        ideal for triangulation. Carrying out the SVD solution to triangulation
-        will give different results depending on the premultiplication, which
-        shows we are not getting enough information.
-        """
         
         # ---------------------------------------------------------------------
         # Working in image co-ordinates throughout
@@ -942,28 +930,24 @@ class FeatureTracker:
             return
     
         
-        # Get t from tf data or predefined data 
-        # For some reason t must be inverted compared to expected, it does not
-        # work to simply swap projection matrices PP1 and PP2
+        # Get t from tf data
         t = -self.image_coord_trans
         self.debug_text.append("trans: "+str(t))
         
         
         # Get rotation matrix
-        R = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(self.relative_quat))[:3, :3]
-        
+        R = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(self.relative_quat))[:3, :3]        
         angles = np.array(tf.transformations.euler_from_quaternion(tf.transformations.quaternion_inverse(self.relative_quat)))
         angles = angles*180./np.pi
-        print angles
-        #angles[0]= angles[0]*180/np.pi
-        #angles[1]= angles[1]*180/np.pi
-        #angles[2]= angles[2]*180/np.pi
-        
+        print angles        
         self.debug_text.append("rot: "+np_to_str(angles))  
         
     
         
-        
+        # Bottom out if motion is insufficient
+        if abs(t[0]) < 0.15 and abs(t[1]) < 0.15:
+            print "Motion bad for triangulation"
+            return None
         
         
         # Compose projection matrix
@@ -976,17 +960,13 @@ class FeatureTracker:
         # Factor in camera calibration
         PP1 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
         PP2 = self.cameraMatrix.dot(P_cam1_to_cam2)
-        points3D_image, accepted = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2)
+        points3D_image, accepted = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2, max_error = 5.)
         points3D_image = points3D_image[:3]
-        #print points3D_image
+        
+        # Filter points with too low accuracy (reprojected to actual image)
         accepted = np.array([accepted]).T
-        #print accepted
         accepted = np.hstack((accepted, accepted, accepted)).T
-        #print accepted
         points3D_image = np.reshape(points3D_image[accepted==True], (3, -1))
-        #print points3D_image
-
-
         
         # Output number of triangulated points
         triangulated = len(points3D_image[0])+0.
@@ -1002,8 +982,6 @@ class FeatureTracker:
         self.reprojected_frame1 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, np.diag((1.,1.,1.)), np.array([[0.,0.,0.]]).T)        
         self.reprojected_frame2 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, R, t)
         
-        
-        
         # Output number of forward triangulated points
         forward_triangulated = len(points3D_image[0])+0.
         self.debug_text.append(forward_triangulated)
@@ -1011,10 +989,16 @@ class FeatureTracker:
         
         # Publish Cloud
         # Note: img1 camera is taken to be the origin, so time_prev NOT
-        # time_now is used.        
-        #if (forward_triangulated/triangulated) > 0.5:
-        print "Publishing Point cloud"
-        self.publish_cloud(points3D_image, self.time_prev)
+        # time_now is used.
+        # Publish Cloud
+        # Note: img1 camera is taken to be the origin, so time1 is used
+        if triangulated != 0 and (forward_triangulated/triangulated > 0.5):
+            print "Publishing Point cloud"
+            self.publish_cloud(points3D_image, self.time_prev)
+        else:
+            print "Poor triangulation"
+            return
+        
         
     def triangulate_point(self, x1,x2,P1,P2): 
         """ Point pair triangulation from
@@ -1032,15 +1016,6 @@ class FeatureTracker:
         # BUT since numpy SVD returns V transpose not V, it is the last row
         X = V[-1,:4]
         
-        # Calculate error
-        # M.dot(solution) should = vector of 6 zeros
-        # as such we get: [w1*x1 error
-        #                  w1*y1 error
-        #                  w1
-        #                  w2*x2 error
-        #                  w2*y2 error
-        #                  w2]
-        
         
         # Get projected pixel co-ords
         projected_pixels_homo = P1.dot(V[-1,:4])
@@ -1049,31 +1024,14 @@ class FeatureTracker:
         error = projected_pixels-x1[:2]
         error_mag1 = np.sqrt(error[0]*error[0]+ error[1]*error[1])
         
+        # Same for frame 2
         projected_pixels_homo = P2.dot(V[-1,:4])
         projected_pixels = (projected_pixels_homo/projected_pixels_homo[2])[:2]
-        print x2[:2]
         error = projected_pixels-x2[:2]
         error_mag2 = np.sqrt(error[0]*error[0]+ error[1]*error[1])
         
         # max is more useful than average as we want a good fit to both
-        error_max = max(error_mag1, error_mag2)
-        
-        '''
-        # Get error vector
-        error_homo = M.dot(V[-1,:])
-        print "error_homo: ", error_homo
-        # Split into frame 1 and frame 2 and convert from homogeneous
-        error_homo = np.reshape(error_homo, (2, 3)).T
-        print "error_homo: ", error_homo
-        error = (error_homo/error_homo[2])[:2]
-        print "error: ", error
-        # Get magnitude of error for each frame
-        error_sq = error*error
-        error_mag = np.sqrt(error_sq[0]+error_sq[1])
-        # error_max is the maximum radial reprojection error across both frames
-        
-        error_max = max(error_mag[0], error_mag[1])
-        '''
+        error_max = max(error_mag1, error_mag2)        
         
         return np.hstack((X / X[3], error_max))
         
@@ -1086,13 +1044,10 @@ class FeatureTracker:
         x2 = np.append(x2, np.array([np.ones(x2.shape[1])]), 0)
         # Triangulate for each pair
         Combi = np.array([self.triangulate_point(x1[:,i],x2[:,i],P1,P2) for i in range(n)]) # Looping here is probably unavoidable
-        X = Combi[:,:4]
-        #print Combi
-        #print "errors : ", Combi[:, 4]
+        # Extract 4D points
+        X = Combi[:,:4]        
+        # Create mask
         accepted = Combi[:, 4]<max_error
-        #print accepted
-        #accepted = [error_max<max_error]
-        #print accepted
         return X.T, accepted
         
         
