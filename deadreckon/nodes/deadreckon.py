@@ -6,7 +6,7 @@ import ardrone_autonomy.msg
 import tf
 import math
 import numpy as np
-from   std_msgs.msg import Empty
+from std_msgs.msg import Empty
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 
@@ -23,7 +23,12 @@ class DeadReckoning:
         self.init_vy_rot = None # initial y vel for trapezium rule
         self.rotZoffset = 0 # initial value of yaw to allow for offsets
         self.trackPath = Path()
-
+        self.frontcam_quat = tf.transformations.quaternion_from_euler(-90.0 * (np.pi/180.), 0.0, -90.0 * (np.pi/180.))
+        self.frontcam_t = (0.21, 0.0, 0.0)
+        self.br = tf.TransformBroadcaster() #create broadcaster
+        self.pathPub = rospy.Publisher('deadreckon_path',Path)
+        
+        
     def reset(self,d):
         print "resetting"
         self.x = 0.0 # x location in world
@@ -151,13 +156,20 @@ class DeadReckoning:
         '''
         # Publish tf
         '''
-        br = tf.TransformBroadcaster() #create broadcaster
-        br.sendTransform((self.x,self.y,self.z), 
+        
+        self.br.sendTransform((self.x,self.y,self.z), 
                          # translation happens first, then rotation
                          quaternion,
                          time,
                          "/ardrone_base_link",
                          "/world")
+                         
+        # (values pulled from ardrone_drive.cpp)
+        # We need to publish this when using high rate navdata to prevent
+        # front camera tf from lagging base ardrone
+        self.br.sendTransform(self.frontcam_t, self.frontcam_quat ,time, '/ardrone_base_frontcam', '/ardrone_base_link')
+        # NOTE: child parent order is reversed w.r.t C++
+
 
         '''
         # Publish path visualisation data
@@ -180,8 +192,8 @@ class DeadReckoning:
         
         self.trackPath.poses.append(newPose)
 
-        pathPub = rospy.Publisher('deadreckon_path',Path)
-        pathPub.publish(self.trackPath)
+        
+        self.pathPub.publish(self.trackPath)
 
 
 if __name__ == '__main__':
