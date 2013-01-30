@@ -282,6 +282,9 @@ void accumulate_point_cloud_buffer(sensor_msgs::PointCloud2 cloud2)
     // Update stride info
     cloud2_buffer.width += cloud2.width;
     cloud2_buffer.row_step += cloud2.row_step;
+    
+    // Publish accumulated point cloud
+    pub.publish(cloud2_buffer);
 }
 
 void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
@@ -494,9 +497,6 @@ void cloud_cb (const sensor_msgs::PointCloudConstPtr& cloud1)
     
     // Publish data for renderer
     render_pub.publish(renderer_poly_line_tri);
-    
-    // Publish accumulated point cloud
-    pub.publish(cloud2_buffer);
     
     std::cout<<"Point Cloud Handling Complete"<<std::endl<<std::endl<<std::endl<<std::endl;
 }

@@ -27,7 +27,7 @@ class DeadReckoning:
         self.frontcam_t = (0.21, 0.0, 0.0)
         self.br = tf.TransformBroadcaster() #create broadcaster
         self.pathPub = rospy.Publisher('deadreckon_path',Path)
-        
+        self.prev_tm = None
         
     def reset(self,d):
         print "resetting"
@@ -42,7 +42,7 @@ class DeadReckoning:
         self.init_vy_rot = None # initial y vel for trapezium rule
         self.rotZoffset = self.gamma 
         self.trackPath = Path()
-
+        self.prev_tm = None
 
     def navdataCallback(self, d):
         
@@ -92,8 +92,17 @@ class DeadReckoning:
         if self.prevtime == None:
             self.reset(self)
             self.prevtime = time
+            self.prev_tm = d.tm
+        print "comparison"
         deltat = (time - self.prevtime).to_sec()
+        print deltat
+        deltat = (float(d.tm-self.prev_tm))/1000000.
+        if deltat > 0.1:
+            deltat = self.prev_deltat
+        self.prev_deltat = deltat
+        print deltat
         self.prevtime = time
+        self.prev_tm = d.tm
         # if playing rosbags and time jumps backwards, we want to reset
         if (deltat < -1.0): 
             self.reset(self)
