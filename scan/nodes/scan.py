@@ -116,6 +116,8 @@ class ScanController:
         
         self.frame_1_is_loaded = False
         self.frame_2_is_loaded = False
+        
+        self.auto_scan_timer = None
     
 
         
@@ -281,6 +283,32 @@ class ScanController:
             self.feature_tracker.process_frames()
             # Shift frame2 to frame1 incase we want sequential use
             self.feature_tracker.load_through()
+            
+    def start_scanning(self, empty):
+        self.get_frame_1(Empty)
+        self.auto_scan_timer = rospy.Timer(rospy.Duration(0.1), self.auto_scan)
+        
+    def stop_scanning(self, empty):
+        if self.auto_scan_timer != None:
+            self.auto_scan_timer.shutdown()
+            
+    def auto_scan(self, event):
+        
+        # Get latest world co-ords of drone
+        #now = rospy.Time.now()
+        #self.feature_tracker.tf.waitForTransform( "world", "ardrone_base_frontcam", self.feature_tracker.time_now, rospy.Duration(1.))
+        pw, q = self.feature_tracker.tf.lookupTransform( "world", "ardrone_base_frontcam", rospy.Time(0))
+        # Difference in position in world co-ords
+        diff = self.feature_tracker.position1 - np.array(pw)
+        # Magnitude of difference
+        mag = np.sqrt(diff[0]*diff[0] + diff[1]*diff[1]+diff[2]*diff[2])
+        print "diff: ", diff
+        if (mag > 0.2):
+            print "Triggering"
+            self.auto_scan_timer.shutdown()
+            self.get_frame_2(Empty)
+            self.start_scanning(Empty)
+        
     
     def connect(self):     
         
@@ -290,6 +318,8 @@ class ScanController:
         rospy.Subscriber('/ardrone/front/camera_info',sensor_msgs.msg.CameraInfo, self.feature_tracker.setCameraInfo)
         rospy.Subscriber('/xboxcontroller/button_a',Empty,self.get_frame_1)
         rospy.Subscriber('/xboxcontroller/button_b',Empty,self.get_frame_2)
+        rospy.Subscriber('/xboxcontroller/button_x',Empty,self.start_scanning)
+        rospy.Subscriber('/xboxcontroller/button_y',Empty,self.stop_scanning)
         rospy.Subscriber('/xboxcontroller/button_back',Empty,self.crude_auto_scan)
 
     
@@ -492,8 +522,8 @@ class FeatureTracker:
         ============================================================"""  
         
         # First must normalise co-ords
-        i1_pts_corr_norm = self.inverseCameraMatrix.dot(make_homo(i1_pts_corr).transpose()).transpose()[:,:2]
-        i2_pts_corr_norm = self.inverseCameraMatrix.dot(make_homo(i2_pts_corr).transpose()).transpose()[:,:2]
+        i1_pts_corr_norm = self.inverseCameraMatrix.dot(self.make_homo(i1_pts_corr).transpose()).transpose()[:,:2]
+        i2_pts_corr_norm = self.inverseCameraMatrix.dot(self.make_homo(i2_pts_corr).transpose()).transpose()[:,:2]
                               
         ind = 0
         maxfit = 0
@@ -603,8 +633,8 @@ class FeatureTracker:
         cloud.header.frame_id = "/world"
         
         #print "Pre-shift points:\r\n ", points
-        sub = np.add(points.T, self.image_position1).T
-        sub = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(self.quaternion1))[:3,:3].dot(sub)
+        sub = np.add(points.T, self.image_position2).T
+        sub = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(self.quaternion2))[:3,:3].dot(sub)
         #print "Post-shift points:\r\n ", sub
         
         # Reshape for easy clouding
@@ -736,7 +766,7 @@ class FeatureTracker:
         
         # Get tf lookup in reverse frame, this ensures translation is in world axis
         p1, q1 = self.tf.lookupTransform( "world", "ardrone_base_frontcam",self.time_buffer)
-        position = p1
+        position = np.array((p1))
         # Flip quat to origin-to-drone-image
         quaternion = tf.transformations.quaternion_inverse(q1)
         
@@ -794,9 +824,6 @@ class FeatureTracker:
         # qmid = qbefore-1.qafter
         self.relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.quaternion1), self.quaternion2)
         #self.relative_quat = tf.transformations.quaternion_from_matrix(np.diag((1., 1., 1., 1.)))
-        angles = np.array(tf.transformations.euler_from_quaternion(tf.transformations.quaternion_inverse(self.relative_quat)))
-        angles = angles*180./np.pi
-        print angles
         self.relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.image_quaternion1), self.image_quaternion2)
         
    
@@ -939,19 +966,12 @@ class FeatureTracker:
         R = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(self.relative_quat))[:3, :3]        
         angles = np.array(tf.transformations.euler_from_quaternion(tf.transformations.quaternion_inverse(self.relative_quat)))
         angles = angles*180./np.pi
-        print angles        
         self.debug_text.append("rot: "+np_to_str(angles))  
         
         # Bottom out if motion is insufficient
         if abs(t[0]) < 0.1 and abs(t[1]) < 0.1:
-            print "Motion bad for triangulation"
-            return None
-        
-        # Bottom out if motion is insufficient
-        if abs(t[0]) < 0.15 and abs(t[1]) < 0.15:
-            print "Motion bad for triangulation"
-            return None
-        
+            print "Motion bad for triangulation :\r\n", str(t)
+            return None        
         
         # Compose projection matrix
         P_cam1_to_cam2 = np.hstack((R, t))
@@ -963,8 +983,12 @@ class FeatureTracker:
         # Factor in camera calibration
         PP1 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
         PP2 = self.cameraMatrix.dot(P_cam1_to_cam2)
-        points3D_image, accepted = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2, max_error = 5.)
+        points3D_image, accepted = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2, max_error = 20.)
         points3D_image = points3D_image[:3]
+        
+        pre_triangulated = len(points3D_image[0])+0.
+        print "Triangulated: ", pre_triangulated
+        self.debug_text.append(pre_triangulated)
         
         # Filter points with too low accuracy (reprojected to actual image)
         accepted = np.array([accepted]).T
@@ -973,6 +997,7 @@ class FeatureTracker:
         
         # Output number of triangulated points
         triangulated = len(points3D_image[0])+0.
+        print "Triangulated: ", triangulated
         self.debug_text.append(triangulated)
         
         # Filter points that are behind the camera
@@ -988,16 +1013,22 @@ class FeatureTracker:
         # Output number of forward triangulated points
         forward_triangulated = len(points3D_image[0])+0.
         self.debug_text.append(forward_triangulated)
+        print "Forward triangulated: ", forward_triangulated
         
+        print points3D_image
+        
+        referred = P_cam1_to_cam2.dot(self.make_homo(points3D_image.T).T)
+        #referred = referred/referred[3]
+        print referred
         
         # Publish Cloud
         # Note: img1 camera is taken to be the origin, so time_prev NOT
         # time_now is used.
         # Publish Cloud
         # Note: img1 camera is taken to be the origin, so time1 is used
-        if triangulated != 0 and (forward_triangulated/triangulated > 0.5):
+        if triangulated != 0 and (float(forward_triangulated)/pre_triangulated > 0.0):
             print "Publishing Point cloud"
-            self.publish_cloud(points3D_image, self.time_prev)
+            self.publish_cloud(referred, self.time_now)
         else:
             print "Poor triangulation"
             return

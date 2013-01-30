@@ -251,7 +251,7 @@ class Triangulator:
         cloud.header.frame_id = "/world"
         
         sub = np.add(points.T, self.position_i1).T
-        sub = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(self.quat_i_to_w_w1))[:3,:3].dot(sub)
+        sub = tf.transformations.quaternion_matrix(self.quat_i_to_w_1)[:3,:3].dot(sub)
         
         # Reshape for easy clouding
         sub = zip(*np.vstack((sub[0], sub[1], sub[2])))
@@ -342,13 +342,13 @@ class Triangulator:
         # Get tf lookup in reverse frame, this ensures translation is in world axis
         p, q = self.tf.lookupTransform( "world", "ardrone_base_frontcam",time2)
         self.position_w2 = np.array((p))
-        self.quat_i_to_w_w2 = tf.transformations.quaternion_inverse(q)
+        self.quat_i_to_w_2 = q
         
         #time2 is after time1 so no need to wait again
         # Get tf lookup in reverse frame, this ensures translation is in world axis
         p, q = self.tf.lookupTransform( "world", "ardrone_base_frontcam",time1)
         self.position_w1 = np.array((p))
-        self.quat_i_to_w_w1 = tf.transformations.quaternion_inverse(q)
+        self.quat_i_to_w_1 = q
         
         print time1
         print time2
@@ -359,11 +359,11 @@ class Triangulator:
         
         p, q = self.tf.lookupTransform("ardrone_base_frontcam", "world", time2)
         self.position_i2 = -np.array((p))
-        self.quat_w_to_i_i2 = tf.transformations.quaternion_inverse(q)
+        self.quat_w_to_i_2 = q
         
         p, q = self.tf.lookupTransform("ardrone_base_frontcam", "world", time1)
         self.position_i1 = -np.array((p))
-        self.quat_w_to_i_i1 = tf.transformations.quaternion_inverse(q)
+        self.quat_w_to_i_1 = q
         
         
         """====================================================================
@@ -375,7 +375,7 @@ class Triangulator:
                           [(self.position_w2[1] - self.position_w1[1])],
                           [(self.position_w2[2] - self.position_w1[2])]))
         print trans        
-        R = tf.transformations.quaternion_matrix(self.quat_i_to_w_w1)[:3, :3]
+        R = tf.transformations.quaternion_matrix(self.quat_w_to_i_1)[:3, :3]
         print R
         # Get difference in position in image co-ordinates
         trans = R.dot(trans)
@@ -575,8 +575,8 @@ class Triangulator:
         points3D_image= np.reshape(points3D_image[infront==True], (3, -1))
         
         # Triangulated points reprojected back to the image plane
-        self.reprojected_frame1 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, np.diag((1.,1.,1.)), np.array([[0.,0.,0.]]).T)        
-        self.reprojected_frame2 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, R, t)
+        self.reprojected_frame1 = self.world_to_pixel_distorted(make_homo(points3D_image.T).T, np.diag((1.,1.,1.)), np.array([[0.,0.,0.]]).T)        
+        self.reprojected_frame2 = self.world_to_pixel_distorted(make_homo(points3D_image.T).T, R, t)
         
         # Output number of forward triangulated points
         forward_triangulated = len(points3D_image[0])+0.
@@ -585,7 +585,7 @@ class Triangulator:
         
         # Publish Cloud
         # Note: img1 camera is taken to be the origin, so time1 is used
-        if triangulated != 0 and (forward_triangulated/triangulated > 0.5):
+        if triangulated != 0 and (forward_triangulated/triangulated > 0.1):
             print "Publishing Point cloud"
             return points3D_image
         else:
