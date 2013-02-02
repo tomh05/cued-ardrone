@@ -299,7 +299,7 @@ class ScanController:
         #self.feature_tracker.tf.waitForTransform( "world", "ardrone_base_frontcam", self.feature_tracker.time_now, rospy.Duration(1.))
         pw, q = self.feature_tracker.tf.lookupTransform( "world", "ardrone_base_frontcam", rospy.Time(0))
         # Difference in position in world co-ords
-        diff = self.feature_tracker.position1 - np.array(pw)
+        diff = self.feature_tracker.position_w1 - np.array(pw)
         # Magnitude of difference
         mag = np.sqrt(diff[0]*diff[0] + diff[1]*diff[1]+diff[2]*diff[2])
         print "diff: ", diff
@@ -547,7 +547,7 @@ class FeatureTracker:
         #if (maxfit < 4*secfit): maxfit ~= secfit is not actually a problem where translation is small, so cannot simply filter by it
         if maxfit < 4: # 8 Chosen as at least 8 points are needed to compute an effective fundamental matrix -> if we cannot satisfy at least 8 points we have serious issues
             print "==================================================="
-            print "P2 not extracted"
+            print "P1 not extracted"
             print "==================================================="
             return False, None, None, None, None, None, None            
         
@@ -633,8 +633,8 @@ class FeatureTracker:
         cloud.header.frame_id = "/world"
         
         #print "Pre-shift points:\r\n ", points
-        sub = np.add(points.T, self.image_position2).T
-        sub = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(self.quaternion2))[:3,:3].dot(sub)
+        sub = np.add(points.T, self.position_i1).T
+        sub = tf.transformations.quaternion_matrix(self.quat_i_to_w1)[:3,:3].dot(sub)
         #print "Post-shift points:\r\n ", sub
         
         # Reshape for easy clouding
@@ -760,9 +760,10 @@ class FeatureTracker:
         ===================================================================="""
         self.tf.waitForTransform("world", "ardrone_base_frontcam", self.time_buffer, rospy.Duration(16))
         # Get tf lookup in reverse frame, this ensures translation is in world axis
-        p1, q1 = self.tf.lookupTransform( "world", "ardrone_base_frontcam",self.time_buffer)
-        position = np.array((p1))
+        position_w, q1 = self.tf.lookupTransform( "world", "ardrone_base_frontcam",self.time_buffer)
+        position_w = np.array((position_w))
         # Flip quat to origin-to-drone-image
+        quaternion_i_to_w = q1
         quaternion = tf.transformations.quaternion_inverse(q1)
         
         """====================================================================
@@ -770,20 +771,25 @@ class FeatureTracker:
         ===================================================================="""
         
         self.tf.waitForTransform("ardrone_base_frontcam", "world", self.time_now, rospy.Duration(16))
-        pi, qi = self.tf.lookupTransform("ardrone_base_frontcam", "world", self.time_buffer)
-        pi = -np.array((pi))
+        position_i, qi = self.tf.lookupTransform("ardrone_base_frontcam", "world", self.time_buffer)
+        position_i = -np.array((position_i))
+        quaternion_w_to_i = qi
         qi = tf.transformations.quaternion_inverse(qi)
         
         
         if frame_no == 1:
-            self.position1 = position
+            self.position_w1 = position_w
+            self.quat_w_to_i1 = quaternion_w_to_i
+            self.position_i1 = position_i
+            self.quat_i_to_w1 = quaternion_i_to_w
             self.quaternion1 = quaternion
-            self.image_position1 = pi
             self.image_quaternion1 = qi
         else:
-            self.position2 = position
+            self.position_w2 = position_w
+            self.quat_w_to_i2 = quaternion_w_to_i
+            self.position_i2 = position_i
+            self.quat_i_to_w2 = quaternion_i_to_w
             self.quaternion2 = quaternion
-            self.image_position2 = pi
             self.image_quaternion2 = qi
             
     def load_through(self):
@@ -796,32 +802,37 @@ class FeatureTracker:
         self.desc1 = self.desc2
         self.time_prev = self.time_now
         # Shift tf
-        self.position1 = self.position2
+        self.position_w2 = self.position_w2
+        self.quat_w_to_i1 = self.quat_w_to_i2
+        self.position_i1 = self.position_i2
+        self.quat_i_to_w1 = self.quat_i_to_w2
         self.quaternion1 = self.quaternion2
-        self.image_position1 = self.image_position2
         self.image_quaternion1 = self.image_quaternion2
 
     def get_change_in_tf(self):       
         
+        # Rotate frame2 position into frame1 image co-ordinates
+        R = tf.transformations.quaternion_matrix(self.quat_w_to_i1)[:3, :3]
+        position_i2_i1 = R.dot(self.position_w2)
         
-        # Difference in position in world, drone axis
-        trans = np.array(([(self.position2[0] - self.position1[0])],
-                          [(self.position2[1] - self.position1[1])],
-                          [(self.position2[2] - self.position1[2])]))
-        
-        R = tf.transformations.quaternion_matrix(self.quaternion2)[:3, :3]
-        trans = R.dot(trans)
-        # Re-order axis into image not necessary as frontcam is image co-ords
+        # Difference in position in image (frame1) co-ordinates
+        trans = np.array(([(position_i2_i1[0] - self.position_i1[0])],
+                          [(position_i2_i1[1] - self.position_i1[1])],
+                          [(position_i2_i1[2] - self.position_i1[2])]))
         self.image_coord_trans = np.array([trans[0], trans[1], trans[2]])
-        #.image_coord_trans = np.array([[0.], trans[1], [0.]])
+        
         
         # Get relative quaternion
-        # qmid = qbefore-1.qafter
-        self.relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.quaternion1), self.quaternion2)
-        #self.relative_quat = tf.transformations.quaternion_from_matrix(np.diag((1., 1., 1., 1.)))
-        self.relative_quat = tf.transformations.quaternion_multiply(tf.transformations.quaternion_inverse(self.image_quaternion1), self.image_quaternion2)
-        
+        # qmid = qafter.qbefore-1
+        self.relative_quat = tf.transformations.quaternion_multiply(self.quat_i_to_w2, tf.transformations.quaternion_inverse(self.quat_i_to_w1))
+        self.relative_quat2 = np.array([tf.transformations.euler_from_quaternion(self.relative_quat)]).T
+        self.relative_quat[0] = -self.relative_quat2[1]
+        self.relative_quat[1] = -self.relative_quat2[2]
+        self.relative_quat[2] = self.relative_quat2[0]
+        self.relative_quat = tf.transformations.quaternion_from_euler(self.relative_quat[0],self.relative_quat[1],self.relative_quat[2])
    
+        
+            
     def process_frames(self):
         
         
@@ -886,6 +897,9 @@ class FeatureTracker:
         
         R = P2[:,:3]
         self.image_based_R2 = R
+        #Rhomo = np.diag((1., 1., 1., 1.))
+        #Rhomo[:3, :3] = R
+        #self.debug_text.append("iR: "+str(np.array([tf.transformations.euler_from_matrix(R)])*180./np.pi))
         t = P2[:,3:4]
         self.image_based_t = t
         
@@ -955,19 +969,23 @@ class FeatureTracker:
             return
     
         
+        # Note: that the translations and rotations are reversed: 
+        # While the camera has moved by [R|t], the shift seen from the points
+        # is the inverse
+        
         # Get t from tf data
-        t = self.image_coord_trans
+        t = -self.image_coord_trans
         self.debug_text.append("trans: "+str(t))
         
         
         # Get rotation matrix
-        R = tf.transformations.quaternion_matrix(self.relative_quat)[:3, :3]        
-        angles = np.array(tf.transformations.euler_from_quaternion(tf.transformations.quaternion_inverse(self.relative_quat)))
+        R = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(self.relative_quat))[:3, :3]     
+        angles = np.array(tf.transformations.euler_from_quaternion(self.relative_quat))
         angles = angles*180./np.pi
         self.debug_text.append("rot: "+np_to_str(angles))  
         
         # Bottom out if motion is insufficient
-        if abs(t[0]) < 0.15 and abs(t[1]) < 0.15:
+        if abs(t[0]) < 0.1 and abs(t[1]) < 0.1:
             print "Motion bad for triangulation :\r\n", str(t)
             return None        
         
@@ -979,8 +997,8 @@ class FeatureTracker:
         Triangulate using pixel co-ord and K[R t]
         """
         # Factor in camera calibration
-        PP2 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
-        PP1 = self.cameraMatrix.dot(P_cam1_to_cam2)
+        PP1 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
+        PP2 = self.cameraMatrix.dot(P_cam1_to_cam2)
         points3D_image, accepted = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2, F, max_error = 20.)
         if points3D_image == None or len(points3D_image) == 0:
             return
@@ -999,8 +1017,9 @@ class FeatureTracker:
         
         # Output number of triangulated points
         triangulated = len(points3D_image[0])+0.
-        print "Triangulated: ", triangulated
+        print "Accepted Triangulated: ", triangulated
         self.debug_text.append(triangulated)
+        print points3D_image
         
         # Filter points that are behind the camera
         infront = points3D_image[2] > 0        
@@ -1011,19 +1030,19 @@ class FeatureTracker:
             return
         
         
-        sq = np.square(points3D_image)
-        sq = np.sqrt(sq[0]+sq[1]+sq[2])
-        sq_sum = np.sum(sq)
-        avg = sq_sum/points3D_image.shape[1]
-        if avg > 5.:
-            "Points too far"
+        #sq = np.square(points3D_image)
+        #sq = np.sqrt(sq[0]+sq[1]+sq[2])
+        #sq_sum = np.sum(sq)
+        #avg = sq_sum/points3D_image.shape[1]
+        #if avg > 5.:
+        #    "Points too far"
         
-        reasonable = sq < 4.
-        reasonable = np.array([reasonable]).transpose()
-        reasonable = np.hstack((reasonable, reasonable, reasonable)).transpose()        
-        points3D_image= np.reshape(points3D_image[reasonable==True], (3, -1))
-        if points3D_image == None or len(points3D_image) == 0:
-            return
+        #reasonable = sq < 4.
+        #reasonable = np.array([reasonable]).transpose()
+        #reasonable = np.hstack((reasonable, reasonable, reasonable)).transpose()        
+        #points3D_image= np.reshape(points3D_image[reasonable==True], (3, -1))
+        #if points3D_image == None or len(points3D_image) == 0:
+        #    return
         
         '''
         # Filter points that are too far in front
@@ -1034,8 +1053,9 @@ class FeatureTracker:
         '''
         
         # Triangulated points reprojected back to the image plane
-        self.reprojected_frame1 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, R, t)        
-        self.reprojected_frame2 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, np.diag((1.,1.,1.)), np.array([[0.,0.,0.]]).T)
+        self.reprojected_frame1 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, np.diag((1.,1.,1.)), np.array([[0.,0.,0.]]).T)        
+        self.reprojected_frame2 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, R, t)
+        print "repro: \r\n", self.reprojected_frame1
         
         # Output number of forward triangulated points
         forward_triangulated = len(points3D_image[0])+0.
@@ -1046,7 +1066,7 @@ class FeatureTracker:
         # Note: img2 camera is taken to be the origin, so time_now is used
         if triangulated != 0 and (float(forward_triangulated)/pre_triangulated > 0.0):
             print "Publishing Point cloud"
-            self.publish_cloud(points3D_image, self.time_now)
+            self.publish_cloud(points3D_image, self.time_prev)
         else:
             print "Poor triangulation"
             return
@@ -1248,6 +1268,7 @@ class FeatureTracker:
         # BUT since numpy SVD returns V transpose not V, it is the last row
         X = V[-1,:4]
         
+        print "s1, s2 : ", V[-1, 4], ", ", V[-1, 5]
         
         # Get projected pixel co-ords
         projected_pixels_homo = P1.dot(V[-1,:4])
@@ -1267,12 +1288,28 @@ class FeatureTracker:
         
         return np.hstack((X / X[3], error_max))
         
-    def triangulate_points(self, x1,x2,P1,P2, F, max_error = 6., max_squared_error = 36.):
+    def triangulate_points(self, x1,x2,P1,P2, F, max_error = 10., max_squared_error = 64.):
         """ Two-view triangulation of points in
         x1,x2 (2*n coordingates)"""
         
-        F = self.find_fundamental_from_proj(P1, P2)
+        #F = self.find_fundamental_from_proj(P1, P2)
+        #print "Dead reckon F:\r\n", F
         
+        #print "P1:\r\n", P1
+        #print "P2:\r\n", P2
+        
+        #P2 = self.cameraMatrix.dot(self.image_P2)
+        #P1 = self.cameraMatrix.dot(self.image_P1)
+        #R1 = np.linalg.inv(self.image_P1[:3, :3])
+        #t1 = np.array([self.image_P1[:, 3]]).T
+        #t1[0] = (t1[0]/np.sign(t1[0]))*np.sign(P1[0,3])
+        #t1[1] = (t1[1]/np.sign(t1[1]))*np.sign(P1[1,3])
+        #t1[2] = (t1[2]/np.sign(t1[2]))*np.sign(P1[2,3])
+        #P1 = self.cameraMatrix.dot(np.hstack((R1, t1)))
+        #print "P1:\r\n", P1
+        #print "P2:\r\n", P2
+        #F = self.find_fundamental_from_proj(P1, P2)
+        #print "Image F:\r\n", F
         
         n = x1.shape[1]
         # Make homogenous
@@ -1283,35 +1320,36 @@ class FeatureTracker:
         #print "P1:\r\n", P1
         #print "P2:\r\n", P2
         # Correct points
-        corr = np.array([self.optimal_correction_triangulate_point(x1[:,i],x2[:,i], F) for i in range(n)])
-        corr1 = corr[:, :3].T
-        corr2 = corr[:, 3:6].T
+        #corr = np.array([self.optimal_correction_triangulate_point(x1[:,i],x2[:,i], F) for i in range(n)])
+        #corr1 = corr[:, :3].T
+        #corr2 = corr[:, 3:6].T
         #print "Corr:\r\n", corr
         #print "Corr1:\r\n", corr1
         #print "Corr2:\r\n", corr2
         
         
-        shift = x1 - corr1
-        shift = shift*shift
-        shift1 = shift[0]+shift[1]
+        #shift = x1 - corr1
+        #shift = shift*shift
+        #shift1 = shift[0]+shift[1]
         
-        shift = x2 - corr2
-        shift = shift*shift
-        shift2 = shift[0]+shift[1]
+        #shift = x2 - corr2
+        #shift = shift*shift
+        #shift2 = shift[0]+shift[1]
         
         #print "shift: \r\n", shift
-        accepted = np.logical_and(shift1<max_squared_error, shift2<max_squared_error)
+        #accepted = np.logical_and(shift1<max_squared_error, shift2<max_squared_error)
         
         # Filter points with too much F implied shift
-        accepted = np.array([accepted]).T
-        accepted = np.hstack((accepted, accepted, accepted)).T
-        x1 = np.reshape(x1[accepted==True], (3, -1))
-        x2 = np.reshape(x2[accepted==True], (3, -1))
+        #accepted = np.array([accepted]).T
+        #accepted = np.hstack((accepted, accepted, accepted)).T
+        #x1 = np.reshape(x1[accepted==True], (3, -1))
+        #x2 = np.reshape(x2[accepted==True], (3, -1))
+        #print "x1: \r\n", x1
         
-        n = len(x1.T)
+        #n = len(x1.T)
         
-        if x1 == None or n <= 1:
-            return None, None
+        #if x1 == None or n <= 1:
+        #    return None, None
             
         
         
@@ -1320,7 +1358,7 @@ class FeatureTracker:
         # Extract 4D points
         X = Combi[:,:4]        
         # Create mask
-        accepted = Combi[:, 4]<max_error
+        accepted = Combi[:, 4] < max_error
         return X.T, accepted
         
         
