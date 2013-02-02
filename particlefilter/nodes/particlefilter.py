@@ -275,6 +275,11 @@ class ParticleFilter:
                                   time, 
                                   "/ardrone_base_link",
                                   "/world")
+    #    def bestGuess(self):
+    #    for i in range(self.N):
+    #        pos = np.array([particle.pos for particle in self.p)
+    #        print "x: "
+    #        print np.mean(pos[0])
 
 if __name__ == '__main__':
     rospy.init_node('particle_filter')
