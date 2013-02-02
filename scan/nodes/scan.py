@@ -633,8 +633,8 @@ class FeatureTracker:
         cloud.header.frame_id = "/world"
         
         #print "Pre-shift points:\r\n ", points
-        sub = np.add(points.T, self.position_i1).T
-        sub = tf.transformations.quaternion_matrix(self.quat_i_to_w1)[:3,:3].dot(sub)
+        sub = np.add(points.T, self.position_i2).T
+        sub = tf.transformations.quaternion_matrix(self.quat_i_to_w2)[:3,:3].dot(sub)
         #print "Post-shift points:\r\n ", sub
         
         # Reshape for easy clouding
@@ -812,19 +812,19 @@ class FeatureTracker:
     def get_change_in_tf(self):       
         
         # Rotate frame2 position into frame1 image co-ordinates
-        R = tf.transformations.quaternion_matrix(self.quat_w_to_i1)[:3, :3]
-        position_i2_i1 = R.dot(self.position_w2)
+        R = tf.transformations.quaternion_matrix(self.quat_w_to_i2)[:3, :3]
+        position_i1_i2 = R.dot(self.position_w1)
         
         # Difference in position in image (frame1) co-ordinates
-        trans = np.array(([(position_i2_i1[0] - self.position_i1[0])],
-                          [(position_i2_i1[1] - self.position_i1[1])],
-                          [(position_i2_i1[2] - self.position_i1[2])]))
+        trans = np.array(([(position_i1_i2[0] - self.position_i2[0])],
+                          [(position_i1_i2[1] - self.position_i2[1])],
+                          [(position_i1_i2[2] - self.position_i2[2])]))
         self.image_coord_trans = np.array([trans[0], trans[1], trans[2]])
         
         
         # Get relative quaternion
         # qmid = qafter.qbefore-1
-        self.relative_quat = tf.transformations.quaternion_multiply(self.quat_i_to_w2, tf.transformations.quaternion_inverse(self.quat_i_to_w1))
+        self.relative_quat = tf.transformations.quaternion_multiply(self.quat_i_to_w1, tf.transformations.quaternion_inverse(self.quat_i_to_w2))
         self.relative_quat2 = np.array([tf.transformations.euler_from_quaternion(self.relative_quat)]).T
         self.relative_quat[0] = -self.relative_quat2[1]
         self.relative_quat[1] = -self.relative_quat2[2]
@@ -997,8 +997,8 @@ class FeatureTracker:
         Triangulate using pixel co-ord and K[R t]
         """
         # Factor in camera calibration
-        PP1 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
-        PP2 = self.cameraMatrix.dot(P_cam1_to_cam2)
+        PP2 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
+        PP1 = self.cameraMatrix.dot(P_cam1_to_cam2)
         points3D_image, accepted = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2, F, max_error = 20.)
         if points3D_image == None or len(points3D_image) == 0:
             return
@@ -1053,8 +1053,8 @@ class FeatureTracker:
         '''
         
         # Triangulated points reprojected back to the image plane
-        self.reprojected_frame1 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, np.diag((1.,1.,1.)), np.array([[0.,0.,0.]]).T)        
-        self.reprojected_frame2 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, R, t)
+        self.reprojected_frame1 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, R, t)        
+        self.reprojected_frame2 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, np.diag((1.,1.,1.)), np.array([[0.,0.,0.]]).T)
         print "repro: \r\n", self.reprojected_frame1
         
         # Output number of forward triangulated points
@@ -1066,7 +1066,7 @@ class FeatureTracker:
         # Note: img2 camera is taken to be the origin, so time_now is used
         if triangulated != 0 and (float(forward_triangulated)/pre_triangulated > 0.0):
             print "Publishing Point cloud"
-            self.publish_cloud(points3D_image, self.time_prev)
+            self.publish_cloud(points3D_image, self.time_now)
         else:
             print "Poor triangulation"
             return
@@ -1288,11 +1288,11 @@ class FeatureTracker:
         
         return np.hstack((X / X[3], error_max))
         
-    def triangulate_points(self, x1,x2,P1,P2, F, max_error = 10., max_squared_error = 64.):
+    def triangulate_points(self, x1,x2,P1,P2, F, max_error = 6., max_squared_error = 36.):
         """ Two-view triangulation of points in
         x1,x2 (2*n coordingates)"""
         
-        #F = self.find_fundamental_from_proj(P1, P2)
+        F = self.find_fundamental_from_proj(P1, P2)
         #print "Dead reckon F:\r\n", F
         
         #print "P1:\r\n", P1
@@ -1320,37 +1320,36 @@ class FeatureTracker:
         #print "P1:\r\n", P1
         #print "P2:\r\n", P2
         # Correct points
-        #corr = np.array([self.optimal_correction_triangulate_point(x1[:,i],x2[:,i], F) for i in range(n)])
-        #corr1 = corr[:, :3].T
-        #corr2 = corr[:, 3:6].T
+        corr = np.array([self.optimal_correction_triangulate_point(x1[:,i],x2[:,i], F) for i in range(n)])
+        corr1 = corr[:, :3].T
+        corr2 = corr[:, 3:6].T
         #print "Corr:\r\n", corr
         #print "Corr1:\r\n", corr1
         #print "Corr2:\r\n", corr2
         
         
-        #shift = x1 - corr1
-        #shift = shift*shift
-        #shift1 = shift[0]+shift[1]
+        shift = x1 - corr1
+        shift = shift*shift
+        shift1 = shift[0]+shift[1]
         
-        #shift = x2 - corr2
-        #shift = shift*shift
-        #shift2 = shift[0]+shift[1]
+        shift = x2 - corr2
+        shift = shift*shift
+        shift2 = shift[0]+shift[1]
         
         #print "shift: \r\n", shift
-        #accepted = np.logical_and(shift1<max_squared_error, shift2<max_squared_error)
+        accepted = np.logical_and(shift1<max_squared_error, shift2<max_squared_error)
         
         # Filter points with too much F implied shift
-        #accepted = np.array([accepted]).T
-        #accepted = np.hstack((accepted, accepted, accepted)).T
-        #x1 = np.reshape(x1[accepted==True], (3, -1))
-        #x2 = np.reshape(x2[accepted==True], (3, -1))
+        accepted = np.array([accepted]).T
+        accepted = np.hstack((accepted, accepted, accepted)).T
+        x1 = np.reshape(x1[accepted==True], (3, -1))
+        x2 = np.reshape(x2[accepted==True], (3, -1))
         #print "x1: \r\n", x1
         
-        #n = len(x1.T)
+        n = len(x1.T)
         
-        #if x1 == None or n <= 1:
-        #    return None, None
-            
+        if x1 == None or n <= 1:
+            return None, None
         
         
         # Triangulate for each pair
