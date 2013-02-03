@@ -285,6 +285,7 @@ class ScanController:
             self.feature_tracker.load_through()
             
     def start_scanning(self, empty):
+        print "Beginning auto-scanning"
         self.get_frame_1(Empty)
         self.auto_scan_timer = rospy.Timer(rospy.Duration(0.1), self.auto_scan)
         
@@ -292,8 +293,7 @@ class ScanController:
         if self.auto_scan_timer != None:
             self.auto_scan_timer.shutdown()
             
-    def auto_scan(self, event):
-        
+    def auto_scan(self, event):        
         # Get latest world co-ords of drone
         #now = rospy.Time.now()
         #self.feature_tracker.tf.waitForTransform( "world", "ardrone_base_frontcam", self.feature_tracker.time_now, rospy.Duration(1.))
@@ -302,8 +302,8 @@ class ScanController:
         diff = self.feature_tracker.position_w1 - np.array(pw)
         # Magnitude of difference
         mag = np.sqrt(diff[0]*diff[0] + diff[1]*diff[1]+diff[2]*diff[2])
-        print "diff: ", diff
-        if (mag > 0.2):
+        #print "diff: ", diff
+        if (mag > 0.25):
             print "Triggering"
             self.auto_scan_timer.shutdown()
             self.get_frame_2(Empty)
@@ -344,9 +344,12 @@ class FeatureTracker:
         self.mag_dist = None
         self.speech_limiter = 0
         self.corners = None
-        self.time_prev = None
+        self.time1 = None
         
         self.image = None
+        
+        self.descriptor_buffer = None
+        self.location_buffer = None
         
     def compute_F_error(self, F, x1_32, x2_32):
         errs = []
@@ -412,7 +415,53 @@ class FeatureTracker:
         i1_pts = kp1_array[i1_indices,:]
         i2_pts = kp2_array[i2_indices,:]
         
+        # Find descriptors that were matched
+        self.desc = np.array(list(desc1[i] for i in i1_indices))
+        
         return i1_pts, i2_pts
+        
+    def match_known_points(self, kp1, desc1):
+        """Matches the specified point with already triangulated points"""
+        desc2 = self.descriptor_buffer
+        # Match features        
+        matches = self.dm.match(desc1, desc2)
+        print "matches:\r\n", matches
+        matches2 = self.dm.match(desc2, desc1)
+        print "matches2:\r\n", matches2
+        
+        print "desc1:\r\n", desc1
+        print "desc2:\r\n", desc2
+
+        # Produce ordered arrays of paired points
+        i1_indices = list(x.queryIdx for x in matches)
+        i2_indices = list(x.trainIdx for x in matches)
+        i2_indices2 = list(x.queryIdx for x in matches2) 
+        i1_indices2 = list(x.trainIdx for x in matches2)
+        
+        
+        # Find pairing that are consistent in both dirs
+        comb1 = set(zip(i1_indices, i2_indices))
+        comb2 = set(zip(i1_indices2, i2_indices2))
+        comb = list(comb1.intersection(comb2))
+        comb = zip(*list(comb))
+        i1_indices = comb[0]
+        i2_indices = comb[1]
+        print i1_indices
+        print i2_indices
+        
+        # Order pairs
+        kp1_array = np.array(list(x.pt for x in kp1))
+        i2_pts_3D = np.array(list(self.location_buffer.T[i] for i in i2_indices))
+        i1_pts = kp1_array[i1_indices,:]
+        print "loc buffer:\r\n", self.location_buffer
+        
+        # Find descriptors that were matched
+        desca = np.array(list(desc1[i] for i in i1_indices))
+        descb = np.array(list(desc2[i] for i in i2_indices))
+        print "desca:\r\n", desca
+        print "descb:\r\n", descb
+        
+        return i1_pts, i2_pts_3D
         
     def make_homo(self, pts):
         pts = np.append(pts,np.array([np.ones(pts.shape[0])]).T, 1)
@@ -429,16 +478,29 @@ class FeatureTracker:
         # Expand mask for easy filtering
         mask_prepped = np.append(mask, mask, 1.)
         # Efficient np-style filtering, then reform
-        i1_pts_masked = np.reshape(i1_pts_undistorted[mask_prepped==1], (-1, 2))
-        i2_pts_masked = np.reshape(i2_pts_undistorted[mask_prepped==1], (-1, 2))
-        i1_pts_undistorted = np.array([i1_pts_masked])
-        i2_pts_undistorted = np.array([i2_pts_masked])
+        i1_pts_corr = np.reshape(i1_pts_undistorted[mask_prepped==1], (-1, 2))
+        i2_pts_corr = np.reshape(i2_pts_undistorted[mask_prepped==1], (-1, 2))
+        #i1_pts_corr = np.array([i1_pts_masked])
+        #i2_pts_corr = np.array([i2_pts_masked])
         
-        i1_pts_masked = np.reshape(i1_pts_draw[mask_prepped==1], (-1, 2))
-        i2_pts_masked = np.reshape(i2_pts_draw[mask_prepped==1], (-1, 2))
-        i1_pts_draw_corr = np.array([i1_pts_masked])
-        i2_pts_draw_corr = np.array([i2_pts_masked])
+        i1_pts_draw_corr = np.reshape(i1_pts_draw[mask_prepped==1], (-1, 2))
+        i2_pts_draw_corr = np.reshape(i2_pts_draw[mask_prepped==1], (-1, 2))
+        #i1_pts_draw_corr = np.array([i1_pts_masked])
+        #i2_pts_draw_corr = np.array([i2_pts_masked])
         
+        
+        # Filter descriptors
+        # This slightly perverse rearrangement effectively horizontally stacks
+        # the appropriate number of 1D column masks to match the desc matrix
+        #
+        # np.resize replicates elements in memory order to fill elements added
+        # by resizing so the mask is transposed to ensure the mask is correctly
+        # stacked, then transposed back into the desired shape
+        mask_prepped = np.resize(mask.T, (self.desc.shape[1],self.desc.shape[0])).T
+        self.desc_corr = np.reshape(self.desc[mask_prepped==1], (-1, self.desc.shape[1]))
+        
+        
+        '''
         """============================================================
         # Filter points that fit F using cv2.correctMatches
         # This unhelpfully overwrites np.nan over rejected entried
@@ -452,6 +514,7 @@ class FeatureTracker:
         i2_pts_corr = np.reshape(i2_pts_corr[0][mask_nan == False], (-1, 2))
         i1_pts_draw_corr = np.reshape(i1_pts_draw_corr[0][mask_nan == False], (-1, 2))
         i2_pts_draw_corr = np.reshape(i2_pts_draw_corr[0][mask_nan == False], (-1, 2))
+        '''
         
         return F, i1_pts_corr, i2_pts_corr, i1_pts_draw_corr, i2_pts_draw_corr
         
@@ -494,7 +557,7 @@ class FeatureTracker:
         
         
         # Use camera1 as origin viewpoint
-        P1 = np.append(np.identity(3), [[0], [0], [0]], 1)
+        P2 = np.append(np.identity(3), [[0], [0], [0]], 1)
         
         """============================================================
         # Compute the four possible P2 projection matrices
@@ -528,7 +591,7 @@ class FeatureTracker:
         ind = 0
         maxfit = 0
         secfit = 0
-        for i, P2 in enumerate(projections):
+        for i, P1 in enumerate(projections):
             # infront accepts only both dimensions
             # WARNING: cv2.tri produces unnormalised homo coords
             points4D = cv2.triangulatePoints(P1, P2, i1_pts_corr_norm.transpose(), i2_pts_corr_norm.transpose())
@@ -556,13 +619,17 @@ class FeatureTracker:
         
         # Filter points
         infront = np.array([infront]).transpose()
+        mask_prepped = np.resize(infront.T, (self.desc_corr.shape[1],self.desc_corr.shape[0])).T
         infront = np.append(infront, infront, 1)
         i1_pts_final = np.reshape(i1_pts_corr[infront==True], (-1, 2))
         i2_pts_final = np.reshape(i2_pts_corr[infront==True], (-1, 2))
         i1_pts_draw_final = np.reshape(i1_pts_draw_corr[infront==True], (-1, 2))
         i2_pts_draw_final = np.reshape(i2_pts_draw_corr[infront==True], (-1, 2))
         
-        return True, P1, projections[ind], i1_pts_final, i2_pts_final, i1_pts_draw_final, i2_pts_draw_final
+        # Filter descriptors
+        self.desc_final = np.reshape(self.desc_corr[mask_prepped==True], (-1, self.desc_corr.shape[1]))
+        
+        return True, projections[ind], P2, i1_pts_final, i2_pts_final, i1_pts_draw_final, i2_pts_draw_final
     
     
     def filter_correct_matches(self, i1_pts_undistorted, i2_pts_undistorted): # not used
@@ -632,10 +699,26 @@ class FeatureTracker:
         cloud.header.stamp = timestamp
         cloud.header.frame_id = "/world"
         
+        
         #print "Pre-shift points:\r\n ", points
         sub = np.add(points.T, self.position_i2).T
         sub = tf.transformations.quaternion_matrix(self.quat_i_to_w2)[:3,:3].dot(sub)
         #print "Post-shift points:\r\n ", sub
+        
+        
+        if (self.descriptor_buffer == None):
+            self.descriptor_buffer = self.desc_triangulated
+        else:
+            self.descriptor_buffer = np.vstack((self.descriptor_buffer, self.desc_triangulated))
+        # Descriptor buffer has 1 row per descriptor
+        
+        if (self.location_buffer == None):
+            self.location_buffer = sub
+        else:
+            self.location_buffer = np.hstack((self.location_buffer, sub))
+        # Location buffer has 1 column per 3D location
+        # Each row in desc buffer corresponds to a loc column (ordered)
+        
         
         # Reshape for easy clouding
         sub = zip(*np.vstack((sub[0], sub[1], sub[2])))
@@ -739,12 +822,14 @@ class FeatureTracker:
             self.pts1 = pts
             self.kp1 = kp
             self.desc1 = desc
-            self.time_prev = self.time_now
+            self.time1 = self.time_buffer
+            self.position_from_cloud()
         else:
             self.grey_now = frame
             self.pts2 = pts
             self.kp2 = kp
             self.desc2 = desc
+            self.time2 = self.time_buffer
             
     def load_tf(self, frame_no):
         """Loads pose for specified frame"""
@@ -770,7 +855,7 @@ class FeatureTracker:
         # Image co-ordinate handling
         ===================================================================="""
         
-        self.tf.waitForTransform("ardrone_base_frontcam", "world", self.time_now, rospy.Duration(16))
+        self.tf.waitForTransform("ardrone_base_frontcam", "world", self.time_buffer, rospy.Duration(16))
         position_i, qi = self.tf.lookupTransform("ardrone_base_frontcam", "world", self.time_buffer)
         position_i = -np.array((position_i))
         quaternion_w_to_i = qi
@@ -800,7 +885,7 @@ class FeatureTracker:
         self.pts1 = self.pts2
         self.kp1 = self.kp2
         self.desc1 = self.desc2
-        self.time_prev = self.time_now
+        self.time1 = self.time2
         # Shift tf
         self.position_w2 = self.position_w2
         self.quat_w_to_i1 = self.quat_w_to_i2
@@ -831,7 +916,47 @@ class FeatureTracker:
         self.relative_quat[2] = self.relative_quat2[0]
         self.relative_quat = tf.transformations.quaternion_from_euler(self.relative_quat[0],self.relative_quat[1],self.relative_quat[2])
    
+    def position_from_cloud(self):
+        """Attempts to locate world position by matching observed image points to 
+        previously triangulated points"""
         
+        if self.descriptor_buffer == None:
+            print "No previously localised points\r\n"
+            return
+        
+        i1_pts_spec, i2_pts_spec = self.match_known_points(self.kp1, self.desc1)
+        print "Cross matches: ", len(i1_pts_spec)
+        
+        print i1_pts_spec
+        print i2_pts_spec
+        
+        """================================================================
+        # Calculate pose and translation to matched template
+        ================================================================"""
+        
+        R, t, inliers = cv2.solvePnPRansac(np.array(i2_pts_spec, dtype=np.float32),  np.array(i1_pts_spec, dtype=np.float32), self.cameraMatrix, self.distCoeffs)
+        
+        if inliers== None:
+            print "===================="
+            print "Template not found"
+            print "===================="
+            return
+        
+        R, J = cv2.Rodrigues(R)        
+        success, angles = self.rotation_to_euler(R)
+        angles*=180/np.pi
+        
+        print len(inliers), " inliers"
+        
+        print "======================="
+        print "Localised with point cloud"
+        print "======================"
+        print "World to image rotation (needs axis swap): \r\n", R
+        t = -t
+        print "World co-ordinates = \r\n", (t[2], -t[1], -t[0])
+        print "Dead reckoned co-ordinates = \r\n", self.position_w1
+        
+    
             
     def process_frames(self):
         
@@ -855,11 +980,18 @@ class FeatureTracker:
         """====================================================================
         Find matched points in both images
         ===================================================================="""
-        success, i1_pts, i2_pts = self.find_and_match_points(self.grey_now)
+        print "No of features 1: ", len(self.kp1)
+        print "No of features 2: ", len(self.kp2)
+        i1_pts, i2_pts = self.match_points(self.kp1, self.kp2, self.desc1, self.desc2)
         i1_pts_draw = i1_pts
         i2_pts_draw = i2_pts
-        if not success:
+        if i1_pts == None or len(i1_pts) < 8:
             return
+        
+        # Check for cross-matching with previously triangulated points
+        #if self.descriptor_buffer != None:
+        #    i1_pts_spec, i2_pts_spec = self.match_known_points(self.kp1, self.desc)
+        #    print "Cross matches: ", len(i1_pts_spec)
     
         print len(i1_pts), " matched points"
 
@@ -985,7 +1117,8 @@ class FeatureTracker:
         self.debug_text.append("rot: "+np_to_str(angles))  
         
         # Bottom out if motion is insufficient
-        if abs(t[0]) < 0.1 and abs(t[1]) < 0.1:
+        mag = np.sqrt(t[0]*t[0]+t[1]*t[1])
+        if mag < 0.2:
             print "Motion bad for triangulation :\r\n", str(t)
             return None        
         
@@ -999,7 +1132,7 @@ class FeatureTracker:
         # Factor in camera calibration
         PP2 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
         PP1 = self.cameraMatrix.dot(P_cam1_to_cam2)
-        points3D_image, accepted = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2, F, max_error = 20.)
+        points3D_image, accepted = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2, F)
         if points3D_image == None or len(points3D_image) == 0:
             return
         points3D_image = points3D_image[:3]
@@ -1010,25 +1143,32 @@ class FeatureTracker:
         
         # Filter points with too low accuracy (reprojected to actual image)
         accepted = np.array([accepted]).T
+        mask_prepped = np.resize(accepted.T, (self.desc_shifted.shape[1],self.desc_shifted.shape[0])).T
         accepted = np.hstack((accepted, accepted, accepted)).T
         points3D_image = np.reshape(points3D_image[accepted==True], (3, -1))
+        # Filter descriptors
+        self.desc_accepted = np.reshape(self.desc_shifted[mask_prepped==True], (-1, self.desc_shifted.shape[1]))
         if points3D_image == None or len(points3D_image) == 0:
             return
+        
+        
         
         # Output number of triangulated points
         triangulated = len(points3D_image[0])+0.
         print "Accepted Triangulated: ", triangulated
         self.debug_text.append(triangulated)
-        print points3D_image
         
         # Filter points that are behind the camera
-        infront = points3D_image[2] > 0        
+        infront = points3D_image[2] > 0
         infront = np.array([infront]).transpose()
-        infront = np.hstack((infront, infront, infront)).transpose()        
+        mask_prepped = np.resize(infront.T, (self.desc_accepted.shape[1], self.desc_accepted.shape[0])).T
+        infront = np.hstack((infront, infront, infront)).transpose()
         points3D_image= np.reshape(points3D_image[infront==True], (3, -1))
+        # Filter descriptors
+        self.desc_triangulated = np.reshape(self.desc_accepted[mask_prepped==True], (-1, self.desc_accepted.shape[1]))
         if points3D_image == None or len(points3D_image) == 0:
             return
-        
+            
         
         #sq = np.square(points3D_image)
         #sq = np.sqrt(sq[0]+sq[1]+sq[2])
@@ -1055,7 +1195,6 @@ class FeatureTracker:
         # Triangulated points reprojected back to the image plane
         self.reprojected_frame1 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, R, t)        
         self.reprojected_frame2 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, np.diag((1.,1.,1.)), np.array([[0.,0.,0.]]).T)
-        print "repro: \r\n", self.reprojected_frame1
         
         # Output number of forward triangulated points
         forward_triangulated = len(points3D_image[0])+0.
@@ -1063,10 +1202,10 @@ class FeatureTracker:
         print "Forward triangulated: ", forward_triangulated
         
         # Publish Cloud
-        # Note: img2 camera is taken to be the origin, so time_now is used
+        # Note: img2 camera is taken to be the origin, so time2 is used
         if triangulated != 0 and (float(forward_triangulated)/pre_triangulated > 0.0):
-            print "Publishing Point cloud"
-            self.publish_cloud(points3D_image, self.time_now)
+            print "Publishing Point cloud---------------------------------------------------------"
+            self.publish_cloud(points3D_image, self.time2)
         else:
             print "Poor triangulation"
             return
@@ -1268,7 +1407,7 @@ class FeatureTracker:
         # BUT since numpy SVD returns V transpose not V, it is the last row
         X = V[-1,:4]
         
-        print "s1, s2 : ", V[-1, 4], ", ", V[-1, 5]
+        #print "s1, s2 : ", V[-1, 4], ", ", V[-1, 5]
         
         # Get projected pixel co-ords
         projected_pixels_homo = P1.dot(V[-1,:4])
@@ -1288,28 +1427,17 @@ class FeatureTracker:
         
         return np.hstack((X / X[3], error_max))
         
-    def triangulate_points(self, x1,x2,P1,P2, F, max_error = 6., max_squared_error = 36.):
+    def triangulate_points(self, x1,x2,P1,P2, F, max_error = 8., max_squared_error = 64.):
         """ Two-view triangulation of points in
         x1,x2 (2*n coordingates)"""
         
         F = self.find_fundamental_from_proj(P1, P2)
-        #print "Dead reckon F:\r\n", F
         
-        #print "P1:\r\n", P1
-        #print "P2:\r\n", P2
-        
-        #P2 = self.cameraMatrix.dot(self.image_P2)
-        #P1 = self.cameraMatrix.dot(self.image_P1)
+        #PP2 = self.cameraMatrix.dot(self.image_P2)
         #R1 = np.linalg.inv(self.image_P1[:3, :3])
-        #t1 = np.array([self.image_P1[:, 3]]).T
-        #t1[0] = (t1[0]/np.sign(t1[0]))*np.sign(P1[0,3])
-        #t1[1] = (t1[1]/np.sign(t1[1]))*np.sign(P1[1,3])
-        #t1[2] = (t1[2]/np.sign(t1[2]))*np.sign(P1[2,3])
-        #P1 = self.cameraMatrix.dot(np.hstack((R1, t1)))
-        #print "P1:\r\n", P1
-        #print "P2:\r\n", P2
-        #F = self.find_fundamental_from_proj(P1, P2)
-        #print "Image F:\r\n", F
+        #t1 = -np.array([self.image_P1[:, 3]]).T
+        #PP1 = self.cameraMatrix.dot(np.hstack((R1, t1)))
+        #F = self.find_fundamental_from_proj(PP1, PP2)
         
         n = x1.shape[1]
         # Make homogenous
@@ -1341,10 +1469,12 @@ class FeatureTracker:
         
         # Filter points with too much F implied shift
         accepted = np.array([accepted]).T
+        mask_prepped = np.resize(accepted.T, (self.desc_final.shape[1],self.desc_final.shape[0])).T
         accepted = np.hstack((accepted, accepted, accepted)).T
         x1 = np.reshape(x1[accepted==True], (3, -1))
         x2 = np.reshape(x2[accepted==True], (3, -1))
-        #print "x1: \r\n", x1
+        # Filter descriptors
+        self.desc_shifted = np.reshape(self.desc_final[mask_prepped==True], (-1, self.desc_final.shape[1]))
         
         n = len(x1.T)
         
