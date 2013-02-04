@@ -425,12 +425,12 @@ class FeatureTracker:
         desc2 = self.descriptor_buffer
         # Match features        
         matches = self.dm.match(desc1, desc2)
-        print "matches:\r\n", matches
+        #print "matches:\r\n", matches
         matches2 = self.dm.match(desc2, desc1)
-        print "matches2:\r\n", matches2
+        #print "matches2:\r\n", matches2
         
-        print "desc1:\r\n", desc1
-        print "desc2:\r\n", desc2
+        #print "desc1:\r\n", desc1
+        #print "desc2:\r\n", desc2
 
         # Produce ordered arrays of paired points
         i1_indices = list(x.queryIdx for x in matches)
@@ -446,20 +446,20 @@ class FeatureTracker:
         comb = zip(*list(comb))
         i1_indices = comb[0]
         i2_indices = comb[1]
-        print i1_indices
-        print i2_indices
+        #print i1_indices
+        #print i2_indices
         
         # Order pairs
         kp1_array = np.array(list(x.pt for x in kp1))
         i2_pts_3D = np.array(list(self.location_buffer.T[i] for i in i2_indices))
         i1_pts = kp1_array[i1_indices,:]
-        print "loc buffer:\r\n", self.location_buffer
+        #print "loc buffer:\r\n", self.location_buffer
         
         # Find descriptors that were matched
         desca = np.array(list(desc1[i] for i in i1_indices))
         descb = np.array(list(desc2[i] for i in i2_indices))
-        print "desca:\r\n", desca
-        print "descb:\r\n", descb
+        #print "desca:\r\n", desca
+        #print "descb:\r\n", descb
         
         return i1_pts, i2_pts_3D
         
@@ -927,8 +927,8 @@ class FeatureTracker:
         i1_pts_spec, i2_pts_spec = self.match_known_points(self.kp1, self.desc1)
         print "Cross matches: ", len(i1_pts_spec)
         
-        print i1_pts_spec
-        print i2_pts_spec
+        #print i1_pts_spec
+        #print i2_pts_spec
         
         """================================================================
         # Calculate pose and translation to matched template
@@ -940,6 +940,25 @@ class FeatureTracker:
         
         
         
+        
+        
+        R, t, inliers = cv2.solvePnPRansac(np.array(i2_pts_spec, dtype=np.float32), np.array(i1_pts_spec, dtype=np.float32), self.cameraMatrix, self.distCoeffs)
+        print "inliers: ", inliers
+        
+        if inliers== None:
+            print "===================="
+            print "Template not found"
+            print "===================="
+            return
+            
+        print "t: ", t
+        
+        R, J = cv2.Rodrigues(R)
+        
+        success, angles = self.rotation_to_euler(R)
+        angles*=180/np.pi
+        
+        '''
         x_homo = self.make_homo(i1_pts_spec)
         X_homo = self.make_homo(i2_pts_spec)
         print x_homo
@@ -1011,7 +1030,7 @@ class FeatureTracker:
         
         print "Function incomplete"
         return
-            
+        '''
             
     def process_frames(self):
         
@@ -1457,6 +1476,7 @@ class FeatureTracker:
         M[3:,5] = -x2
         # Compute SVD
         U,S,V = np.linalg.svd(M)
+        
         # numpy SVD is ordered from largest to smallest (for S)
         # so least squares solution will always lie in the last column of V
         # BUT since numpy SVD returns V transpose not V, it is the last row
