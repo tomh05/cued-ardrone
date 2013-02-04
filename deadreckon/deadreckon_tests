@@ -1,0 +1,60 @@
+Case 1 - 50Hz (_realtime_navdata:=False _navdata_demo:=0) - rate50.bag:
+
+    Median off. Header timestamps:
+        #0.44m error
+    Median 3. Header timestamps:
+        #0.56m error
+    Median 5. Header timestamps:
+        #0.66m error
+    Median 10. Header timestamps:
+        #.83m error
+    Median 20. Header timestamps:
+        #1.17m error
+        
+    NB: Using drone timings (navdata.tm) desyncs: 48.7secs vs 50.0secs
+    
+    Median off. Drone deltat:
+        #0.48m error
+    Median 3. Drone deltat:
+        #0.41m error
+    Median 5. Drone deltat:
+        #0.42m error
+    Median 10. Drone deltat:
+        #0.53m error
+    Median 20. Drone deltat:
+        #0.78m error    
+    
+    
+    NB: Using drone timings does not desync (40.6secs vs 40.6secs)
+    
+Case 2 - 200Hz (_realtime_navdata:=True _navdata_demo:=0) - rate200.bag:
+
+    Median off. Header timestamps:
+        0.77m error
+    Median 3. Header timestamps:
+        0.76m error
+    Median 5. Header timestamps:
+        0.76m error
+    Median 10. Header timestamps:
+        0.76m error
+    Median 20. Header timestamps:
+        0.76m error
+    Median 50. Header timestamps:
+        0.76m error
+    Median 100. Header timestamps:
+        0.70m error
+    
+
+
+    Median off. Drone deltat:
+        0.79m error
+    
+
+Recommendations:
+    50Hz:
+        Median filter off
+        Use header timings
+    200Hz:
+        Median filter off
+        Use drone timings
+    
