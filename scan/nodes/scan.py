@@ -934,29 +934,84 @@ class FeatureTracker:
         # Calculate pose and translation to matched template
         ================================================================"""
         
-        R, t, inliers = cv2.solvePnPRansac(np.array(i2_pts_spec, dtype=np.float32),  np.array(i1_pts_spec, dtype=np.float32), self.cameraMatrix, self.distCoeffs)
-        
-        if inliers== None:
-            print "===================="
-            print "Template not found"
-            print "===================="
+        if len(i1_pts_spec) < 5:
+            "Not enough matches to localise"
             return
         
-        R, J = cv2.Rodrigues(R)        
-        success, angles = self.rotation_to_euler(R)
-        angles*=180/np.pi
         
-        print len(inliers), " inliers"
+        
+        x_homo = self.make_homo(i1_pts_spec)
+        X_homo = self.make_homo(i2_pts_spec)
+        print x_homo
+        print X_homo
+        
+        # Note using a list of np arrays defeats the point of using np
+        X = X_homo[0:5]
+        #X = []
+        #X.append(X_homo[0])
+        #X.append(X_homo[1])
+        #X.append(X_homo[2])
+        #X.append(X_homo[3])
+        #X.append(X_homo[4])
+        print "X:\r\n", X
+        
+        x = self.inverseCameraMatrix.dot(x_homo[0:5].T)
+        #x = []
+        #x.append(x_homo[0:1].T)
+        #x.append(x_homo[1:2].T)
+        #x.append(x_homo[2:3].T)
+        #x.append(x_homo[3:4].T)
+        #x.append(x_homo[4:5].T)
+        print "x:\r\n", x
+        print x[:,0:1]
+        
+        
+        
+        # Set up point lists
+        ###NOT COMPLETE
+        
+        # Compose simultaneous equations
+        A = np.zeros((15,14))
+        # X is a list of 1x4 homogeneous 3D co-ords
+        # x is a list of 3x1 homogenous 2D co-ords pre-multipled by K^-1
+        for i in range(5):
+            print i
+            A[3*i      , 0  :   4] = X[i]
+            A[3*i+1    , 4  :   8] = X[i]
+            A[3*i+2    , 8  :   9] = 1.
+            A[3*i:3*i+3, i+9:i+10] = -x[:,i:i+1]
+        
+        print "A:\r\n", A
+        
+        
+        # Solve
+        U,S,V = np.linalg.svd(A)
+        print "S:\r\n", S
+        print "V(last):\r\n", V[-1]
+        
+        # Reconstruct R
+        r1 = V[-1,0:3]
+        r2 = V[-1,4:7]
+        print "r1: ", r1
+        print "r2: ", r2
+        r3 = np.cross(r1,r2)
+        R = np.vstack((np.vstack((r1, r2)), r3))
+        
+        # Reconstruct t
+        t = np.array([[V[-1, 3]], [V[-1, 7]], [V[-1, 8]]])
+        
         
         print "======================="
         print "Localised with point cloud"
         print "======================"
         print "World to image rotation (needs axis swap): \r\n", R
         t = -t
-        print "World co-ordinates = \r\n", (t[2], -t[1], -t[0])
+        print "World co-ordinates = \r\n", t
         print "Dead reckoned co-ordinates = \r\n", self.position_w1
         
-    
+        print "Function incomplete"
+        return
+            
             
     def process_frames(self):
         
