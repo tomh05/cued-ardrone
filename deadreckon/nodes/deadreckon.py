@@ -56,17 +56,17 @@ class DeadReckoning:
         '''
         # Running 10 sample median buffer (reduce noise on d.vx, d.vy)
         '''
-        if len(self.v_buffer) < 10:
-            self.v_buffer.append([d.vx, d.vy])
-            vx = np.median(zip(*self.v_buffer)[0])
-            vy = np.median(zip(*self.v_buffer)[1])
-        else:
-            self.v_buffer.pop(0)
-            self.v_buffer.append([d.vx, d.vy])
-            vx = np.median(zip(*self.v_buffer)[0])
-            vy = np.median(zip(*self.v_buffer)[1])
-        #vx = d.vx 
-        #vy = d.vy 
+        #if len(self.v_buffer) < 10:
+        #    self.v_buffer.append([d.vx, d.vy])
+        #    vx = np.median(zip(*self.v_buffer)[0])
+        #    vy = np.median(zip(*self.v_buffer)[1])
+        #else:
+        #    self.v_buffer.pop(0)
+        #    self.v_buffer.append([d.vx, d.vy])
+        #    vx = np.median(zip(*self.v_buffer)[0])
+        #    vy = np.median(zip(*self.v_buffer)[1])
+        vx = d.vx 
+        vy = d.vy 
         #print str(d.vx) + "," + str(d.vy) + "," + str(d.vz)
         
         
@@ -93,20 +93,22 @@ class DeadReckoning:
             self.reset(self)
             self.prevtime = time
             self.prev_tm = d.tm
-        print "comparison"
+        #print "comparison"
         deltat = (time - self.prevtime).to_sec()
-        print deltat
-        deltat = (float(d.tm-self.prev_tm))/1000000.
-        if deltat > 0.1:
-            deltat = self.prev_deltat
+        #print deltat
+        #deltat = (float(d.tm-self.prev_tm))/1000000.
+        #if deltat > 0.1:
+        #    deltat = self.prev_deltat
+        deltat = (time - self.prevtime).to_sec()
         self.prev_deltat = deltat
-        print deltat
+        #print deltat
         self.prevtime = time
         self.prev_tm = d.tm
         # if playing rosbags and time jumps backwards, we want to reset
         if (deltat < -1.0): 
             self.reset(self)
- 
+        
+        # NOTE: at 50Hz 10median filter is better than none and header times are better than tm
         
         '''
         # Resolve into co-ordinate system
