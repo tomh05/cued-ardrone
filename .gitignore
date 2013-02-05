@@ -6,3 +6,4 @@ simpledrone/build
 /build/
 drone_demo/
 *.bag
+*.png
