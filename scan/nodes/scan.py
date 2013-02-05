@@ -303,7 +303,7 @@ class ScanController:
         # Magnitude of difference
         mag = np.sqrt(diff[0]*diff[0] + diff[1]*diff[1]+diff[2]*diff[2])
         #print "diff: ", diff
-        if (mag > 0.25):
+        if (abs(diff[2]) > 0.20):
             print "Triggering"
             self.auto_scan_timer.shutdown()
             self.get_frame_2(Empty)
@@ -943,14 +943,15 @@ class FeatureTracker:
         
         
         R, t, inliers = cv2.solvePnPRansac(np.array(i2_pts_spec, dtype=np.float32), np.array(i1_pts_spec, dtype=np.float32), self.cameraMatrix, self.distCoeffs)
-        print "inliers: ", inliers
         
-        if inliers== None:
+        
+        if inliers == None:
             print "===================="
             print "Template not found"
             print "===================="
             return
-            
+        
+        print "No. of inliers: ", len(inliers)    
         print "t: ", t
         
         R, J = cv2.Rodrigues(R)
@@ -1062,10 +1063,10 @@ class FeatureTracker:
         if i1_pts == None or len(i1_pts) < 8:
             return
         
-        # Check for cross-matching with previously triangulated points
-        #if self.descriptor_buffer != None:
-        #    i1_pts_spec, i2_pts_spec = self.match_known_points(self.kp1, self.desc)
-        #    print "Cross matches: ", len(i1_pts_spec)
+        #Check for cross-matching with previously triangulated points
+        if self.descriptor_buffer != None:
+            i1_pts_spec, i2_pts_spec = self.match_known_points(self.kp1, self.desc)
+            print "Frame-frame matches already triangulated: ", len(i1_pts_spec)
     
         print len(i1_pts), " matched points"
 
@@ -1502,7 +1503,7 @@ class FeatureTracker:
         
         return np.hstack((X / X[3], error_max))
         
-    def triangulate_points(self, x1,x2,P1,P2, F, max_error = 10., max_squared_error = 64.):
+    def triangulate_points(self, x1,x2,P1,P2, F, max_error = 8., max_squared_error = 64.):
         """ Two-view triangulation of points in
         x1,x2 (2*n coordingates)"""
         
@@ -1552,7 +1553,7 @@ class FeatureTracker:
         #self.desc_shifted = np.reshape(self.desc_final[mask_prepped==True], (-1, self.desc_final.shape[1]))
         self.desc_shifted = self.desc_final
         
-        #n = len(x1.T)
+        n = len(x1.T)
         
         if x1 == None or n <= 1:
             return None, None
