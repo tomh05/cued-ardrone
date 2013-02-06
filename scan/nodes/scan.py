@@ -58,6 +58,7 @@ import tf
 from sensor_msgs.msg import PointCloud
 from sensor_msgs.msg import PointCloud2
 from std_msgs.msg import Empty
+from std_msgs.msg import Header
 from nav_msgs.msg import Path
 import math
 import time
@@ -303,7 +304,7 @@ class ScanController:
         # Magnitude of difference
         mag = np.sqrt(diff[0]*diff[0] + diff[1]*diff[1]+diff[2]*diff[2])
         #print "diff: ", diff
-        if (abs(diff[2]) > 0.20):
+        if (abs(diff[2]) > 0.2):
             print "Triggering"
             self.auto_scan_timer.shutdown()
             self.get_frame_2(Empty)
@@ -338,6 +339,7 @@ class FeatureTracker:
         cv2.namedWindow("track")
         self.cloud_pub = rospy.Publisher('/scan/absolute_cloud', PointCloud)
         self.cloud_pub2 = rospy.Publisher('/scan/relative_cloud', PointCloud)
+        self.pose_pub = rospy.Publisher('/scan/pose', gm.PoseStamped)
         self.prev_position = None
         self.prev_quat = None
         self.prev_prev_position = None
@@ -557,7 +559,7 @@ class FeatureTracker:
         
         
         # Use camera1 as origin viewpoint
-        P2 = np.append(np.identity(3), [[0], [0], [0]], 1)
+        P1 = np.append(np.identity(3), [[0], [0], [0]], 1)
         
         """============================================================
         # Compute the four possible P2 projection matrices
@@ -585,23 +587,18 @@ class FeatureTracker:
         ============================================================"""  
         
         # First must normalise co-ords
-        i1_pts_corr_norm = self.inverseCameraMatrix.dot(self.make_homo(i1_pts_corr).transpose()).transpose()[:,:2]
-        i2_pts_corr_norm = self.inverseCameraMatrix.dot(self.make_homo(i2_pts_corr).transpose()).transpose()[:,:2]
+        i1_pts_corr_norm = self.make_homo(i1_pts_corr)
+        i2_pts_corr_norm = self.make_homo(i2_pts_corr)
                               
         ind = 0
         maxfit = 0
         secfit = 0
-        for i, P1 in enumerate(projections):
-            # infront accepts only both dimensions
-            # WARNING: cv2.tri produces unnormalised homo coords
-            points4D = cv2.triangulatePoints(P1, P2, i1_pts_corr_norm.transpose(), i2_pts_corr_norm.transpose())
-            # normalise homogenous coords
-            points4D /= points4D[3]
-            #points4D = self.triangulate_points(i1_pts_corr.transpose(), i2_pts_corr.transpose(), P1, P2)
-            d1 = np.dot(P1,points4D)[2]
-            d2 = np.dot(P2,points4D)[2]
+        for i, P2 in enumerate(projections):
+            points4D = self.unfiltered_triangulate_points(i1_pts_corr.transpose(), i2_pts_corr.transpose(), P1, P2)
+            d1 = np.dot(self.cameraMatrix.dot(P1),points4D)[2]
+            d2 = np.dot(self.cameraMatrix.dot(P2),points4D)[2]
             PI = sum((d1>0) & (d2>0))
-            #print "Support for P2 ", i, " : ", PI
+            print "Support for P2 ", i, " : ", PI
             if PI > maxfit:
                 secfit = maxfit
                 maxfit = PI
@@ -629,7 +626,7 @@ class FeatureTracker:
         # Filter descriptors
         self.desc_final = np.reshape(self.desc_corr[mask_prepped==True], (-1, self.desc_corr.shape[1]))
         
-        return True, projections[ind], P2, i1_pts_final, i2_pts_final, i1_pts_draw_final, i2_pts_draw_final
+        return True, P1, projections[ind], i1_pts_final, i2_pts_final, i1_pts_draw_final, i2_pts_draw_final
     
     
     def filter_correct_matches(self, i1_pts_undistorted, i2_pts_undistorted): # not used
@@ -954,10 +951,37 @@ class FeatureTracker:
         print "No. of inliers: ", len(inliers)    
         print "t: ", t
         
-        R, J = cv2.Rodrigues(R)
+        R, J = cv2.Rodrigues(R)        
+        Rhomo = np.diag((1., 1., 1., 1.))
+        Rhomo[:3, :3] = R
         
         success, angles = self.rotation_to_euler(R)
         angles*=180/np.pi
+        
+        poseStamped = gm.PoseStamped()
+        header = Header()
+        pose = gm.Pose()
+        point = gm.Point()
+        orientation = gm.Quaternion() 
+        
+        print -t[0]
+        point.x = -t[0]
+        point.y = -t[1]
+        point.z = -t[2]
+        pose.position = point
+        quat = tf.transformations.quaternion_inverse(tf.transformations.quaternion_from_matrix(Rhomo))
+        orientation.x = quat[0]
+        orientation.y = quat[1]
+        orientation.z = quat[2]
+        orientation.w = quat[3]
+        pose.orientation = orientation
+        header.stamp = self.time1
+        header.frame_id = '/world'
+        poseStamped.pose = pose
+        poseStamped.header = header
+        
+        self.pose_pub.publish(poseStamped)
+        
         
         '''
         x_homo = self.make_homo(i1_pts_spec)
@@ -1161,6 +1185,10 @@ class FeatureTracker:
         """ Triangulates 3D points from set of matches co-ords using relative
         camera position determined from tf"""
         
+        print pts1
+        print pts2
+        
+        
         # ---------------------------------------------------------------------
         # Working in image co-ordinates throughout
         # ---------------------------------------------------------------------
@@ -1182,8 +1210,8 @@ class FeatureTracker:
         
         # Get t from tf data
         t = -self.image_coord_trans
+        t_mag = np.sqrt(t.T.dot(t))
         self.debug_text.append("trans: "+str(t))
-        
         
         # Get rotation matrix
         R = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(self.relative_quat))[:3, :3]     
@@ -1195,10 +1223,23 @@ class FeatureTracker:
         mag = np.sqrt(t[0]*t[0]+t[1]*t[1])
         if mag < 0.2:
             print "Motion bad for triangulation :\r\n", str(t)
-            return None        
+            return None  
         
-        # Compose projection matrix
-        P_cam1_to_cam2 = np.hstack((R, t))
+        
+        # Compare image translation with dead reckoned        
+        ti = np.array([self.image_P2[:, 3]]).T
+        # Find angle between vectors ( |a||b|cos(theta) = a . b )
+        theta = (180./np.pi)*math.acos(t.T.dot(ti)/t_mag)
+        print "theta ", theta
+        
+        # Compose image projection matrix
+        Ri = self.image_P1[:3, :3]
+        PP1 = np.hstack((Ri, t_mag*ti))        
+        print "Image P2:\r\n", PP1
+        
+        # Compose dead reckoned projection matrix
+        P_cam1_to_cam2 = np.hstack((R, t))        
+        print "Dead P:\r\n", P_cam1_to_cam2
         
         
         """
@@ -1207,85 +1248,71 @@ class FeatureTracker:
         # Factor in camera calibration
         PP2 = np.hstack((self.cameraMatrix, np.array([[0.],[0.],[0,]])))
         PP1 = self.cameraMatrix.dot(P_cam1_to_cam2)
-        points3D_image, accepted = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2, F)
-        if points3D_image == None or len(points3D_image) == 0:
-            return
-        points3D_image = points3D_image[:3]
-        
-        pre_triangulated = len(points3D_image[0])+0.
-        print "Triangulated: ", pre_triangulated
+        # Print pre-triangulated count
+        pre_triangulated = len(pts1)+0.
+        print "Pre-triangulated: ", pre_triangulated
         self.debug_text.append(pre_triangulated)
-        
-        # Filter points with too low accuracy (reprojected to actual image)
-        accepted = np.array([accepted]).T
-        mask_prepped = np.resize(accepted.T, (self.desc_shifted.shape[1],self.desc_shifted.shape[0])).T
-        accepted = np.hstack((accepted, accepted, accepted)).T
-        points3D_image = np.reshape(points3D_image[accepted==True], (3, -1))
-        # Filter descriptors
-        self.desc_accepted = np.reshape(self.desc_shifted[mask_prepped==True], (-1, self.desc_shifted.shape[1]))
+        # Triangulate
+        points3D_image = self.triangulate_points(pts1.transpose(), pts2.transpose(), PP1, PP2)
         if points3D_image == None or len(points3D_image) == 0:
-            return
-        
-        
-        
-        # Output number of triangulated points
-        triangulated = len(points3D_image[0])+0.
-        print "Accepted Triangulated: ", triangulated
-        self.debug_text.append(triangulated)
+            return            
+        points3D_image = points3D_image[:3]        
         
         # Filter points that are behind the camera
         infront = points3D_image[2] > 0
         infront = np.array([infront]).transpose()
-        mask_prepped = np.resize(infront.T, (self.desc_accepted.shape[1], self.desc_accepted.shape[0])).T
-        infront = np.hstack((infront, infront, infront)).transpose()
-        points3D_image= np.reshape(points3D_image[infront==True], (3, -1))
+        points3D_image = np.reshape(points3D_image[np.hstack((infront, infront, infront)).T==True], (3, -1))
         # Filter descriptors
-        self.desc_triangulated = np.reshape(self.desc_accepted[mask_prepped==True], (-1, self.desc_accepted.shape[1]))
+        self.desc_triangulated = np.reshape(self.desc_accepted[np.resize(infront.T, (self.desc_accepted.shape[1], self.desc_accepted.shape[0])).T==True], (-1, self.desc_accepted.shape[1]))
+        if points3D_image == None or len(points3D_image) == 0:
+            "No points infront of camera"
+            return
+        
+        # Output number of forward triangulated points
+        forward_triangulated = len(points3D_image[0])+0.
+        self.debug_text.append(forward_triangulated)
+        print "Forward triangulated: ", forward_triangulated    
+        
+        sq = np.square(points3D_image)
+        sq = np.sqrt(sq[0]+sq[1]+sq[2])
+        sq_sum = np.sum(sq)
+        avg = sq_sum/points3D_image.shape[1]
+        if avg > 5.:
+            "Points too far"
+            return
+        
+        reasonable = sq < 4.
+        reasonable = np.array([reasonable]).transpose()
+        points3D_image= np.reshape(points3D_image[np.hstack((reasonable, reasonable, reasonable)).T==True], (3, -1))
+        self.desc_triangulated = np.reshape(self.desc_triangulated[np.resize(reasonable.T, (self.desc_triangulated.shape[1], self.desc_triangulated.shape[0])).T==True], (-1, self.desc_triangulated.shape[1]))
         if points3D_image == None or len(points3D_image) == 0:
             return
-            
         
-        #sq = np.square(points3D_image)
-        #sq = np.sqrt(sq[0]+sq[1]+sq[2])
-        #sq_sum = np.sum(sq)
-        #avg = sq_sum/points3D_image.shape[1]
-        #if avg > 5.:
-        #    "Points too far"
         
-        #reasonable = sq < 4.
-        #reasonable = np.array([reasonable]).transpose()
-        #reasonable = np.hstack((reasonable, reasonable, reasonable)).transpose()        
-        #points3D_image= np.reshape(points3D_image[reasonable==True], (3, -1))
-        #if points3D_image == None or len(points3D_image) == 0:
-        #    return
-        
-        '''
         # Filter points that are too far in front
-        infront = points3D_image[2] < 4.        
+        infront = points3D_image[2] < 5.        
         infront = np.array([infront]).transpose()
-        infront = np.hstack((infront, infront, infront)).transpose()        
-        points3D_image= np.reshape(points3D_image[infront==True], (3, -1))
-        '''
+        points3D_image= np.reshape(points3D_image[np.hstack((infront, infront, infront)).T==True], (3, -1))
+        # Filter descriptors
+        self.desc_triangulated = np.reshape(self.desc_triangulated[np.resize(infront.T, (self.desc_triangulated.shape[1], self.desc_triangulated.shape[0])).T==True], (-1, self.desc_triangulated.shape[1]))
+        if points3D_image == None or len(points3D_image) == 0:
+            return
+        
         
         # Triangulated points reprojected back to the image plane
         self.reprojected_frame1 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, R, t)        
         self.reprojected_frame2 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, np.diag((1.,1.,1.)), np.array([[0.,0.,0.]]).T)
         
-        # Output number of forward triangulated points
-        forward_triangulated = len(points3D_image[0])+0.
-        self.debug_text.append(forward_triangulated)
-        print "Forward triangulated: ", forward_triangulated
-        
         # Publish Cloud
         # Note: img2 camera is taken to be the origin, so time2 is used
-        if triangulated != 0 and (float(forward_triangulated)/pre_triangulated > 0.0):
+        if forward_triangulated != 0 and (float(forward_triangulated)/pre_triangulated > 0.0):
             print "Publishing Point cloud---------------------------------------------------------"
             self.publish_cloud(points3D_image, self.time2)
         else:
             print "Poor triangulation"
             return
             
-    def find_fundamental_from_proj(self, P1, P2, f0 = 600.):
+    def find_fundamental_from_proj(self, P1, P2, f0 = 640.):
         F = np.diag((0.,0.,0.))
         W = np.diag((0.,0.,0., 0.))
         
@@ -1355,23 +1382,39 @@ class FeatureTracker:
         
         return F
        
-    def optimal_correction_triangulate_point(self, x1, x2, F, f0 = 600.):
+    def optimal_correction_triangulate_point(self, xvector1, xvector2, F, f0 = 640.):
+        """This carries out the Optimal Correction Method outlined by Kanatami 
+        et al in 'Triangulation from Two Views Revisited: Hartley-Sturm vs. 
+        Optimal Correction'. This particular iterative method is significantly
+        faster than Hartley-Sturm's and is stable in all cases.
+        
+        This method shifts the pixel locations the minimal distance such that 
+        they both satisfy the epipolar constraint. This has the implicit effect
+        of causing the triangulation to intersect exactly
+        
+        x1 and x2 are pixel co-ord homogenous matched points
+        F is the fundamental
+        f0 is a scale factor for numerical stability and ~ image width (pixels)
+        """
+        
+        # NOTE: The x1, x2 vectors are different to those in the paper.
+        # The paper uses x_vector = [ x/f0 ]   This uses:  [ x ]
+        #                           [ y/f0 ]               [ y ]
+        #                           [ 1    ]               [ 1 ]
+        # This simply means some scalings f0 scaling are skipped
+        
+        
         # Flatten fundamental
         u = np.reshape(F, (1,-1))[0]
         
         
-        
-        # Precalc constant terms
+        # Precalc terms that do not change in iteration
         f0f0 = f0 * f0
+        f10 = u[2]*f0
+        f11 = u[5]*f0
+        f20 = u[6]*f0
+        f21 = u[7]*f0        
         uu = np.array([u[0]*u[0], u[1]*u[1], u[2]*u[2], u[3]*u[3], u[4]*u[4], u[5]*u[5], u[6]*u[6], u[7]*u[7]])
-        
-        Q00 = f0f0*(uu[2] + uu[5] + uu[6] + uu[7])
-        
-        # Accuracy target
-        E0 = 1.0e+10#*f0f0
-        convergence = 1.0e-6#*f0f0
-        
-        
         u0u1 = u[0]*u[1]
         u0u2 = u[0]*u[2]
         u0u3 = u[0]*u[3]
@@ -1385,22 +1428,33 @@ class FeatureTracker:
         u4u5 = u[4]*u[5]
         u4u7 = u[4]*u[7]
         
-        P9 = f0f0*u[8]
+        # P is a vector of elementwise products of Xihat and u
+        # Xihat is never individually calculated
+        P8 = f0f0*u[8]
         
-        f10 = u[2]*f0
-        f11 = u[5]*f0
-        f20 = u[6]*f0
-        f21 = u[7]*f0
+        # Q is the sum of constant diagonal terms in V0[Xi]
+        Qconst = f0f0*(uu[2] + uu[5] + uu[6] + uu[7])
+        
+        
+        
+        # Convergence target.
+        # ie. minimal error reduction considered to justify another iteration
+        # Should be multiplied by f0f0 wrt actual desired limit
+        convergence = 1.0e-8
         
         # Initialise values
-        xhat1 = x1[0]
-        yhat1 = x1[1]
-        xhat2 = x2[0]
-        yhat2 = x2[1]
-        ox1 = x1[0]
-        oy1 = x1[1]
-        ox2 = x2[0]
-        oy2 = x2[1]
+        # E0 is initialised to ~ infinity
+        # Should be multiplied by f0f0 wrt actual nominal E0
+        E0 = 1.0e+10
+        xhat1 = xvector1[0]
+        yhat1 = xvector1[1]
+        xhat2 = xvector2[0]
+        yhat2 = xvector2[1]
+        # Original x values are saved in this form to make the code cleaner
+        ox1 = xvector1[0]
+        oy1 = xvector1[1]
+        ox2 = xvector2[0]
+        oy2 = xvector2[1]
         xtwiddle1 = 0.
         ytwiddle1 = 0.
         xtwiddle2 = 0.
@@ -1410,7 +1464,7 @@ class FeatureTracker:
         iterations = 0
         while(not done):
             iterations = iterations + 1
-            # Compute P
+            # Compute P -> a vector of elementwise products of Xihat and u
             P = np.array([(xhat1*xhat2 + xhat2*xtwiddle1 + xhat1*xtwiddle2)*u[0],
                           (xhat1*yhat2 + yhat2*xtwiddle1 + xhat1*ytwiddle2)*u[1],
                           f0*(xhat1+xtwiddle1)*u[2],
@@ -1419,7 +1473,7 @@ class FeatureTracker:
                           f0*(yhat1+ytwiddle1)*u[5],
                           f0*(xhat2+xtwiddle2)*u[6],
                           f0*(yhat2+ytwiddle2)*u[7],
-                          P9])
+                          P8])
                              
             # Pre-calc intermediate terms
             xx1 = xhat1*xhat1
@@ -1433,67 +1487,89 @@ class FeatureTracker:
             f0y1 = f0*yhat1
             f0y2 = f0*yhat2
             
-            
-            diag = np.array([Q00, (xx1+xx2)*uu[0], (xx1+yy2)*uu[1], f0f0*uu[2], (yy1+xx2)*uu[3], (yy1+yy2)*uu[4], f0f0*uu[5], f0f0*uu[6], f0f0*uu[7]])
-            #diag = np.array([Q00, (xx1+xx2)*uu[0], (xx1+yy2)*uu[1], (yy1+xx2)*uu[3], (yy1+yy2)*uu[4]])
+            # Calculate results of diagonal terms of (u, V0[Xi]u)
+            diag = np.array([(xx1+xx2)*uu[0], (xx1+yy2)*uu[1], (yy1+xx2)*uu[3], (yy1+yy2)*uu[4], Qconst])
+            # Calculate results of unique off-diagonal terms of (u, V0[Xi]u)
+            # Matrix is symmetric so each value actually occurs twice
             cross = np.array([xy2*u0u1, f0x2*u0u2, xy1*u0u3, f0x1*u0u6,
                               f0y2*u1u2, xy1*u1u4, f0x1*u1u7,
                               xy2*u3u4, f0x2*u3u5, f0y1*u3u6,
                               f0y2*u4u5, f0y1*u4u7])
             
+            # Evaluate (u, Xihat)
             uxi = np.sum(P)
+            # Evaluate (u, V0[Xi]u)
+            # Non-diagonal terms each occur twice
             uxiu = np.sum(diag) + 2.0*np.sum(cross)
+            #      (u, Xihat)
+            # C = ------------
+            #     (u, V0[Xi]u)
             C = uxi/uxiu
             
+            # Update twiddle values
+            #
+            # [ xtwiddle1 ] = C[ u0 u1 u2 ][ xhat2 ]
+            # [ ytwiddle1 ]    [ u3 u4 u5 ][ yhat2 ]
+            #                              [ f0    ]
+            #
+            # [ xtwiddle2 ] = C[ u0 u3 u6 ][ xhat1 ]
+            # [ ytwiddle2 ]    [ u2 u5 u8 ][ yhat1 ]
+            #                              [ f0    ]            
             xtwiddle1 = C*(u[0]*xhat2 + u[1]*yhat2+f10)
             ytwiddle1 = C*(u[3]*xhat2 + u[4]*yhat2+f11)
             xtwiddle2 = C*(u[0]*xhat1 + u[3]*yhat1+f20)
             ytwiddle2 = C*(u[1]*xhat1 + u[4]*yhat1+f21)
             
+            # Evaluate reprojection error
+            # This should technically be divided by f0f0 but this is avoided as
+            # E is f0f0E0typical and convergence is f0f0convergencetypical
             E = xtwiddle1*xtwiddle1 + ytwiddle1*ytwiddle1 + xtwiddle2*xtwiddle2 + ytwiddle2*ytwiddle2
             
+            # Check if iteration reduced error
             if abs(E-E0) > convergence:
+                # Update error bound
                 E0 = deepcopy(E)
-                xhat1 = deepcopy(ox1 - xtwiddle1)
-                yhat1 = deepcopy(oy1 - ytwiddle1)
-                xhat2 = deepcopy(ox2 - xtwiddle2)
-                yhat2 = deepcopy(oy2 - ytwiddle2)
+                # Update difference terms
+                xhat1 = ox1 - xtwiddle1
+                yhat1 = oy1 - ytwiddle1
+                xhat2 = ox2 - xtwiddle2
+                yhat2 = oy2 - ytwiddle2
             else:
+                # No benefit to further iteration
                 done = True
                 
         new_x1 = np.array((xhat1, yhat1, 1.0))
         new_x2 = np.array((xhat2, yhat2, 1.0))
         
-        return np.hstack((new_x1, new_x2))
-        
+        return np.hstack((new_x1, new_x2, E))
+    
     def triangulate_point(self, x1,x2,P1,P2): 
         """ Point pair triangulation from
         least squares solution. """
         # Compose matrix representing simultaneous equations
-        M = np.zeros((6,6))
-        M[:3,:4] = P1
-        M[3:,:4] = P2
-        M[:3,4] = -x1
-        M[3:,5] = -x2
+        M = np.zeros((4,4))
+        M[0] = x1[0]*P1[2]-P1[0]
+        M[1] = x1[1]*P1[2]-P1[1]
+        M[2] = x2[0]*P2[2]-P2[0]
+        M[3] = x2[1]*P2[2]-P2[1]
         # Compute SVD
         U,S,V = np.linalg.svd(M)
         
         # numpy SVD is ordered from largest to smallest (for S)
         # so least squares solution will always lie in the last column of V
         # BUT since numpy SVD returns V transpose not V, it is the last row
-        X = V[-1,:4]
+        X = V[-1,:]
         
-        #print "s1, s2 : ", V[-1, 4], ", ", V[-1, 5]
         
         # Get projected pixel co-ords
-        projected_pixels_homo = P1.dot(V[-1,:4])
+        projected_pixels_homo = P1.dot(V[-1,:])
         projected_pixels = (projected_pixels_homo/projected_pixels_homo[2])[:2]
         # Get dif between proj and image
         error = projected_pixels-x1[:2]
         error_mag1 = np.sqrt(error[0]*error[0]+ error[1]*error[1])
         
         # Same for frame 2
-        projected_pixels_homo = P2.dot(V[-1,:4])
+        projected_pixels_homo = P2.dot(V[-1,:])
         projected_pixels = (projected_pixels_homo/projected_pixels_homo[2])[:2]
         error = projected_pixels-x2[:2]
         error_mag2 = np.sqrt(error[0]*error[0]+ error[1]*error[1])
@@ -1502,61 +1578,71 @@ class FeatureTracker:
         error_max = max(error_mag1, error_mag2)        
         
         return np.hstack((X / X[3], error_max))
+    
         
-    def triangulate_points(self, x1,x2,P1,P2, F, max_error = 8., max_squared_error = 64.):
+    
+    def unfiltered_triangulate_points(self, x1,x2,P1,P2):
         """ Two-view triangulation of points in
         x1,x2 (2*n coordingates)"""
         
-        #F = self.find_fundamental_from_proj(P1, P2)
+        F = self.find_fundamental_from_proj(P1, P2)
+        n = x1.shape[1]
+        # Make homogenous
+        x1 = np.append(x1, np.array([np.ones(x1.shape[1])]), 0)
+        x2 = np.append(x2, np.array([np.ones(x2.shape[1])]), 0)
+        # Correct points
+        corr = np.array([self.optimal_correction_triangulate_point(x1[:,i],x2[:,i], F) for i in range(n)])
+        corr1 = corr[:, :3].T
+        corr2 = corr[:, 3:6].T
+        # Triangulate for each pair
+        Combi = np.array([self.triangulate_point(corr1[:,i],corr2[:,i],P1,P2) for i in range(n)]) # Looping here is probably unavoidable
+        # Extract 4D points
+        X = Combi[:,:4]
+        return X.T
+    
+    def triangulate_points(self, x1,x2,P1,P2, max_error = 10., max_squared_error = 100.):
+        """ Two-view triangulation of points in
+        x1,x2 (2*n coordingates)"""
         
-        #PP2 = self.cameraMatrix.dot(self.image_P2)
-        #R1 = np.linalg.inv(self.image_P1[:3, :3])
-        #t1 = -np.array([self.image_P1[:, 3]]).T
-        #PP1 = self.cameraMatrix.dot(np.hstack((R1, t1)))
-        #F = self.find_fundamental_from_proj(PP1, PP2)
+        F = self.find_fundamental_from_proj(P1, P2)
         
         n = x1.shape[1]
         # Make homogenous
         x1 = np.append(x1, np.array([np.ones(x1.shape[1])]), 0)
         x2 = np.append(x2, np.array([np.ones(x2.shape[1])]), 0)
-        #print "x1:\r\n", x1
-        #print "x2:\r\n", x2
-        #print "P1:\r\n", P1
-        #print "P2:\r\n", P2
         # Correct points
-        #corr = np.array([self.optimal_correction_triangulate_point(x1[:,i],x2[:,i], F) for i in range(n)])
-        #corr1 = corr[:, :3].T
-        #corr2 = corr[:, 3:6].T
-        #print "Corr:\r\n", corr
-        #print "Corr1:\r\n", corr1
-        #print "Corr2:\r\n", corr2
+        corr = np.array([self.optimal_correction_triangulate_point(x1[:,i],x2[:,i], F) for i in range(n)])
+        corr1 = corr[:, :3].T
+        corr2 = corr[:, 3:6].T
+        errors = corr[:, 6:7]
         
+        shift = x1 - corr1
+        shift = shift*shift
+        shift1 = shift[0]+shift[1]
         
-        #shift = x1 - corr1
-        #shift = shift*shift
-        #shift1 = shift[0]+shift[1]
+        shift = x2 - corr2
+        shift = shift*shift
+        shift2 = shift[0]+shift[1]
         
-        #shift = x2 - corr2
-        #shift = shift*shift
-        #shift2 = shift[0]+shift[1]
-        
-        #print "shift: \r\n", shift
-        #accepted = np.logical_and(shift1<max_squared_error, shift2<max_squared_error)
+        accepted = np.logical_and(shift1<max_squared_error, shift2<max_squared_error)
         
         # Filter points with too much F implied shift
-        #accepted = np.array([accepted]).T
-        #mask_prepped = np.resize(accepted.T, (self.desc_final.shape[1],self.desc_final.shape[0])).T
-        #accepted = np.hstack((accepted, accepted, accepted)).T
-        #x1 = np.reshape(x1[accepted==True], (3, -1))
-        #x2 = np.reshape(x2[accepted==True], (3, -1))
+        accepted = np.array([accepted]).T
+        mask_prepped = np.resize(accepted.T, (self.desc_final.shape[1],self.desc_final.shape[0])).T
+        accepted = np.hstack((accepted, accepted, accepted)).T
+        x1 = np.reshape(x1[accepted==True], (3, -1))
+        x2 = np.reshape(x2[accepted==True], (3, -1))
         # Filter descriptors
-        #self.desc_shifted = np.reshape(self.desc_final[mask_prepped==True], (-1, self.desc_final.shape[1]))
-        self.desc_shifted = self.desc_final
+        self.desc_shifted = np.reshape(self.desc_final[mask_prepped==True], (-1, self.desc_final.shape[1]))
         
-        n = len(x1.T)
-        
+        n = len(x1.T)        
         if x1 == None or n <= 1:
-            return None, None
+            print "No points correctable"
+            return None
+            
+        self.corr_triangulated = n+0.
+        print "Corr-triangulated: ", self.corr_triangulated
+        self.debug_text.append(self.corr_triangulated)
         
         
         # Triangulate for each pair
@@ -1565,7 +1651,26 @@ class FeatureTracker:
         X = Combi[:,:4]        
         # Create mask
         accepted = Combi[:, 4] < max_error
-        return X.T, accepted
+        
+        # Filter points with too low accuracy (reprojected to actual image)
+        accepted = np.array([accepted]).T
+        mask_prepped = np.resize(accepted.T, (self.desc_shifted.shape[1],self.desc_shifted.shape[0])).T
+        accepted = np.hstack((accepted, accepted, accepted)).T
+        X = np.reshape(X.T[accepted==True], (3, -1))
+        # Filter descriptors
+        self.desc_accepted = np.reshape(self.desc_shifted[mask_prepped==True], (-1, self.desc_shifted.shape[1]))
+        
+        if X == None or len(X) == 0:
+            print "No points triangulatable"
+            return None
+        
+        self.triangulated = len(X[0])+0.
+        print "Triangulated: ", self.triangulated
+        self.debug_text.append(self.triangulated)
+        
+        print X
+        
+        return X
         
         
     def imgproc(self, d):
