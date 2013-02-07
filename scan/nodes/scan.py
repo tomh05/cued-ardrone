@@ -935,11 +935,12 @@ class FeatureTracker:
             "Not enough matches to localise"
             return
         
+        print i2_pts_spec
+        # Flip triangulated 3D points into image axis order but world origin
+        i2_pts_image = np.array([-i2_pts_spec.T[1],-i2_pts_spec.T[2], i2_pts_spec.T[0]], dtype=np.float32).T
+        print i2_pts_image
         
-        
-        
-        
-        R, t, inliers = cv2.solvePnPRansac(np.array(i2_pts_spec, dtype=np.float32), np.array(i1_pts_spec, dtype=np.float32), self.cameraMatrix, self.distCoeffs)
+        R, t, inliers = cv2.solvePnPRansac(i2_pts_image, np.array(i1_pts_spec, dtype=np.float32), self.cameraMatrix, self.distCoeffs)
         
         
         if inliers == None:
