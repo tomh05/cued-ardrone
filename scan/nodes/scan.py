@@ -965,10 +965,11 @@ class FeatureTracker:
         point = gm.Point()
         orientation = gm.Quaternion() 
         
-        print -t[0]
-        point.x = -t[0]
-        point.y = -t[1]
-        point.z = -t[2]
+        # Publish stamped pose
+        # Note we need to flip back into world axis
+        point.x = -t[2]
+        point.y = t[0]
+        point.z = t[1]
         pose.position = point
         quat = tf.transformations.quaternion_inverse(tf.transformations.quaternion_from_matrix(Rhomo))
         orientation.x = quat[0]
