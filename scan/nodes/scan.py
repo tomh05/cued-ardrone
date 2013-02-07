@@ -937,10 +937,10 @@ class FeatureTracker:
         
         print i2_pts_spec
         # Flip triangulated 3D points into image axis order but world origin
-        i2_pts_image = np.array([-i2_pts_spec.T[1],-i2_pts_spec.T[2], i2_pts_spec.T[0]], dtype=np.float32).T
-        print i2_pts_image
+        #i2_pts_image = np.array([-i2_pts_spec.T[1],-i2_pts_spec.T[2], i2_pts_spec.T[0]], dtype=np.float32).T
+        #print i2_pts_image
         
-        R, t, inliers = cv2.solvePnPRansac(i2_pts_image, np.array(i1_pts_spec, dtype=np.float32), self.cameraMatrix, self.distCoeffs)
+        R, t, inliers = cv2.solvePnPRansac(np.array(i2_pts_spec, dtype=np.float32), np.array(i1_pts_spec, dtype=np.float32), self.cameraMatrix, self.distCoeffs)
         
         
         if inliers == None:
@@ -949,12 +949,16 @@ class FeatureTracker:
             print "===================="
             return
         
+        
         print "No. of inliers: ", len(inliers)    
-        print "t: ", t
+        
         
         R, J = cv2.Rodrigues(R)        
         Rhomo = np.diag((1., 1., 1., 1.))
         Rhomo[:3, :3] = R
+        
+        t_position = R.dot(t)
+        print "t: ", t_position
         
         success, angles = self.rotation_to_euler(R)
         angles*=180/np.pi
@@ -967,9 +971,9 @@ class FeatureTracker:
         
         # Publish stamped pose
         # Note we need to flip back into world axis
-        point.x = -t[2]
-        point.y = t[0]
-        point.z = t[1]
+        point.x = t_position[0]
+        point.y = t_position[1]
+        point.z = t_position[2]
         pose.position = point
         quat = tf.transformations.quaternion_inverse(tf.transformations.quaternion_from_matrix(Rhomo))
         orientation.x = quat[0]
