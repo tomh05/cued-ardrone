@@ -220,11 +220,9 @@ if __name__ == '__main__':
     print "\r\n----------------------------------DEAD RECKON--------------------------------------"
     print "Use median filter (", FILTERSIZE, ") : ", FILTERENABLE, "        (set with _filtersize and _filterenable)"
     
-    TMDELTAT = rospy.get_param('~usetmdeltat', True)
-    print "Use tm for deltat        : ", TMDELTAT, "         (set with _usetmdeltat)"
-    TMSTAMP = rospy.get_param('~usetmstamp', True)
-    print "Use tm for timestamps    : ", TMSTAMP, "         (set with _usetmstamp)"
-    print "-----------------------------------------------------------------------------------\r\n"
+    TMDELTAT = rospy.get_param('~usetm', True)
+    print "Use tm instead of headers : ", TMDELTAT, "         (set with _usetm)"
+    TMSTAMP = TMDELTAT
     
     
     rospy.spin()
