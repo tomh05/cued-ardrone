@@ -957,7 +957,7 @@ class FeatureTracker:
         Rhomo = np.diag((1., 1., 1., 1.))
         Rhomo[:3, :3] = R
         
-        t_position = R.dot(t)
+        t_position = R.T.dot(t)
         print "t: ", t_position
         
         success, angles = self.rotation_to_euler(R)

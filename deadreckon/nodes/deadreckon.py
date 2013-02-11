@@ -16,6 +16,7 @@ FILTERENABLE = True
 FILTERSIZE = 10
 TMDELTAT = False
 TMSTAMP = False
+PATHDIV = 20
 
 
 
@@ -26,7 +27,8 @@ class DeadReckoning:
         self.y = 0.0 # y location in world
         self.z = 0.0 # z location in world
         self.rotZoffset = 0 # initial value of yaw to allow for offsets
-        self.trackPath = Path()
+        self.trackPath = Path
+        self.path_div = 0
         
         # Declare publishers and constant tf values
         self.frontcam_quat = tf.transformations.quaternion_from_euler(-90.0 * (np.pi/180.), 0.0, -90.0 * (np.pi/180.))
@@ -51,6 +53,7 @@ class DeadReckoning:
         self.z = 0.0 # z location in world        
         self.rotZoffset = self.gamma        
         self.trackPath = Path()
+        self.path_div = 0
         
         # Clear time values
         self.prevtime = None
@@ -101,7 +104,6 @@ class DeadReckoning:
         self.gamma = DEG2RAD*d.rotZ # yaw
         # produce quaternion
         quaternion = tf.transformations.quaternion_from_euler(self.alpha, self.beta, self.gamma - self.rotZoffset)
-        
         
         
         
@@ -186,23 +188,22 @@ class DeadReckoning:
 
 
         '''
-        # Publish path visualisation data
+        # Publish path visualisation data every 10 navdatas
         '''
-        self.trackPath.header        = d.header
+        if (self.path_div % PATHDIV == 0):
+            self.trackPath.header        = d.header
 
-        # copy headers over from Navdata
-        self.trackPath.header        = d.header
-        newPose = PoseStamped()
-        newPose.header               = d.header
-        newPose.header.frame_id      = '/world'
-        newPose.pose.position.x      = self.x
-        newPose.pose.position.y      = self.y
-        newPose.pose.position.z      = self.z
-        newPose.pose.orientation.x   = self.alpha  
-        newPose.pose.orientation.y   = self.beta  
-        newPose.pose.orientation.z   = corr_angle
-        self.trackPath.poses.append(newPose)        
-        self.pathPub.publish(self.trackPath)
+            # copy headers over from Navdata
+            self.trackPath.header        = d.header
+            newPose = PoseStamped()
+            newPose.header               = d.header
+            newPose.header.frame_id      = '/world'
+            newPose.pose.position.x      = self.x
+            newPose.pose.position.y      = self.y
+            newPose.pose.position.z      = self.z
+            self.trackPath.poses.append(newPose)        
+            self.pathPub.publish(self.trackPath)
+        self.path_div = self.path_div + 1
 
 
 if __name__ == '__main__':
@@ -223,6 +224,9 @@ if __name__ == '__main__':
     TMDELTAT = rospy.get_param('~usetm', True)
     print "Use tm instead of headers : ", TMDELTAT, "         (set with _usetm)"
     TMSTAMP = TMDELTAT
+    
+    PATHDIV = rospy.get_param('~pathdiv', 20)
+    print "Downsample path by factor of: ", PATHDIV, "         (set with _pathdiv)"
     
     
     rospy.spin()
