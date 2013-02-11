@@ -1606,7 +1606,7 @@ class FeatureTracker:
         X = Combi[:,:4]
         return X.T
     
-    def triangulate_points(self, x1,x2,P1,P2, max_error = 10., max_squared_error = 100.):
+    def triangulate_points(self, x1,x2,P1,P2, max_error = 16., max_squared_error = 256.):
         """ Two-view triangulation of points in
         x1,x2 (2*n coordingates)"""
         
@@ -1617,34 +1617,35 @@ class FeatureTracker:
         x1 = np.append(x1, np.array([np.ones(x1.shape[1])]), 0)
         x2 = np.append(x2, np.array([np.ones(x2.shape[1])]), 0)
         # Correct points
-        corr = np.array([self.optimal_correction_triangulate_point(x1[:,i],x2[:,i], F) for i in range(n)])
-        corr1 = corr[:, :3].T
-        corr2 = corr[:, 3:6].T
-        errors = corr[:, 6:7]
+        #corr = np.array([self.optimal_correction_triangulate_point(x1[:,i],x2[:,i], F) for i in range(n)])
+        #corr1 = corr[:, :3].T
+        #corr2 = corr[:, 3:6].T
+        #errors = corr[:, 6:7]
         
-        shift = x1 - corr1
-        shift = shift*shift
-        shift1 = shift[0]+shift[1]
+        #shift = x1 - corr1
+        #shift = shift*shift
+        #shift1 = shift[0]+shift[1]
         
-        shift = x2 - corr2
-        shift = shift*shift
-        shift2 = shift[0]+shift[1]
+        #shift = x2 - corr2
+        #shift = shift*shift
+        #shift2 = shift[0]+shift[1]
         
-        accepted = np.logical_and(shift1<max_squared_error, shift2<max_squared_error)
+        #accepted = np.logical_and(shift1<max_squared_error, shift2<max_squared_error)
         
         # Filter points with too much F implied shift
-        accepted = np.array([accepted]).T
-        mask_prepped = np.resize(accepted.T, (self.desc_final.shape[1],self.desc_final.shape[0])).T
-        accepted = np.hstack((accepted, accepted, accepted)).T
-        x1 = np.reshape(x1[accepted==True], (3, -1))
-        x2 = np.reshape(x2[accepted==True], (3, -1))
+        #accepted = np.array([accepted]).T
+        #mask_prepped = np.resize(accepted.T, (self.desc_final.shape[1],self.desc_final.shape[0])).T
+        #accepted = np.hstack((accepted, accepted, accepted)).T
+        #x1 = np.reshape(x1[accepted==True], (3, -1))
+        #x2 = np.reshape(x2[accepted==True], (3, -1))
         # Filter descriptors
-        self.desc_shifted = np.reshape(self.desc_final[mask_prepped==True], (-1, self.desc_final.shape[1]))
+        #self.desc_shifted = np.reshape(self.desc_final[mask_prepped==True], (-1, self.desc_final.shape[1]))
+        self.desc_shifted = self.desc_final
         
-        n = len(x1.T)        
-        if x1 == None or n <= 1:
-            print "No points correctable"
-            return None
+        #n = len(x1.T)        
+        #if x1 == None or n <= 1:
+        #    print "No points correctable"
+        #    return None
             
         self.corr_triangulated = n+0.
         print "Corr-triangulated: ", self.corr_triangulated
