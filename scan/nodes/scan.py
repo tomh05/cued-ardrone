@@ -60,6 +60,7 @@ from sensor_msgs.msg import PointCloud2
 from std_msgs.msg import Empty
 from std_msgs.msg import Header
 from nav_msgs.msg import Path
+from custom_msgs.msg import DescribedPointCloud
 import math
 import time
 import threading
@@ -304,7 +305,7 @@ class ScanController:
         # Magnitude of difference
         mag = np.sqrt(diff[0]*diff[0] + diff[1]*diff[1]+diff[2]*diff[2])
         #print "diff: ", diff
-        if (abs(diff[2]) > 0.2):
+        if (mag > 0.3):
             print "Triggering"
             self.auto_scan_timer.shutdown()
             self.get_frame_2(Empty)
@@ -339,6 +340,7 @@ class FeatureTracker:
         cv2.namedWindow("track")
         self.cloud_pub = rospy.Publisher('/scan/absolute_cloud', PointCloud)
         self.cloud_pub2 = rospy.Publisher('/scan/relative_cloud', PointCloud)
+        self.desc_cloud_pub = rospy.Publisher('/scan/relative_described_cloud', DescribedPointCloud)
         self.pose_pub = rospy.Publisher('/scan/pose', gm.PoseStamped)
         self.prev_position = None
         self.prev_quat = None
@@ -747,6 +749,19 @@ class FeatureTracker:
         
         print "Cloud  of ", len(cloud.points), "Published"
         
+        """====================================================================
+        # Relative Point Cloud with keypoints and descriptors
+        ===================================================================="""
+        
+        described_cloud = DescribedPointCloud()
+        described_cloud.cloud = cloud
+        described_cloud.descriptors = self.desc_triangulated.reshape(-1,).tolist()
+        described_cloud.desc_stride = self.desc_triangulated.shape[1]
+        described_cloud.kp = self.kp_triangulated.reshape(-1,).tolist()
+        self.desc_cloud_pub.publish(described_cloud)
+        
+        
+        
     def world_to_pixel_distorted(self, pts, R, t, K=None, k=None):
         """Takes 3D world co-ord and reverse projects using K and distCoeffs"""
         
@@ -935,7 +950,7 @@ class FeatureTracker:
             "Not enough matches to localise"
             return
         
-        print i2_pts_spec
+        #print i2_pts_spec
         # Flip triangulated 3D points into image axis order but world origin
         #i2_pts_image = np.array([-i2_pts_spec.T[1],-i2_pts_spec.T[2], i2_pts_spec.T[0]], dtype=np.float32).T
         #print i2_pts_image
@@ -950,43 +965,44 @@ class FeatureTracker:
             return
         
         
-        print "No. of inliers: ", len(inliers)    
-        
-        
-        R, J = cv2.Rodrigues(R)        
-        Rhomo = np.diag((1., 1., 1., 1.))
-        Rhomo[:3, :3] = R
-        
-        t_position = R.T.dot(t)
-        print "t: ", t_position
-        
-        success, angles = self.rotation_to_euler(R)
-        angles*=180/np.pi
-        
-        poseStamped = gm.PoseStamped()
-        header = Header()
-        pose = gm.Pose()
-        point = gm.Point()
-        orientation = gm.Quaternion() 
-        
-        # Publish stamped pose
-        # Note we need to flip back into world axis
-        point.x = t_position[0]
-        point.y = t_position[1]
-        point.z = t_position[2]
-        pose.position = point
-        quat = tf.transformations.quaternion_inverse(tf.transformations.quaternion_from_matrix(Rhomo))
-        orientation.x = quat[0]
-        orientation.y = quat[1]
-        orientation.z = quat[2]
-        orientation.w = quat[3]
-        pose.orientation = orientation
-        header.stamp = self.time1
-        header.frame_id = '/world'
-        poseStamped.pose = pose
-        poseStamped.header = header
-        
-        self.pose_pub.publish(poseStamped)
+        print "No. of inliers: ", len(inliers)   
+        if len(inliers) > 10: 
+            
+            
+            R, J = cv2.Rodrigues(R)        
+            Rhomo = np.diag((1., 1., 1., 1.))
+            Rhomo[:3, :3] = R
+            
+            t_position = -R.T.dot(t)
+            print "t: ", t_position
+            
+            success, angles = self.rotation_to_euler(R)
+            angles*=180/np.pi
+            
+            poseStamped = gm.PoseStamped()
+            header = Header()
+            pose = gm.Pose()
+            point = gm.Point()
+            orientation = gm.Quaternion() 
+            
+            # Publish stamped pose
+            # Note we need to flip back into world axis
+            point.x = t_position[0]
+            point.y = t_position[1]
+            point.z = t_position[2]
+            pose.position = point
+            quat = tf.transformations.quaternion_from_matrix(Rhomo)
+            orientation.x = quat[0]
+            orientation.y = quat[1]
+            orientation.z = quat[2]
+            orientation.w = quat[3]
+            pose.orientation = orientation
+            header.stamp = self.time1
+            header.frame_id = '/world'
+            poseStamped.pose = pose
+            poseStamped.header = header
+            
+            self.pose_pub.publish(poseStamped)
         
         
         '''
@@ -1140,13 +1156,14 @@ class FeatureTracker:
         t = P2[:,3:4]
         self.image_based_t = t
         
-        self.prev_i1_pts_final = i1_pts_final
-        self.prev_i2_pts_final = i2_pts_final
+        self.kp_final = i1_pts_final
+        
+        print len(i1_pts_final), " E fitted points"
         
         self.tf_triangulate_points(i1_pts_final, i2_pts_final, F)
         #self.tf_triangulate_points(i1_pts_corr, i2_pts_corr, F)
         
-        print len(i1_pts_final), " E fitted points"
+        
         
         
         """====================================================================
@@ -1270,6 +1287,7 @@ class FeatureTracker:
         points3D_image = np.reshape(points3D_image[np.hstack((infront, infront, infront)).T==True], (3, -1))
         # Filter descriptors
         self.desc_triangulated = np.reshape(self.desc_accepted[np.resize(infront.T, (self.desc_accepted.shape[1], self.desc_accepted.shape[0])).T==True], (-1, self.desc_accepted.shape[1]))
+        self.kp_triangulated = np.reshape(self.kp_accepted[np.resize(infront.T,(self.kp_accepted.shape[1], self.kp_accepted.shape[0])).T==True], (-1, self.kp_accepted.shape[1]))
         if points3D_image == None or len(points3D_image) == 0:
             "No points infront of camera"
             return
@@ -1291,6 +1309,7 @@ class FeatureTracker:
         reasonable = np.array([reasonable]).transpose()
         points3D_image= np.reshape(points3D_image[np.hstack((reasonable, reasonable, reasonable)).T==True], (3, -1))
         self.desc_triangulated = np.reshape(self.desc_triangulated[np.resize(reasonable.T, (self.desc_triangulated.shape[1], self.desc_triangulated.shape[0])).T==True], (-1, self.desc_triangulated.shape[1]))
+        self.kp_triangulated = np.reshape(self.kp_triangulated[np.resize(reasonable.T,(self.kp_triangulated.shape[1], self.kp_triangulated.shape[0])).T==True], (-1, self.kp_triangulated.shape[1]))
         if points3D_image == None or len(points3D_image) == 0:
             return
         
@@ -1301,6 +1320,7 @@ class FeatureTracker:
         points3D_image= np.reshape(points3D_image[np.hstack((infront, infront, infront)).T==True], (3, -1))
         # Filter descriptors
         self.desc_triangulated = np.reshape(self.desc_triangulated[np.resize(infront.T, (self.desc_triangulated.shape[1], self.desc_triangulated.shape[0])).T==True], (-1, self.desc_triangulated.shape[1]))
+        self.kp_triangulated = np.reshape(self.kp_triangulated[np.resize(infront.T,(self.kp_triangulated.shape[1], self.kp_triangulated.shape[0])).T==True], (-1, self.kp_triangulated.shape[1]))
         if points3D_image == None or len(points3D_image) == 0:
             return
         
@@ -1606,7 +1626,7 @@ class FeatureTracker:
         X = Combi[:,:4]
         return X.T
     
-    def triangulate_points(self, x1,x2,P1,P2, max_error = 16., max_squared_error = 256.):
+    def triangulate_points(self, x1,x2,P1,P2, max_error = 8., max_squared_error = 256.):
         """ Two-view triangulation of points in
         x1,x2 (2*n coordingates)"""
         
@@ -1662,10 +1682,12 @@ class FeatureTracker:
         # Filter points with too low accuracy (reprojected to actual image)
         accepted = np.array([accepted]).T
         mask_prepped = np.resize(accepted.T, (self.desc_shifted.shape[1],self.desc_shifted.shape[0])).T
+        mask_prepped2 = np.resize(accepted.T, (self.kp_final.shape[1],self.kp_final.shape[0])).T
         accepted = np.hstack((accepted, accepted, accepted)).T
         X = np.reshape(X.T[accepted==True], (3, -1))
         # Filter descriptors
         self.desc_accepted = np.reshape(self.desc_shifted[mask_prepped==True], (-1, self.desc_shifted.shape[1]))
+        self.kp_accepted = np.reshape(self.kp_final[mask_prepped2==True], (-1, self.kp_final.shape[1]))
         
         if X == None or len(X) == 0:
             print "No points triangulatable"
@@ -1674,8 +1696,6 @@ class FeatureTracker:
         self.triangulated = len(X[0])+0.
         print "Triangulated: ", self.triangulated
         self.debug_text.append(self.triangulated)
-        
-        print X
         
         return X
         
