@@ -1,0 +1,15 @@
+<package>
+  <description brief="cloud_compare">
+
+     cloud_compare
+
+  </description>
+  <author>Alex</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/cloud_compare</url>
+  <depend package="custom_msgs"/>
+
+</package>
+
+
