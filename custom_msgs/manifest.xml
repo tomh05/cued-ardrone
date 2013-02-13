@@ -9,6 +9,7 @@
   <review status="unreviewed" notes=""/>
   <url>http://ros.org/wiki/custom_msgs</url>
   <depend package="image_transport"/>
+  <depend package="std_msgs"/>
 
 </package>
 
