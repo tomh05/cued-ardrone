@@ -63,9 +63,13 @@ class CloudComparer:
                 F, pts1_corr, pts2_corr = self.extract_fundamental(pts1, pts2)
                 if len(pts1_corr) > 0:
                     print len(pts1_corr), " F matches"
+                    self.approx_register()
                     self.publish_matches(len(pts1_corr), header, cloud.cloud.header) 
         
         self.kp_desc_buffer.append(( new_kp, new_desc, cloud.cloud.header))
+        
+    def approx_register(self, pts1, pts2):
+        # De-couple mean 
     
     def publish_matches(self, count, header1, header2):
         stamped_stamped_int = StampedStampedInt()
