@@ -23,6 +23,7 @@ import tf
 from std_msgs.msg import Float32MultiArray
 from nav_msgs.msg import Path
 import math
+import pickle
 from time import time, sleep
 
 from PositionController import PositionController
@@ -100,11 +101,13 @@ class TemplateCapturer:
 			self.inverseCameraMatrix = np.linalg.inv(self.cameraMatrix)
 			self.distCoeffs = np.array([ci.D], dtype=np.float32)
 			self.P = np.array([ci.P[:4],ci.P[4:8],ci.P[8:12]])
-			self.calibrated = True    
+			self.calibrated = True
+			# fh = open('CameraInfo.pickle', 'w')
+			# pickle.dump({'cameraMatrix': self.cameraMatrix, 'inverseCameraMatrix': self.inverseCameraMatrix, \
+			# 'distCoeffs': self.distCoeffs, 'P': self.P}, fh)
+			# fh.close()
 			print "Calibration Initialised"
-
-	
-
+		
 
 if __name__=='__main__':
 	template_capturer = TemplateCapturer()
