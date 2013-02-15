@@ -332,9 +332,9 @@ class FeatureTracker:
         self.quaternion = tf.transformations.quaternion_from_euler(0.,0.,0., axes='sxyz')
         self.grey_previous = None
         self.calibrated = False
-        self.fd = cv2.FeatureDetector_create('SIFT')
-        self.de = cv2.DescriptorExtractor_create('SIFT')
-        self.dm = cv2.DescriptorMatcher_create('BruteForce') #'BruteForce-Hamming' for binary
+        self.fd = cv2.FeatureDetector_create('ORB')
+        self.de = cv2.DescriptorExtractor_create('ORB')
+        self.dm = cv2.DescriptorMatcher_create('BruteForce-Hamming') #'BruteForce-Hamming' for binary
         self.desc1 = None
         self.kp1 = None
         cv2.namedWindow("track")
@@ -530,6 +530,7 @@ class FeatureTracker:
         Filters out conflicting points
         """
         
+        time_debug = time.time()
         # Camera Matrices to extract essential matrix and then normalise
         E = self.cameraMatrix.transpose().dot(F.dot(self.cameraMatrix))
         E /= E[2,2]
@@ -579,6 +580,8 @@ class FeatureTracker:
         # UW'V'|-u3
         projections.append(np.append(U.dot(W.transpose().dot(V)),np.array([-U[:,2]]).transpose(),1))
         
+        print "Setup 4 proj took: ", time.time()-time_debug
+        time_debug = time.time()
         """============================================================
         # Determine projection with most valid points
         # Produce boolean mask for best case and filter pts
@@ -588,15 +591,14 @@ class FeatureTracker:
         # co-ords (i.e. non-unity w)
         ============================================================"""  
         
-        # First must normalise co-ords
-        i1_pts_corr_norm = self.make_homo(i1_pts_corr)
-        i2_pts_corr_norm = self.make_homo(i2_pts_corr)
-                              
+    
         ind = 0
         maxfit = 0
         secfit = 0
         for i, P2 in enumerate(projections):
-            points4D = self.unfiltered_triangulate_points(i1_pts_corr.transpose(), i2_pts_corr.transpose(), P1, P2)
+            time_debug2 = time.time()
+            points4D = self.unfiltered_triangulate_points(i1_pts_corr.transpose(), i2_pts_corr.transpose(),P1,P2)
+            print "Triangulating took: ", time.time()-time_debug2
             d1 = np.dot(self.cameraMatrix.dot(P1),points4D)[2]
             d2 = np.dot(self.cameraMatrix.dot(P2),points4D)[2]
             PI = sum((d1>0) & (d2>0))
@@ -612,7 +614,8 @@ class FeatureTracker:
             print "P1 not extracted"
             print "==================================================="
             return False, None, None, None, None, None, None            
-        
+        print "PIing took: ", time.time()-time_debug
+        time_debug = time.time()
         #print "P2"
         #print projections[ind]
         
@@ -627,6 +630,8 @@ class FeatureTracker:
         
         # Filter descriptors
         self.desc_final = np.reshape(self.desc_corr[mask_prepped==True], (-1, self.desc_corr.shape[1]))
+        
+        print "Filtering took: ", time.time()-time_debug
         
         return True, P1, projections[ind], i1_pts_final, i2_pts_final, i1_pts_draw_final, i2_pts_draw_final
     
@@ -819,7 +824,7 @@ class FeatureTracker:
             print "Invalid frame number : ", frame_no
             return
         
-        
+        time_debug = time.time()
         frame = cv2.cvtColor(self.image_buffer, cv2.COLOR_BGR2GRAY)
         # There appears to be no way to specify the bound on no of 
         # features detected. May be able increase no by running four
@@ -828,6 +833,7 @@ class FeatureTracker:
         # image
         pts = self.fd.detect(frame)
         kp, desc = self.de.compute(frame, pts)
+        print "Feature Extraction: ", time.time()-time_debug
         
         if frame_no == 1:
             self.grey_previous = frame
@@ -1103,7 +1109,9 @@ class FeatureTracker:
         ===================================================================="""
         print "No of features 1: ", len(self.kp1)
         print "No of features 2: ", len(self.kp2)
+        time_debug = time.time()
         i1_pts, i2_pts = self.match_points(self.kp1, self.kp2, self.desc1, self.desc2)
+        print "Matching Took: ", time.time()-time_debug
         i1_pts_draw = i1_pts
         i2_pts_draw = i2_pts
         if i1_pts == None or len(i1_pts) < 8:
@@ -1111,11 +1119,15 @@ class FeatureTracker:
         
         #Check for cross-matching with previously triangulated points
         if self.descriptor_buffer != None:
+            time_debug = time.time()
             i1_pts_spec, i2_pts_spec = self.match_known_points(self.kp1, self.desc)
             print "Frame-frame matches already triangulated: ", len(i1_pts_spec)
+            print "Matching Took: ", time.time()-time_debug
     
         print len(i1_pts), " matched points"
 
+
+        time_debug = time.time()
         """====================================================================
         Undistort points using known camera calibration
         ==================================================================="""
@@ -1126,8 +1138,9 @@ class FeatureTracker:
         else:
             print "WARNING: No calibration info. Cannot Continue"
             return       
-
         
+        print "Undistort took: ", time.time()-time_debug
+        time_debug = time.time()
         """============================================================
         Extract F and filter outliers
         ============================================================"""
@@ -1137,7 +1150,9 @@ class FeatureTracker:
             return        
             
         print len(i1_pts_corr), " F fitted points"
-            
+        
+        print "F took: ", time.time()-time_debug
+        time_debug = time.time()
         """============================================================
         # Extract P1 and P2 via E
         ============================================================"""
@@ -1159,6 +1174,8 @@ class FeatureTracker:
         self.kp_final = i1_pts_final
         
         print len(i1_pts_final), " E fitted points"
+        
+        print "E took: ", time.time()-time_debug
         
         self.tf_triangulate_points(i1_pts_final, i2_pts_final, F)
         #self.tf_triangulate_points(i1_pts_corr, i2_pts_corr, F)
@@ -1205,11 +1222,9 @@ class FeatureTracker:
         cv2.waitKey(10)
 
     def tf_triangulate_points(self, pts1, pts2, F):
+        time_start = time.time()
         """ Triangulates 3D points from set of matches co-ords using relative
         camera position determined from tf"""
-        
-        print pts1
-        print pts2
         
         
         # ---------------------------------------------------------------------
@@ -1337,6 +1352,7 @@ class FeatureTracker:
         else:
             print "Poor triangulation"
             return
+        print "Triangulation took: ", time.time() - time_start
             
     def find_fundamental_from_proj(self, P1, P2, f0 = 640.):
         F = np.diag((0.,0.,0.))
@@ -1607,26 +1623,37 @@ class FeatureTracker:
     
         
     
-    def unfiltered_triangulate_points(self, x1,x2,P1,P2):
+    def unfiltered_triangulate_points(self,x1,x2,P1,P2):
         """ Two-view triangulation of points in
         x1,x2 (2*n coordingates)"""
-        
-        F = self.find_fundamental_from_proj(P1, P2)
         n = x1.shape[1]
         # Make homogenous
         x1 = np.append(x1, np.array([np.ones(x1.shape[1])]), 0)
         x2 = np.append(x2, np.array([np.ones(x2.shape[1])]), 0)
-        # Correct points
-        corr = np.array([self.optimal_correction_triangulate_point(x1[:,i],x2[:,i], F) for i in range(n)])
-        corr1 = corr[:, :3].T
-        corr2 = corr[:, 3:6].T
         # Triangulate for each pair
-        Combi = np.array([self.triangulate_point(corr1[:,i],corr2[:,i],P1,P2) for i in range(n)]) # Looping here is probably unavoidable
-        # Extract 4D points
-        X = Combi[:,:4]
+        X = np.array([self.unfiltered_triangulate_point(x1[:,i],x2[:,i], P1, P2) for i in range(x1.shape[1])]) # Looping here is probably unavoidable
         return X.T
+        
+    def unfiltered_triangulate_point(self, x1,x2, P1, P2): 
+        """ Point pair triangulation from
+        least squares solution. """
+        # Compose matrix representing simultaneous equations
+        M = np.zeros((4,4))
+        M[0] = x1[0]*P1[2]-P1[0]
+        M[1] = x1[1]*P1[2]-P1[1]
+        M[2] = x2[0]*P2[2]-P2[0]
+        M[3] = x2[1]*P2[2]-P2[1]
+        # Compute SVD
+        U,S,V = np.linalg.svd(M)
+        
+        # numpy SVD is ordered from largest to smallest (for S)
+        # so least squares solution will always lie in the last column of V
+        # BUT since numpy SVD returns V transpose not V, it is the last row
+        X = V[-1,:]
+        
+        return np.hstack(X / X[3])
     
-    def triangulate_points(self, x1,x2,P1,P2, max_error = 8., max_squared_error = 256.):
+    def triangulate_points(self, x1,x2,P1,P2, max_error = 36., max_squared_error = 256.):
         """ Two-view triangulation of points in
         x1,x2 (2*n coordingates)"""
         
