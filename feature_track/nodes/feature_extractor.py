@@ -17,6 +17,8 @@
 #
 # SIFT should be capable of 15 fps
 # ORB should be capable of 75 fps (and will typically produce more features)
+#
+#==============================================================================
 
 import roslib; roslib.load_manifest('feature_track')
 import rospy

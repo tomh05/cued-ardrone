@@ -1,4 +1,6 @@
 from ._StampedStampedInt import *
+from ._StampedFeaturesMatchesWithImage import *
+from ._StampedFeaturesMatches import *
 from ._StampedFrames import *
 from ._StampedMatchesWithImage import *
 from ._RendererPolyLineTri import *

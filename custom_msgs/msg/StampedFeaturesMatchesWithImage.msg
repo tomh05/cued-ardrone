@@ -1,0 +1,12 @@
+Header header1
+Header header2
+float32[] points1
+float32[] points2
+float32[] descriptors1
+float32[] descriptors2
+int16 descriptors1_stride
+int16 descriptors2_stride
+string descriptors1_matcher
+string descriptors2_matcher
+sensor_msgs/Image image1
+sensor_msgs/Image image2
