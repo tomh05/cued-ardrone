@@ -11,10 +11,14 @@
           DESCRIPTORS1
           DESCRIPTORS2-VAL
           DESCRIPTORS2
-          DESCRIPTORS1_STRIDE-VAL
-          DESCRIPTORS1_STRIDE
-          DESCRIPTORS2_STRIDE-VAL
-          DESCRIPTORS2_STRIDE
+          DESCRIPTORS_STRIDE-VAL
+          DESCRIPTORS_STRIDE
           DESCRIPTORS_MATCHER-VAL
           DESCRIPTORS_MATCHER
+          F-VAL
+          F
+          P1-VAL
+          P1
+          P2-VAL
+          P2
 ))

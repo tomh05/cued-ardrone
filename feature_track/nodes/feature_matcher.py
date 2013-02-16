@@ -66,8 +66,7 @@ class FeatureMatcher:
                 # Extract fundamental
                 F, pts1_F, pts2_F, desc1_F, desc2_F = self.extract_fundamental(pts1_un, pts2_un, desc1, desc2)
                 if len(pts1_F) > 4:
-                    #print len(pts1_corr), " F matches"
-                    self.publish_matches(pts1_F, pts2_F, desc1_F, desc2_F, self.feature_buffer[-1].header, sfwi.header)
+                    self.publish_matches(F, pts1_F, pts2_F, desc1_F, desc2_F, self.feature_buffer[-1].header, sfwi.header)
         
         fb = FeatureBuffer()
         fb.points = new_kp
@@ -76,17 +75,17 @@ class FeatureMatcher:
         self.feature_buffer.append(fb)
         print "Features Matched ( ", np.around(((time.time()-self.time_prev)*1000),1), "ms) "
     
-    def publish_matches(self, pts1, pts2, desc1, desc2, header1, header2):
+    def publish_matches(self, F, pts1, pts2, desc1, desc2, header1, header2):
         sfm = StampedFeaturesMatches()
         sfm.header1 = header1
         sfm.header2 = header2
         sfm.points1 = pts1.reshape(-1,).tolist()
         sfm.points2 = pts2.reshape(-1,).tolist()
         sfm.descriptors1 = desc1.reshape(-1,).tolist()
-        sfm.descriptors1_stride = desc1.shape[1]
         sfm.descriptors2 = desc2.reshape(-1,).tolist()
-        sfm.descriptors2_stride = desc2.shape[1]
+        sfm.descriptors_stride = desc1.shape[1]
         sfm.descriptors_matcher = self.matcher_type
+        sfm.F = F.reshape(-1,).tolist()
         self.match_pub.publish(sfm)
     
     def get_keypoints_and_descriptors(self, sfwi):

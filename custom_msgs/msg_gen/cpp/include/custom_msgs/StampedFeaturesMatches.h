@@ -30,9 +30,11 @@ struct StampedFeaturesMatches_ {
   , points2()
   , descriptors1()
   , descriptors2()
-  , descriptors1_stride(0)
-  , descriptors2_stride(0)
+  , descriptors_stride(0)
   , descriptors_matcher()
+  , F()
+  , P1()
+  , P2()
   {
   }
 
@@ -43,9 +45,11 @@ struct StampedFeaturesMatches_ {
   , points2(_alloc)
   , descriptors1(_alloc)
   , descriptors2(_alloc)
-  , descriptors1_stride(0)
-  , descriptors2_stride(0)
+  , descriptors_stride(0)
   , descriptors_matcher(_alloc)
+  , F(_alloc)
+  , P1(_alloc)
+  , P2(_alloc)
   {
   }
 
@@ -67,14 +71,20 @@ struct StampedFeaturesMatches_ {
   typedef std::vector<float, typename ContainerAllocator::template rebind<float>::other >  _descriptors2_type;
   std::vector<float, typename ContainerAllocator::template rebind<float>::other >  descriptors2;
 
-  typedef int16_t _descriptors1_stride_type;
-  int16_t descriptors1_stride;
-
-  typedef int16_t _descriptors2_stride_type;
-  int16_t descriptors2_stride;
+  typedef int16_t _descriptors_stride_type;
+  int16_t descriptors_stride;
 
   typedef std::basic_string<char, std::char_traits<char>, typename ContainerAllocator::template rebind<char>::other >  _descriptors_matcher_type;
   std::basic_string<char, std::char_traits<char>, typename ContainerAllocator::template rebind<char>::other >  descriptors_matcher;
+
+  typedef std::vector<float, typename ContainerAllocator::template rebind<float>::other >  _F_type;
+  std::vector<float, typename ContainerAllocator::template rebind<float>::other >  F;
+
+  typedef std::vector<float, typename ContainerAllocator::template rebind<float>::other >  _P1_type;
+  std::vector<float, typename ContainerAllocator::template rebind<float>::other >  P1;
+
+  typedef std::vector<float, typename ContainerAllocator::template rebind<float>::other >  _P2_type;
+  std::vector<float, typename ContainerAllocator::template rebind<float>::other >  P2;
 
 
   typedef boost::shared_ptr< ::custom_msgs::StampedFeaturesMatches_<ContainerAllocator> > Ptr;
@@ -105,12 +115,12 @@ template<class ContainerAllocator>
 struct MD5Sum< ::custom_msgs::StampedFeaturesMatches_<ContainerAllocator> > {
   static const char* value() 
   {
-    return "e0d7debe61635928141b4390d89e565f";
+    return "cbc18a10678a1e1ce89ac8ea4e4d22c4";
   }
 
   static const char* value(const  ::custom_msgs::StampedFeaturesMatches_<ContainerAllocator> &) { return value(); } 
-  static const uint64_t static_value1 = 0xe0d7debe61635928ULL;
-  static const uint64_t static_value2 = 0x141b4390d89e565fULL;
+  static const uint64_t static_value1 = 0xcbc18a10678a1e1cULL;
+  static const uint64_t static_value2 = 0xe89ac8ea4e4d22c4ULL;
 };
 
 template<class ContainerAllocator>
@@ -133,9 +143,11 @@ float32[] points1\n\
 float32[] points2\n\
 float32[] descriptors1\n\
 float32[] descriptors2\n\
-int16 descriptors1_stride\n\
-int16 descriptors2_stride\n\
+int16 descriptors_stride\n\
 string descriptors_matcher\n\
+float32[] F\n\
+float32[] P1\n\
+float32[] P2\n\
 \n\
 ================================================================================\n\
 MSG: std_msgs/Header\n\
@@ -179,9 +191,11 @@ template<class ContainerAllocator> struct Serializer< ::custom_msgs::StampedFeat
     stream.next(m.points2);
     stream.next(m.descriptors1);
     stream.next(m.descriptors2);
-    stream.next(m.descriptors1_stride);
-    stream.next(m.descriptors2_stride);
+    stream.next(m.descriptors_stride);
     stream.next(m.descriptors_matcher);
+    stream.next(m.F);
+    stream.next(m.P1);
+    stream.next(m.P2);
   }
 
   ROS_DECLARE_ALLINONE_SERIALIZER;
@@ -229,12 +243,28 @@ s << std::endl;
       s << indent << "  descriptors2[" << i << "]: ";
       Printer<float>::stream(s, indent + "  ", v.descriptors2[i]);
     }
-    s << indent << "descriptors1_stride: ";
-    Printer<int16_t>::stream(s, indent + "  ", v.descriptors1_stride);
-    s << indent << "descriptors2_stride: ";
-    Printer<int16_t>::stream(s, indent + "  ", v.descriptors2_stride);
+    s << indent << "descriptors_stride: ";
+    Printer<int16_t>::stream(s, indent + "  ", v.descriptors_stride);
     s << indent << "descriptors_matcher: ";
     Printer<std::basic_string<char, std::char_traits<char>, typename ContainerAllocator::template rebind<char>::other > >::stream(s, indent + "  ", v.descriptors_matcher);
+    s << indent << "F[]" << std::endl;
+    for (size_t i = 0; i < v.F.size(); ++i)
+    {
+      s << indent << "  F[" << i << "]: ";
+      Printer<float>::stream(s, indent + "  ", v.F[i]);
+    }
+    s << indent << "P1[]" << std::endl;
+    for (size_t i = 0; i < v.P1.size(); ++i)
+    {
+      s << indent << "  P1[" << i << "]: ";
+      Printer<float>::stream(s, indent + "  ", v.P1[i]);
+    }
+    s << indent << "P2[]" << std::endl;
+    for (size_t i = 0; i < v.P2.size(); ++i)
+    {
+      s << indent << "  P2[" << i << "]: ";
+      Printer<float>::stream(s, indent + "  ", v.P2[i]);
+    }
   }
 };
 

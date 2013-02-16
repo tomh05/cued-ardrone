@@ -37,21 +37,31 @@
     :initarg :descriptors2
     :type (cl:vector cl:float)
    :initform (cl:make-array 0 :element-type 'cl:float :initial-element 0.0))
-   (descriptors1_stride
-    :reader descriptors1_stride
-    :initarg :descriptors1_stride
-    :type cl:fixnum
-    :initform 0)
-   (descriptors2_stride
-    :reader descriptors2_stride
-    :initarg :descriptors2_stride
+   (descriptors_stride
+    :reader descriptors_stride
+    :initarg :descriptors_stride
     :type cl:fixnum
     :initform 0)
    (descriptors_matcher
     :reader descriptors_matcher
     :initarg :descriptors_matcher
     :type cl:string
-    :initform ""))
+    :initform "")
+   (F
+    :reader F
+    :initarg :F
+    :type (cl:vector cl:float)
+   :initform (cl:make-array 0 :element-type 'cl:float :initial-element 0.0))
+   (P1
+    :reader P1
+    :initarg :P1
+    :type (cl:vector cl:float)
+   :initform (cl:make-array 0 :element-type 'cl:float :initial-element 0.0))
+   (P2
+    :reader P2
+    :initarg :P2
+    :type (cl:vector cl:float)
+   :initform (cl:make-array 0 :element-type 'cl:float :initial-element 0.0)))
 )
 
 (cl:defclass StampedFeaturesMatches (<StampedFeaturesMatches>)
@@ -92,20 +102,30 @@
   (roslisp-msg-protocol:msg-deprecation-warning "Using old-style slot reader custom_msgs-msg:descriptors2-val is deprecated.  Use custom_msgs-msg:descriptors2 instead.")
   (descriptors2 m))
 
-(cl:ensure-generic-function 'descriptors1_stride-val :lambda-list '(m))
-(cl:defmethod descriptors1_stride-val ((m <StampedFeaturesMatches>))
-  (roslisp-msg-protocol:msg-deprecation-warning "Using old-style slot reader custom_msgs-msg:descriptors1_stride-val is deprecated.  Use custom_msgs-msg:descriptors1_stride instead.")
-  (descriptors1_stride m))
-
-(cl:ensure-generic-function 'descriptors2_stride-val :lambda-list '(m))
-(cl:defmethod descriptors2_stride-val ((m <StampedFeaturesMatches>))
-  (roslisp-msg-protocol:msg-deprecation-warning "Using old-style slot reader custom_msgs-msg:descriptors2_stride-val is deprecated.  Use custom_msgs-msg:descriptors2_stride instead.")
-  (descriptors2_stride m))
+(cl:ensure-generic-function 'descriptors_stride-val :lambda-list '(m))
+(cl:defmethod descriptors_stride-val ((m <StampedFeaturesMatches>))
+  (roslisp-msg-protocol:msg-deprecation-warning "Using old-style slot reader custom_msgs-msg:descriptors_stride-val is deprecated.  Use custom_msgs-msg:descriptors_stride instead.")
+  (descriptors_stride m))
 
 (cl:ensure-generic-function 'descriptors_matcher-val :lambda-list '(m))
 (cl:defmethod descriptors_matcher-val ((m <StampedFeaturesMatches>))
   (roslisp-msg-protocol:msg-deprecation-warning "Using old-style slot reader custom_msgs-msg:descriptors_matcher-val is deprecated.  Use custom_msgs-msg:descriptors_matcher instead.")
   (descriptors_matcher m))
+
+(cl:ensure-generic-function 'F-val :lambda-list '(m))
+(cl:defmethod F-val ((m <StampedFeaturesMatches>))
+  (roslisp-msg-protocol:msg-deprecation-warning "Using old-style slot reader custom_msgs-msg:F-val is deprecated.  Use custom_msgs-msg:F instead.")
+  (F m))
+
+(cl:ensure-generic-function 'P1-val :lambda-list '(m))
+(cl:defmethod P1-val ((m <StampedFeaturesMatches>))
+  (roslisp-msg-protocol:msg-deprecation-warning "Using old-style slot reader custom_msgs-msg:P1-val is deprecated.  Use custom_msgs-msg:P1 instead.")
+  (P1 m))
+
+(cl:ensure-generic-function 'P2-val :lambda-list '(m))
+(cl:defmethod P2-val ((m <StampedFeaturesMatches>))
+  (roslisp-msg-protocol:msg-deprecation-warning "Using old-style slot reader custom_msgs-msg:P2-val is deprecated.  Use custom_msgs-msg:P2 instead.")
+  (P2 m))
 (cl:defmethod roslisp-msg-protocol:serialize ((msg <StampedFeaturesMatches>) ostream)
   "Serializes a message object of type '<StampedFeaturesMatches>"
   (roslisp-msg-protocol:serialize (cl:slot-value msg 'header1) ostream)
@@ -154,11 +174,7 @@
     (cl:write-byte (cl:ldb (cl:byte 8 16) bits) ostream)
     (cl:write-byte (cl:ldb (cl:byte 8 24) bits) ostream)))
    (cl:slot-value msg 'descriptors2))
-  (cl:let* ((signed (cl:slot-value msg 'descriptors1_stride)) (unsigned (cl:if (cl:< signed 0) (cl:+ signed 65536) signed)))
-    (cl:write-byte (cl:ldb (cl:byte 8 0) unsigned) ostream)
-    (cl:write-byte (cl:ldb (cl:byte 8 8) unsigned) ostream)
-    )
-  (cl:let* ((signed (cl:slot-value msg 'descriptors2_stride)) (unsigned (cl:if (cl:< signed 0) (cl:+ signed 65536) signed)))
+  (cl:let* ((signed (cl:slot-value msg 'descriptors_stride)) (unsigned (cl:if (cl:< signed 0) (cl:+ signed 65536) signed)))
     (cl:write-byte (cl:ldb (cl:byte 8 0) unsigned) ostream)
     (cl:write-byte (cl:ldb (cl:byte 8 8) unsigned) ostream)
     )
@@ -168,6 +184,39 @@
     (cl:write-byte (cl:ldb (cl:byte 8 16) __ros_str_len) ostream)
     (cl:write-byte (cl:ldb (cl:byte 8 24) __ros_str_len) ostream))
   (cl:map cl:nil #'(cl:lambda (c) (cl:write-byte (cl:char-code c) ostream)) (cl:slot-value msg 'descriptors_matcher))
+  (cl:let ((__ros_arr_len (cl:length (cl:slot-value msg 'F))))
+    (cl:write-byte (cl:ldb (cl:byte 8 0) __ros_arr_len) ostream)
+    (cl:write-byte (cl:ldb (cl:byte 8 8) __ros_arr_len) ostream)
+    (cl:write-byte (cl:ldb (cl:byte 8 16) __ros_arr_len) ostream)
+    (cl:write-byte (cl:ldb (cl:byte 8 24) __ros_arr_len) ostream))
+  (cl:map cl:nil #'(cl:lambda (ele) (cl:let ((bits (roslisp-utils:encode-single-float-bits ele)))
+    (cl:write-byte (cl:ldb (cl:byte 8 0) bits) ostream)
+    (cl:write-byte (cl:ldb (cl:byte 8 8) bits) ostream)
+    (cl:write-byte (cl:ldb (cl:byte 8 16) bits) ostream)
+    (cl:write-byte (cl:ldb (cl:byte 8 24) bits) ostream)))
+   (cl:slot-value msg 'F))
+  (cl:let ((__ros_arr_len (cl:length (cl:slot-value msg 'P1))))
+    (cl:write-byte (cl:ldb (cl:byte 8 0) __ros_arr_len) ostream)
+    (cl:write-byte (cl:ldb (cl:byte 8 8) __ros_arr_len) ostream)
+    (cl:write-byte (cl:ldb (cl:byte 8 16) __ros_arr_len) ostream)
+    (cl:write-byte (cl:ldb (cl:byte 8 24) __ros_arr_len) ostream))
+  (cl:map cl:nil #'(cl:lambda (ele) (cl:let ((bits (roslisp-utils:encode-single-float-bits ele)))
+    (cl:write-byte (cl:ldb (cl:byte 8 0) bits) ostream)
+    (cl:write-byte (cl:ldb (cl:byte 8 8) bits) ostream)
+    (cl:write-byte (cl:ldb (cl:byte 8 16) bits) ostream)
+    (cl:write-byte (cl:ldb (cl:byte 8 24) bits) ostream)))
+   (cl:slot-value msg 'P1))
+  (cl:let ((__ros_arr_len (cl:length (cl:slot-value msg 'P2))))
+    (cl:write-byte (cl:ldb (cl:byte 8 0) __ros_arr_len) ostream)
+    (cl:write-byte (cl:ldb (cl:byte 8 8) __ros_arr_len) ostream)
+    (cl:write-byte (cl:ldb (cl:byte 8 16) __ros_arr_len) ostream)
+    (cl:write-byte (cl:ldb (cl:byte 8 24) __ros_arr_len) ostream))
+  (cl:map cl:nil #'(cl:lambda (ele) (cl:let ((bits (roslisp-utils:encode-single-float-bits ele)))
+    (cl:write-byte (cl:ldb (cl:byte 8 0) bits) ostream)
+    (cl:write-byte (cl:ldb (cl:byte 8 8) bits) ostream)
+    (cl:write-byte (cl:ldb (cl:byte 8 16) bits) ostream)
+    (cl:write-byte (cl:ldb (cl:byte 8 24) bits) ostream)))
+   (cl:slot-value msg 'P2))
 )
 (cl:defmethod roslisp-msg-protocol:deserialize ((msg <StampedFeaturesMatches>) istream)
   "Deserializes a message object of type '<StampedFeaturesMatches>"
@@ -232,11 +281,7 @@
     (cl:let ((unsigned 0))
       (cl:setf (cl:ldb (cl:byte 8 0) unsigned) (cl:read-byte istream))
       (cl:setf (cl:ldb (cl:byte 8 8) unsigned) (cl:read-byte istream))
-      (cl:setf (cl:slot-value msg 'descriptors1_stride) (cl:if (cl:< unsigned 32768) unsigned (cl:- unsigned 65536))))
-    (cl:let ((unsigned 0))
-      (cl:setf (cl:ldb (cl:byte 8 0) unsigned) (cl:read-byte istream))
-      (cl:setf (cl:ldb (cl:byte 8 8) unsigned) (cl:read-byte istream))
-      (cl:setf (cl:slot-value msg 'descriptors2_stride) (cl:if (cl:< unsigned 32768) unsigned (cl:- unsigned 65536))))
+      (cl:setf (cl:slot-value msg 'descriptors_stride) (cl:if (cl:< unsigned 32768) unsigned (cl:- unsigned 65536))))
     (cl:let ((__ros_str_len 0))
       (cl:setf (cl:ldb (cl:byte 8 0) __ros_str_len) (cl:read-byte istream))
       (cl:setf (cl:ldb (cl:byte 8 8) __ros_str_len) (cl:read-byte istream))
@@ -245,6 +290,48 @@
       (cl:setf (cl:slot-value msg 'descriptors_matcher) (cl:make-string __ros_str_len))
       (cl:dotimes (__ros_str_idx __ros_str_len msg)
         (cl:setf (cl:char (cl:slot-value msg 'descriptors_matcher) __ros_str_idx) (cl:code-char (cl:read-byte istream)))))
+  (cl:let ((__ros_arr_len 0))
+    (cl:setf (cl:ldb (cl:byte 8 0) __ros_arr_len) (cl:read-byte istream))
+    (cl:setf (cl:ldb (cl:byte 8 8) __ros_arr_len) (cl:read-byte istream))
+    (cl:setf (cl:ldb (cl:byte 8 16) __ros_arr_len) (cl:read-byte istream))
+    (cl:setf (cl:ldb (cl:byte 8 24) __ros_arr_len) (cl:read-byte istream))
+  (cl:setf (cl:slot-value msg 'F) (cl:make-array __ros_arr_len))
+  (cl:let ((vals (cl:slot-value msg 'F)))
+    (cl:dotimes (i __ros_arr_len)
+    (cl:let ((bits 0))
+      (cl:setf (cl:ldb (cl:byte 8 0) bits) (cl:read-byte istream))
+      (cl:setf (cl:ldb (cl:byte 8 8) bits) (cl:read-byte istream))
+      (cl:setf (cl:ldb (cl:byte 8 16) bits) (cl:read-byte istream))
+      (cl:setf (cl:ldb (cl:byte 8 24) bits) (cl:read-byte istream))
+    (cl:setf (cl:aref vals i) (roslisp-utils:decode-single-float-bits bits))))))
+  (cl:let ((__ros_arr_len 0))
+    (cl:setf (cl:ldb (cl:byte 8 0) __ros_arr_len) (cl:read-byte istream))
+    (cl:setf (cl:ldb (cl:byte 8 8) __ros_arr_len) (cl:read-byte istream))
+    (cl:setf (cl:ldb (cl:byte 8 16) __ros_arr_len) (cl:read-byte istream))
+    (cl:setf (cl:ldb (cl:byte 8 24) __ros_arr_len) (cl:read-byte istream))
+  (cl:setf (cl:slot-value msg 'P1) (cl:make-array __ros_arr_len))
+  (cl:let ((vals (cl:slot-value msg 'P1)))
+    (cl:dotimes (i __ros_arr_len)
+    (cl:let ((bits 0))
+      (cl:setf (cl:ldb (cl:byte 8 0) bits) (cl:read-byte istream))
+      (cl:setf (cl:ldb (cl:byte 8 8) bits) (cl:read-byte istream))
+      (cl:setf (cl:ldb (cl:byte 8 16) bits) (cl:read-byte istream))
+      (cl:setf (cl:ldb (cl:byte 8 24) bits) (cl:read-byte istream))
+    (cl:setf (cl:aref vals i) (roslisp-utils:decode-single-float-bits bits))))))
+  (cl:let ((__ros_arr_len 0))
+    (cl:setf (cl:ldb (cl:byte 8 0) __ros_arr_len) (cl:read-byte istream))
+    (cl:setf (cl:ldb (cl:byte 8 8) __ros_arr_len) (cl:read-byte istream))
+    (cl:setf (cl:ldb (cl:byte 8 16) __ros_arr_len) (cl:read-byte istream))
+    (cl:setf (cl:ldb (cl:byte 8 24) __ros_arr_len) (cl:read-byte istream))
+  (cl:setf (cl:slot-value msg 'P2) (cl:make-array __ros_arr_len))
+  (cl:let ((vals (cl:slot-value msg 'P2)))
+    (cl:dotimes (i __ros_arr_len)
+    (cl:let ((bits 0))
+      (cl:setf (cl:ldb (cl:byte 8 0) bits) (cl:read-byte istream))
+      (cl:setf (cl:ldb (cl:byte 8 8) bits) (cl:read-byte istream))
+      (cl:setf (cl:ldb (cl:byte 8 16) bits) (cl:read-byte istream))
+      (cl:setf (cl:ldb (cl:byte 8 24) bits) (cl:read-byte istream))
+    (cl:setf (cl:aref vals i) (roslisp-utils:decode-single-float-bits bits))))))
   msg
 )
 (cl:defmethod roslisp-msg-protocol:ros-datatype ((msg (cl:eql '<StampedFeaturesMatches>)))
@@ -255,16 +342,16 @@
   "custom_msgs/StampedFeaturesMatches")
 (cl:defmethod roslisp-msg-protocol:md5sum ((type (cl:eql '<StampedFeaturesMatches>)))
   "Returns md5sum for a message object of type '<StampedFeaturesMatches>"
-  "e0d7debe61635928141b4390d89e565f")
+  "cbc18a10678a1e1ce89ac8ea4e4d22c4")
 (cl:defmethod roslisp-msg-protocol:md5sum ((type (cl:eql 'StampedFeaturesMatches)))
   "Returns md5sum for a message object of type 'StampedFeaturesMatches"
-  "e0d7debe61635928141b4390d89e565f")
+  "cbc18a10678a1e1ce89ac8ea4e4d22c4")
 (cl:defmethod roslisp-msg-protocol:message-definition ((type (cl:eql '<StampedFeaturesMatches>)))
   "Returns full string definition for message of type '<StampedFeaturesMatches>"
-  (cl:format cl:nil "Header header1~%Header header2~%float32[] points1~%float32[] points2~%float32[] descriptors1~%float32[] descriptors2~%int16 descriptors1_stride~%int16 descriptors2_stride~%string descriptors_matcher~%~%================================================================================~%MSG: std_msgs/Header~%# Standard metadata for higher-level stamped data types.~%# This is generally used to communicate timestamped data ~%# in a particular coordinate frame.~%# ~%# sequence ID: consecutively increasing ID ~%uint32 seq~%#Two-integer timestamp that is expressed as:~%# * stamp.secs: seconds (stamp_secs) since epoch~%# * stamp.nsecs: nanoseconds since stamp_secs~%# time-handling sugar is provided by the client library~%time stamp~%#Frame this data is associated with~%# 0: no frame~%# 1: global frame~%string frame_id~%~%~%"))
+  (cl:format cl:nil "Header header1~%Header header2~%float32[] points1~%float32[] points2~%float32[] descriptors1~%float32[] descriptors2~%int16 descriptors_stride~%string descriptors_matcher~%float32[] F~%float32[] P1~%float32[] P2~%~%================================================================================~%MSG: std_msgs/Header~%# Standard metadata for higher-level stamped data types.~%# This is generally used to communicate timestamped data ~%# in a particular coordinate frame.~%# ~%# sequence ID: consecutively increasing ID ~%uint32 seq~%#Two-integer timestamp that is expressed as:~%# * stamp.secs: seconds (stamp_secs) since epoch~%# * stamp.nsecs: nanoseconds since stamp_secs~%# time-handling sugar is provided by the client library~%time stamp~%#Frame this data is associated with~%# 0: no frame~%# 1: global frame~%string frame_id~%~%~%"))
 (cl:defmethod roslisp-msg-protocol:message-definition ((type (cl:eql 'StampedFeaturesMatches)))
   "Returns full string definition for message of type 'StampedFeaturesMatches"
-  (cl:format cl:nil "Header header1~%Header header2~%float32[] points1~%float32[] points2~%float32[] descriptors1~%float32[] descriptors2~%int16 descriptors1_stride~%int16 descriptors2_stride~%string descriptors_matcher~%~%================================================================================~%MSG: std_msgs/Header~%# Standard metadata for higher-level stamped data types.~%# This is generally used to communicate timestamped data ~%# in a particular coordinate frame.~%# ~%# sequence ID: consecutively increasing ID ~%uint32 seq~%#Two-integer timestamp that is expressed as:~%# * stamp.secs: seconds (stamp_secs) since epoch~%# * stamp.nsecs: nanoseconds since stamp_secs~%# time-handling sugar is provided by the client library~%time stamp~%#Frame this data is associated with~%# 0: no frame~%# 1: global frame~%string frame_id~%~%~%"))
+  (cl:format cl:nil "Header header1~%Header header2~%float32[] points1~%float32[] points2~%float32[] descriptors1~%float32[] descriptors2~%int16 descriptors_stride~%string descriptors_matcher~%float32[] F~%float32[] P1~%float32[] P2~%~%================================================================================~%MSG: std_msgs/Header~%# Standard metadata for higher-level stamped data types.~%# This is generally used to communicate timestamped data ~%# in a particular coordinate frame.~%# ~%# sequence ID: consecutively increasing ID ~%uint32 seq~%#Two-integer timestamp that is expressed as:~%# * stamp.secs: seconds (stamp_secs) since epoch~%# * stamp.nsecs: nanoseconds since stamp_secs~%# time-handling sugar is provided by the client library~%time stamp~%#Frame this data is associated with~%# 0: no frame~%# 1: global frame~%string frame_id~%~%~%"))
 (cl:defmethod roslisp-msg-protocol:serialization-length ((msg <StampedFeaturesMatches>))
   (cl:+ 0
      (roslisp-msg-protocol:serialization-length (cl:slot-value msg 'header1))
@@ -274,8 +361,10 @@
      4 (cl:reduce #'cl:+ (cl:slot-value msg 'descriptors1) :key #'(cl:lambda (ele) (cl:declare (cl:ignorable ele)) (cl:+ 4)))
      4 (cl:reduce #'cl:+ (cl:slot-value msg 'descriptors2) :key #'(cl:lambda (ele) (cl:declare (cl:ignorable ele)) (cl:+ 4)))
      2
-     2
      4 (cl:length (cl:slot-value msg 'descriptors_matcher))
+     4 (cl:reduce #'cl:+ (cl:slot-value msg 'F) :key #'(cl:lambda (ele) (cl:declare (cl:ignorable ele)) (cl:+ 4)))
+     4 (cl:reduce #'cl:+ (cl:slot-value msg 'P1) :key #'(cl:lambda (ele) (cl:declare (cl:ignorable ele)) (cl:+ 4)))
+     4 (cl:reduce #'cl:+ (cl:slot-value msg 'P2) :key #'(cl:lambda (ele) (cl:declare (cl:ignorable ele)) (cl:+ 4)))
 ))
 (cl:defmethod roslisp-msg-protocol:ros-message-to-list ((msg <StampedFeaturesMatches>))
   "Converts a ROS message object to a list"
@@ -286,7 +375,9 @@
     (cl:cons ':points2 (points2 msg))
     (cl:cons ':descriptors1 (descriptors1 msg))
     (cl:cons ':descriptors2 (descriptors2 msg))
-    (cl:cons ':descriptors1_stride (descriptors1_stride msg))
-    (cl:cons ':descriptors2_stride (descriptors2_stride msg))
+    (cl:cons ':descriptors_stride (descriptors_stride msg))
     (cl:cons ':descriptors_matcher (descriptors_matcher msg))
+    (cl:cons ':F (F msg))
+    (cl:cons ':P1 (P1 msg))
+    (cl:cons ':P2 (P2 msg))
 ))

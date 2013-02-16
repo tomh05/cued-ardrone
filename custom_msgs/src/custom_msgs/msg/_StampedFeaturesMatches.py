@@ -7,7 +7,7 @@ import struct
 import std_msgs.msg
 
 class StampedFeaturesMatches(genpy.Message):
-  _md5sum = "e0d7debe61635928141b4390d89e565f"
+  _md5sum = "cbc18a10678a1e1ce89ac8ea4e4d22c4"
   _type = "custom_msgs/StampedFeaturesMatches"
   _has_header = False #flag to mark the presence of a Header object
   _full_text = """Header header1
@@ -16,9 +16,11 @@ float32[] points1
 float32[] points2
 float32[] descriptors1
 float32[] descriptors2
-int16 descriptors1_stride
-int16 descriptors2_stride
+int16 descriptors_stride
 string descriptors_matcher
+float32[] F
+float32[] P1
+float32[] P2
 
 ================================================================================
 MSG: std_msgs/Header
@@ -39,8 +41,8 @@ time stamp
 string frame_id
 
 """
-  __slots__ = ['header1','header2','points1','points2','descriptors1','descriptors2','descriptors1_stride','descriptors2_stride','descriptors_matcher']
-  _slot_types = ['std_msgs/Header','std_msgs/Header','float32[]','float32[]','float32[]','float32[]','int16','int16','string']
+  __slots__ = ['header1','header2','points1','points2','descriptors1','descriptors2','descriptors_stride','descriptors_matcher','F','P1','P2']
+  _slot_types = ['std_msgs/Header','std_msgs/Header','float32[]','float32[]','float32[]','float32[]','int16','string','float32[]','float32[]','float32[]']
 
   def __init__(self, *args, **kwds):
     """
@@ -50,7 +52,7 @@ string frame_id
     changes.  You cannot mix in-order arguments and keyword arguments.
 
     The available fields are:
-       header1,header2,points1,points2,descriptors1,descriptors2,descriptors1_stride,descriptors2_stride,descriptors_matcher
+       header1,header2,points1,points2,descriptors1,descriptors2,descriptors_stride,descriptors_matcher,F,P1,P2
 
     :param args: complete set of field values, in .msg order
     :param kwds: use keyword arguments corresponding to message field names
@@ -71,12 +73,16 @@ string frame_id
         self.descriptors1 = []
       if self.descriptors2 is None:
         self.descriptors2 = []
-      if self.descriptors1_stride is None:
-        self.descriptors1_stride = 0
-      if self.descriptors2_stride is None:
-        self.descriptors2_stride = 0
+      if self.descriptors_stride is None:
+        self.descriptors_stride = 0
       if self.descriptors_matcher is None:
         self.descriptors_matcher = ''
+      if self.F is None:
+        self.F = []
+      if self.P1 is None:
+        self.P1 = []
+      if self.P2 is None:
+        self.P2 = []
     else:
       self.header1 = std_msgs.msg.Header()
       self.header2 = std_msgs.msg.Header()
@@ -84,9 +90,11 @@ string frame_id
       self.points2 = []
       self.descriptors1 = []
       self.descriptors2 = []
-      self.descriptors1_stride = 0
-      self.descriptors2_stride = 0
+      self.descriptors_stride = 0
       self.descriptors_matcher = ''
+      self.F = []
+      self.P1 = []
+      self.P2 = []
 
   def _get_types(self):
     """
@@ -132,14 +140,25 @@ string frame_id
       buff.write(_struct_I.pack(length))
       pattern = '<%sf'%length
       buff.write(struct.pack(pattern, *self.descriptors2))
-      _x = self
-      buff.write(_struct_2h.pack(_x.descriptors1_stride, _x.descriptors2_stride))
+      buff.write(_struct_h.pack(self.descriptors_stride))
       _x = self.descriptors_matcher
       length = len(_x)
       if python3 or type(_x) == unicode:
         _x = _x.encode('utf-8')
         length = len(_x)
       buff.write(struct.pack('<I%ss'%length, length, _x))
+      length = len(self.F)
+      buff.write(_struct_I.pack(length))
+      pattern = '<%sf'%length
+      buff.write(struct.pack(pattern, *self.F))
+      length = len(self.P1)
+      buff.write(_struct_I.pack(length))
+      pattern = '<%sf'%length
+      buff.write(struct.pack(pattern, *self.P1))
+      length = len(self.P2)
+      buff.write(_struct_I.pack(length))
+      pattern = '<%sf'%length
+      buff.write(struct.pack(pattern, *self.P2))
     except struct.error as se: self._check_types(se)
     except TypeError as te: self._check_types(te)
 
@@ -208,10 +227,9 @@ string frame_id
       start = end
       end += struct.calcsize(pattern)
       self.descriptors2 = struct.unpack(pattern, str[start:end])
-      _x = self
       start = end
-      end += 4
-      (_x.descriptors1_stride, _x.descriptors2_stride,) = _struct_2h.unpack(str[start:end])
+      end += 2
+      (self.descriptors_stride,) = _struct_h.unpack(str[start:end])
       start = end
       end += 4
       (length,) = _struct_I.unpack(str[start:end])
@@ -221,6 +239,27 @@ string frame_id
         self.descriptors_matcher = str[start:end].decode('utf-8')
       else:
         self.descriptors_matcher = str[start:end]
+      start = end
+      end += 4
+      (length,) = _struct_I.unpack(str[start:end])
+      pattern = '<%sf'%length
+      start = end
+      end += struct.calcsize(pattern)
+      self.F = struct.unpack(pattern, str[start:end])
+      start = end
+      end += 4
+      (length,) = _struct_I.unpack(str[start:end])
+      pattern = '<%sf'%length
+      start = end
+      end += struct.calcsize(pattern)
+      self.P1 = struct.unpack(pattern, str[start:end])
+      start = end
+      end += 4
+      (length,) = _struct_I.unpack(str[start:end])
+      pattern = '<%sf'%length
+      start = end
+      end += struct.calcsize(pattern)
+      self.P2 = struct.unpack(pattern, str[start:end])
       return self
     except struct.error as e:
       raise genpy.DeserializationError(e) #most likely buffer underfill
@@ -265,14 +304,25 @@ string frame_id
       buff.write(_struct_I.pack(length))
       pattern = '<%sf'%length
       buff.write(self.descriptors2.tostring())
-      _x = self
-      buff.write(_struct_2h.pack(_x.descriptors1_stride, _x.descriptors2_stride))
+      buff.write(_struct_h.pack(self.descriptors_stride))
       _x = self.descriptors_matcher
       length = len(_x)
       if python3 or type(_x) == unicode:
         _x = _x.encode('utf-8')
         length = len(_x)
       buff.write(struct.pack('<I%ss'%length, length, _x))
+      length = len(self.F)
+      buff.write(_struct_I.pack(length))
+      pattern = '<%sf'%length
+      buff.write(self.F.tostring())
+      length = len(self.P1)
+      buff.write(_struct_I.pack(length))
+      pattern = '<%sf'%length
+      buff.write(self.P1.tostring())
+      length = len(self.P2)
+      buff.write(_struct_I.pack(length))
+      pattern = '<%sf'%length
+      buff.write(self.P2.tostring())
     except struct.error as se: self._check_types(se)
     except TypeError as te: self._check_types(te)
 
@@ -342,10 +392,9 @@ string frame_id
       start = end
       end += struct.calcsize(pattern)
       self.descriptors2 = numpy.frombuffer(str[start:end], dtype=numpy.float32, count=length)
-      _x = self
       start = end
-      end += 4
-      (_x.descriptors1_stride, _x.descriptors2_stride,) = _struct_2h.unpack(str[start:end])
+      end += 2
+      (self.descriptors_stride,) = _struct_h.unpack(str[start:end])
       start = end
       end += 4
       (length,) = _struct_I.unpack(str[start:end])
@@ -355,10 +404,31 @@ string frame_id
         self.descriptors_matcher = str[start:end].decode('utf-8')
       else:
         self.descriptors_matcher = str[start:end]
+      start = end
+      end += 4
+      (length,) = _struct_I.unpack(str[start:end])
+      pattern = '<%sf'%length
+      start = end
+      end += struct.calcsize(pattern)
+      self.F = numpy.frombuffer(str[start:end], dtype=numpy.float32, count=length)
+      start = end
+      end += 4
+      (length,) = _struct_I.unpack(str[start:end])
+      pattern = '<%sf'%length
+      start = end
+      end += struct.calcsize(pattern)
+      self.P1 = numpy.frombuffer(str[start:end], dtype=numpy.float32, count=length)
+      start = end
+      end += 4
+      (length,) = _struct_I.unpack(str[start:end])
+      pattern = '<%sf'%length
+      start = end
+      end += struct.calcsize(pattern)
+      self.P2 = numpy.frombuffer(str[start:end], dtype=numpy.float32, count=length)
       return self
     except struct.error as e:
       raise genpy.DeserializationError(e) #most likely buffer underfill
 
 _struct_I = genpy.struct_I
+_struct_h = struct.Struct("<h")
 _struct_3I = struct.Struct("<3I")
-_struct_2h = struct.Struct("<2h")
