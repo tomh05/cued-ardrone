@@ -17,6 +17,8 @@
     (:file "_package_DescribedPointCloud" :depends-on ("_package"))
     (:file "StampedFeaturesWithImage" :depends-on ("_package_StampedFeaturesWithImage"))
     (:file "_package_StampedFeaturesWithImage" :depends-on ("_package"))
+    (:file "Visualisation" :depends-on ("_package_Visualisation"))
+    (:file "_package_Visualisation" :depends-on ("_package"))
     (:file "StampedFeaturesMatchesWithImage" :depends-on ("_package_StampedFeaturesMatchesWithImage"))
     (:file "_package_StampedFeaturesMatchesWithImage" :depends-on ("_package"))
     (:file "StampedStampedInt" :depends-on ("_package_StampedStampedInt"))

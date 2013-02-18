@@ -1,5 +1,39 @@
 #!/usr/bin/env python
 
+#============================== Projection Calc ===============================
+# 
+# This script calculates the essential matrix and then projection matrix
+# between two given frames with their matches
+#
+#==============================================================================
+# 
+# This routine was the single most intensive part of the entire image pipeline
+# The main issue is that it must triangulate 4N points where there are 4 
+# matches and this is more than 4 times worse than actual 3D point cloud
+# triangulation as N is greater at this point in the pipeline.
+#
+# A such a probabilistic rejection method was added. This sequentially tests
+# points for each of the 4 projections. The lower bound for the best projection
+# is then used as a hypothesis to test the other projections after each cycle, 
+# and projections are rejected on a 3 sigma confidence margin (99.6%).
+# 
+# e.g. We have M=200 samples and have tested N=25. Projections have passed:
+#       P1=22, P2=18 , P3=0, P4=4
+# We hypothesis that the best case is P1=22 out of the 200 (rather than the 25)
+# as a lower bound. We establish the standard deviation as:
+#       sigma = sqrt(P1/M(1-P1/M)/M)
+# P2, P3 and P4 are hypothesis tested with:
+#       std_dev_from_hypothesis = (P#/M - P1/M)/sigma
+# And rejected if the magnitude is greater than 3 (it must always be negative)
+# 
+# This boosts performance by a factor of 3-4x and appears to yield the same
+# results consistantly. The rejection method is purely speculative and whilst
+# it appears to work and seems intuitive, it may well be unsound.
+#
+# Probabilistic rejection should be capable of ~40 fps
+# Full calculation should be capable of ~10 fps
+#==============================================================================
+
 import roslib; roslib.load_manifest('feature_track')
 import rospy
 import numpy as np
@@ -11,9 +45,10 @@ import time
 
 class ProjectionCalc:
     
-    def __init__(self):
+    def __init__(self, prob):
         # Initialise ROS node
         self.connect()
+        self.use_prob = prob
         
     def connect(self):
         print 'Waiting for calibration ... '
@@ -29,10 +64,10 @@ class ProjectionCalc:
         
         success, P1, P2, pts1_E, pts2_E, desc1_E, desc2_E = self.extract_projections(F, pts1, pts2, desc1, desc2)
         if not success or len(pts1_E) < 4:
+            print "Motion failed ( ", np.around(((time.time()-self.time_prev)*1000),1), "ms) "
             return
         
         self.publish_proj(P1, P2, pts1_E, pts2_E, desc1_E, desc2_E, sfm)
-        
         print "Motion from images done ( ", np.around(((time.time()-self.time_prev)*1000),1), "ms) "
 
     def decode_message(self, sfm):
@@ -114,9 +149,27 @@ class ProjectionCalc:
         """============================================================
         # Determine projection with most valid points
         # Produce boolean mask for best case and filter pts
-        ==============================================================="""  
+        ==============================================================="""
+        if self.use_prob:
+            P2, infront = self.probabilistic_projection(i1_pts_corr, i2_pts_corr, P1, projections)
+        else:
+            P2, infront = self.normal_projection(i1_pts_corr, i2_pts_corr, P1, projections)
         
-
+        
+        # Filter points
+        mask_prepped = np.resize(infront.T, (desc1.shape[1],desc1.shape[0])).T
+        infront = np.append(infront, infront, 1)
+        i1_pts_final = np.reshape(i1_pts_corr[infront==True], (-1, 2))
+        i2_pts_final = np.reshape(i2_pts_corr[infront==True], (-1, 2))
+        
+        # Filter descriptors
+        desc1_final = np.reshape(desc1[mask_prepped==True], (-1, desc1.shape[1]))
+        desc2_final = np.reshape(desc2[mask_prepped==True], (-1, desc2.shape[1]))
+        
+        return True, P1, P2, i1_pts_final, i2_pts_final, desc1_final, desc2_final
+        
+    def normal_projection(self, i1_pts_corr, i2_pts_corr, P1, projections):
+        #time_prev = time.time()
         ind = 0
         maxfit = 0
         secfit = 0
@@ -131,57 +184,78 @@ class ProjectionCalc:
                 maxfit = PI
                 ind = i
                 infront = (d1>0) & (d2>0)
-        #if (maxfit < 4*secfit): maxfit ~= secfit is not actually a problem where translation is small, so cannot simply filter by it
-        if maxfit < 4: # 8 Chosen as at least 8 points are needed to compute an effective fundamental matrix -> if we cannot satisfy at least 8 points we have serious issues
-            print "==================================================="
-            print "P1 not extracted"
-            print "==================================================="
-            return False, None, None, None, None, None, None
+        print maxfit
         #print "P2"
         #print projections[ind]
-        
-        # Filter points
         infront = np.array([infront]).transpose()
-        mask_prepped = np.resize(infront.T, (desc1.shape[1],desc1.shape[0])).T
-        infront = np.append(infront, infront, 1)
-        i1_pts_final = np.reshape(i1_pts_corr[infront==True], (-1, 2))
-        i2_pts_final = np.reshape(i2_pts_corr[infront==True], (-1, 2))
+        #print "Normal3 done ( ", np.around(((time.time()-time_prev)*1000),1), "ms) "
+        return projections[ind], infront
         
-        # Filter descriptors
-        desc1_final = np.reshape(desc1[mask_prepped==True], (-1, desc1.shape[1]))
-        desc2_final = np.reshape(desc2[mask_prepped==True], (-1, desc2.shape[1]))
         
-        return True, P1, projections[ind], i1_pts_final, i2_pts_final, desc1_final, desc2_final
+    
+    def probabilistic_projection(self, i1_pts_corr, i2_pts_corr, P1, projections):
+        """====================================================================
+        # Probabilistic P selection
+        # Only test enough points to be relatively certain
+        ===================================================================="""
+        #time_prev = time.time()
+        # Make homogenous
+        x1 = np.append(i1_pts_corr.transpose(), np.array([np.ones(i1_pts_corr.transpose().shape[1])]), 0)
+        x2 = np.append(i2_pts_corr.transpose(), np.array([np.ones(i2_pts_corr.transpose().shape[1])]), 0)
+        # Initialise
+        N = 0
+        PI = np.array([0,0,0,0])
+        rejected = np.array([False, False, False, False])
+        rejected_count = 0
+        triangulators = []
+        infronts = []
+        for i, P2 in enumerate(projections):
+            triangulators.append(Triangulator(P1, P2))
+            infronts.append(np.array(np.zeros((1,x1.shape[1])), dtype=np.bool).T)
+        
+        # Rejection iterate
+        for i in  range(x1.shape[1]):
+            for j, P2 in enumerate(projections):
+                if not rejected[j]:
+                    point4D = np.array([triangulators[j].triangulate(x1[:,i],x2[:,i], P1, P2)]).T
+                    d1 = np.dot(self.cameraMatrix.dot(P1),point4D)[2]
+                    d2 = np.dot(self.cameraMatrix.dot(P2),point4D)[2]
+                    front = (d1>0) and (d2>0)
+                    infronts[j][i] = front
+                    PI[j] = PI[j] + int(front)
+            N = N + 1
+            
+            if (N > 10 and rejected_count < 3):
+                maxpi = 0
+                index = -1
+                for k, pi in enumerate(PI):
+                    if not rejected[k] and pi >= maxpi:
+                        maxpi = pi
+                        index = k
+                if maxpi > 0:
+                    p_test = maxpi/float(x1.shape[1])
+                    sigma = np.sqrt(p_test*(1.-p_test)/float(x1.shape[1]))
+                    fail = False
+                    for k, pi in enumerate(PI):
+                        if not rejected[k] and k != index:
+                            p = pi/float(x1.shape[1])
+                            z = (p-p_test)/sigma
+                            if abs(z) > 3:
+                                rejected[k] = True
+                                rejected_count = rejected_count + 1
+        #print "Probabilistic done ( ", np.around(((time.time()-time_prev)*1000),1), "ms) "
+        return projections[index], infronts[index]
         
     def unfiltered_triangulate_points(self,x1,x2,P1,P2):
         """ Two-view triangulation of points in
         x1,x2 (2*n coordingates)"""
-        n = x1.shape[1]
         # Make homogenous
         x1 = np.append(x1, np.array([np.ones(x1.shape[1])]), 0)
         x2 = np.append(x2, np.array([np.ones(x2.shape[1])]), 0)
         # Triangulate for each pair
-        X = np.array([self.unfiltered_triangulate_point(x1[:,i],x2[:,i], P1, P2) for i in range(x1.shape[1])]) # Looping here is probably unavoidable
+        triangulator = Triangulator(P1, P2)
+        X = np.array([triangulator.triangulate(x1[:,i],x2[:,i], P1, P2) for i in range(x1.shape[1])]) # Looping here is probably unavoidable
         return X.T
-        
-    def unfiltered_triangulate_point(self, x1,x2, P1, P2): 
-        """ Point pair triangulation from
-        least squares solution. """
-        # Compose matrix representing simultaneous equations
-        M = np.zeros((4,4))
-        M[0] = x1[0]*P1[2]-P1[0]
-        M[1] = x1[1]*P1[2]-P1[1]
-        M[2] = x2[0]*P2[2]-P2[0]
-        M[3] = x2[1]*P2[2]-P2[1]
-        # Compute SVD
-        U,S,V = np.linalg.svd(M)
-        
-        # numpy SVD is ordered from largest to smallest (for S)
-        # so least squares solution will always lie in the last column of V
-        # BUT since numpy SVD returns V transpose not V, it is the last row
-        X = V[-1,:]
-        
-        return np.hstack(X / X[3])
     
     def setCameraInfo(self, ci):
         """Converts the ROS published camera info into numpy arrays and 
@@ -191,21 +265,42 @@ class ProjectionCalc:
         self.distCoeffs = np.array([ci.D], dtype=np.float32)
         self.P = np.array([ci.P[:4],ci.P[4:8],ci.P[8:12]])
         print "                    Calibration Initialised\r\n"
+            
+class Triangulator:
+        def __init__(self, P1, P2):
+            self.M = np.zeros((4,4))
+            self.off = np.array([P1[0], P1[1], P2[0], P2[1]])
+            
+        def triangulate(self, x1, x2, P1, P2):
+            # Compose matrix representing simultaneous equations
+            self.M[0] = x1[0]*P1[2]
+            self.M[1] = x1[1]*P1[2]
+            self.M[2] = x2[0]*P2[2]
+            self.M[3] = x2[1]*P2[2]
+            self.M = self.M - self.off
+            # Compute SVD
+            U,S,V = np.linalg.svd(self.M)        
+            # numpy SVD is ordered from largest to smallest (for S)
+            # so least squares solution will always lie in the last column of V
+            # BUT since numpy SVD returns V transpose not V, it is the last row
+            X = V[-1,:]
+            return X / X[3]
 
 def run():
     rospy.init_node('Projection_Calc')
     # Initialise controller
     
     # Get parameters
+    prob = rospy.get_param('~prob', True)
     
     # Print startup info
     print "\r\n"
     print "======================= Projection Calc ==========================="
-    print " Auto-detecting matcher type from feature type"
+    print " Probabilistic rejection : ", prob, " - Set with _prob"
     print "==================================================================="
     print "\r\n"
     
-    pc = ProjectionCalc()
+    pc = ProjectionCalc(prob)
     
     # Begin ROS loop
     rospy.spin()

@@ -29,6 +29,7 @@ import cv
 from cv_bridge import CvBridge
 import numpy as np
 import tf
+from tf.msg import tfMessage
 from std_msgs.msg import Empty
 from std_msgs.msg import Header
 from sensor_msgs.msg import Image
@@ -86,7 +87,7 @@ class FeatureExtractor:
     def feature_extract(self):
         """Loads a frame and extracts features"""
         # ROS to monochrome cv image
-        cvimg = self.bridge.imgmsg_to_cv(self.ros_image,"bgr8")
+        cvimg = self.bridge.imgmsg_to_cv(self.ros_image,"mono8")
         # cv to cv2 numpy array image
         frame = np.asarray(cvimg)
         # Extract features
@@ -108,6 +109,7 @@ class FeatureExtractor:
         stwi.descriptors = desc.reshape(-1,).tolist()
         stwi.descriptors_stride = desc.shape[1]
         stwi.descriptors_matcher = self.matcher_type
+        stwi.image = self.ros_image
         self.feature_pub.publish(stwi)
         print "Features published (", np.around((time.time()-self.time_prev)*1000,1),"ms)"
         
@@ -116,6 +118,30 @@ class FeatureExtractor:
         if self.image_lock:
             return
         self.ros_image = d
+        
+
+class tf_resetter:
+    # This allows replaying of bags without needing to kill node
+    def __init__(self, detector, descriptor):
+        self.timestamp = None
+        self.detector = detector
+        self.descriptor = descriptor
+        self.fe = FeatureExtractor(detector, descriptor)
+        rospy.Subscriber('/tf', tfMessage, self.tf_check)
+    
+    def tf_check(self, tfmsg):
+        time_now = tfmsg.transforms[-1].header.stamp.to_sec()
+        if self.timestamp != None and time_now < self.timestamp - 5.:
+            print "\r\nResetting\r\n"
+            self.timestamp = time_now
+            self.fe.auto_scan_timer.shutdown()
+            self.fe.tf.clear()
+            self.fe.ros_image = None
+            self.fe.image_lock = False
+            rospy.sleep(0.5)
+            self.fe.start_scanning(Empty)
+        self.timestamp = time_now
+
 
 def run():
     # Init Node
@@ -137,7 +163,9 @@ def run():
     print "\r\n"
     
     # Initialise controller
-    fe = FeatureExtractor(detector, descriptor)
+    #fe = FeatureExtractor(detector, descriptor)
+    tr = tf_resetter(detector, descriptor)
+    
     # Begin ROS loop
     rospy.spin()
     
