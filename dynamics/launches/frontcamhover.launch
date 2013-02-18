@@ -1,0 +1,22 @@
+<launch>
+    <arg name="camera" value="front" />
+    <arg name="markerno" value="79" />
+    <node name="setcam" pkg="dynamics" type="setdronecamera.py">
+        <param name="camera" type="string" value="$(arg camera)"/>
+    </node>
+    <!--<node name="imageview" pkg="image_view" type="image_view">
+        <remap from="image" to="/ardrone/$(arg camera)/image_raw"/>
+    </node>-->
+    <node name="ar_pose" pkg="ar_pose" type="ar_multi" output="screen">
+        <remap from="/usb_cam/camera_info" to="ardrone/$(arg camera)/camera_info" />
+        <remap from="/usb_cam/image_raw" to="ardrone/$(arg camera)/image_rect" />
+        
+        <param name="marker_pattern_list" type="string" value="$(find ar_pose)/data/object_4x4_id$(arg markerno)"/>
+		<param name="threshold" type="int" value="100"/>
+    </node>
+    <node name="rviz" pkg="rviz" type="rviz"/>
+    <group ns="/ardrone/$(arg camera)">
+        <node name="image_proc" pkg="image_proc" type="image_proc" />
+    </group>
+    
+</launch>
