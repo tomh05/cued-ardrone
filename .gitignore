@@ -1,6 +1,8 @@
 # vim swap files
 .*.swp
+.*.pyc
 simpledrone/build
 
 /build/
 drone_demo/
+build/
