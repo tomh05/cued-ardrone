@@ -32,7 +32,7 @@ from visualization_msgs.msg import MarkerArray, Marker
 # draws pointcloud if false, or arrows if true. 
 # use  less than 20 particles for arrows
 useArrows = False
-publishTf = False
+publishTf = True
 
 #------------------------------------------------------
 # Params setup
@@ -72,13 +72,13 @@ for i in range(len(worldmap.markers)):
 
 class ParticleFilter:
     def __init__(self):
-        self.N          = 60     # number of particles
-        self.p          = []      # particle list
-        self.ar_markers = None 
-        self.w = []
+        self.N            = 60     # number of particles
+        self.p            = []      # particle list
+        self.ar_markers   = None 
+        self.w            = []
+        self.maxWparticle = 0
         self.gamma_offset = gamma_offset
-        # Callbacks may overlap: make sure they don't by having a 'teddy' that a callback takes and receives in turn
-        #self.busy = False 
+        # Callbacks may overlap: make sure they don't by locking thread
         self.lock = threading.Lock()
 
         # service that handles accelerometer smoothing, integrating etc.
@@ -124,12 +124,6 @@ class ParticleFilter:
 
     def navdataCallback(self,navdata):
         self.lock.acquire()
-        '''
-        while (self.busy):
-            time.sleep(0.001)
-        # reserve control of thread
-        self.busy = True
-        '''
         #find change in position
         self.navdata = navdata
         movement = self.getIMUMovement(navdata=self.navdata, gamma_offset=self.gamma_offset)
@@ -138,11 +132,8 @@ class ParticleFilter:
             # update particle locations
             self.p[i].move(movement)
 
-        self.broadcastTf(navdata.header.stamp,0)
         self.visualiseParticles()
 
-        # return control
-        #self.busy = False
         if (self.ar_markers is not None):
             #weigh and resample
             if (len(self.ar_markers.markers)>0):
@@ -158,7 +149,7 @@ class ParticleFilter:
             self.ar_markers = None
         mapVisualisation.markers[0].color.g = 1.0
         self.mapMarkerPub.publish(mapVisualisation)
- 
+        self.broadcastTf(self.navdata.header.stamp,self.maxWparticle)
         self.lock.release()
        
     def visualiseParticles(self):
@@ -207,13 +198,10 @@ class ParticleFilter:
 
     def markerCallback(self,ar_markers):
         self.lock.acquire()
-        self.ar_markers = ar_markers
+        # feed in new markers for processing on next navdata
+        self.ar_markers = ar_markers 
         self.lock.release()
         '''
-        while (self.busy):
-            time.sleep(0.001)
-        # reserve control of thread
-        self.busy = True
         if (len(ar_markers.markers)>0):
             self.findWeights(ar_markers)
          
@@ -228,8 +216,6 @@ class ParticleFilter:
 
         mapVisualisation.markers[0].color.g = 1.0
         self.mapMarkerPub.publish(mapVisualisation)
-        # return control of thread
-        self.busy = False
         '''
 
         
@@ -266,9 +252,12 @@ class ParticleFilter:
             clonedParticle.setNoise(transNoise,rotNoise,markerNoise)
             new_p.append(clonedParticle)
         self.p = new_p
+        self.maxWparticle = self.w.index(mw)
 
     def broadcastTf(self,time,i):
         if publishTf:
+            #rospy.loginfo("Transmitting at x=")
+            #rospy.loginfo(self.p[i].pos)
             self.br.sendTransform(self.p[i].pos,
                                   # translation happens first, then rotation
                                   self.p[i].orientation,
