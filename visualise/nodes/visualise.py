@@ -44,31 +44,8 @@ class Visualiser:
         
         pts1, pts2, repro1, repro2 = self.decode_message(draw)
         
-        '''
-        # pts1 and pts2 are undistorted we want to distort them
-        # This is done really crudely by undistorting the original points and
-        # matching
-        pts1_un = cv2.undistortPoints(np.array([draw1]), self.cameraMatrix, self.distCoeffs, P=self.cameraMatrix)[0]
-        pts2_un = cv2.undistortPoints(np.array([draw2]), self.cameraMatrix, self.distCoeffs, P=self.cameraMatrix)[0]
-        
-        mask = np.array(np.zeros((draw1.shape[0], 1)), np.bool)
-        for i, pun in enumerate(pts1_un):
-            pun = np.resize(pun, (pts1.shape[0], pts1.shape[1]))
-            minimum = (np.abs(pun-pts1)).min(axis=0)
-            if (minimum < .5e-4).all():
-                mask[i] = True
-        pts1_draw = np.reshape(draw1[np.resize(np.array([mask]).T, (draw1.shape[1], draw1.shape[0])).T==True], (-1, draw1.shape[1]))
-        print pts1_draw.shape
-        
-        mask = np.array(np.zeros((draw2.shape[0], 1)), np.bool)
-        for i, pun in enumerate(pts2_un):
-            pun = np.resize(pun, (pts2.shape[0], pts2.shape[1]))
-            minimum = (np.abs(pun-pts2)).min(axis=0)
-            if (minimum < .5e-4).all():
-                mask[i] = True
-        pts2_draw = np.reshape(draw2[np.resize(np.array([mask]).T, (draw2.shape[1], draw2.shape[0])).T==True], (-1, draw1.shape[1]))
-        '''
-        
+        pts1_draw = self.distort_points(pts1.T)
+        pts2_draw = self.distort_points(pts2.T)
         
         """====================================================================
         # Plot fully tracked points
@@ -80,7 +57,7 @@ class Visualiser:
         imh = grey_previous.shape[0]
         
         # Draw lines linking fully tracked points
-        for p1, p2 in zip(pts1, pts2):
+        for p1, p2 in zip(pts1_draw, pts2_draw):
             cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
         
         # Reproject triangulated points
@@ -98,7 +75,40 @@ class Visualiser:
     @staticmethod
     def to_np(msg):
         return np.reshape(np.array(msg), (-1, 2))
+    
+    def distort_points(self, pts):
         
+        k = self.distCoeffs
+        k1 = k[0][0] # Radial coeff 1
+        k2 = k[0][1] # Radial coeff 2
+        p1 = k[0][2] # Tangential coeff 1
+        p2 = k[0][3] # Tangential coeff 2
+        
+          
+        K = self.cameraMatrix
+        fx = K[0,0]
+        fy = K[1,1]
+        cx = K[0,2]                    
+        cy = K[1,2]
+        
+        x_dash = (pts[0] - cx)/fx;   
+        y_dash = (pts[1] - cy)/fy;
+        
+        # Precalc terms (Note: This is significantly simpler than if we had all 8 distCoeffs)
+        r_2 = x_dash*x_dash + y_dash*y_dash
+        r_4 = r_2*r_2
+        terms = (1+k1*r_2+k2*r_4)
+        
+        # Distortion
+        x_dash2 = x_dash*terms + 2*p1*x_dash*y_dash + p2*(r_2+2*x_dash*x_dash)
+        y_dash2 = y_dash*terms + 2*p2*x_dash*y_dash + p1*(r_2+2*y_dash*y_dash)
+        
+        # To pixel
+        u = fx*x_dash2+cx
+        v = fy*y_dash2+cy
+          
+        return np.array([u,v]).T
+    
     @staticmethod
     def decode_message(msg):
         # Need to re-numpy the array kp & descriptors

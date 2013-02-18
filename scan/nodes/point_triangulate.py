@@ -57,8 +57,11 @@ from custom_msgs.msg import StampedFeaturesMatches
 from custom_msgs.msg import Visualisation
 import math
 import time
+from copy import deepcopy
 
 USE_OPTIMAL_CORRECTION = False
+REPRO_ERROR_SQUARED = 100.
+OPT_ERROR_SQUARED = 256.
 
 class Triangulator:
         def __init__(self, P1, P2):
@@ -84,13 +87,13 @@ class Triangulator:
             projected_pixels = (projected_pixels_homo/projected_pixels_homo[2])[:2]
             # Get dif between proj and image
             error = projected_pixels-x1[:2]
-            error_mag1 = np.sqrt(error[0]*error[0]+ error[1]*error[1])
+            error_mag1 = error[0]*error[0]+ error[1]*error[1]
             
             # Same for frame 2
             projected_pixels_homo = P2.dot(V[-1,:])
             projected_pixels = (projected_pixels_homo/projected_pixels_homo[2])[:2]
             error = projected_pixels-x2[:2]
-            error_mag2 = np.sqrt(error[0]*error[0]+ error[1]*error[1])
+            error_mag2 = error[0]*error[0]+ error[1]*error[1]
             
             # max is more useful than average as we want a good fit to both
             error_max = max(error_mag1, error_mag2)        
@@ -100,6 +103,8 @@ class Triangulator:
 class PointTriangulator:
     def __init__(self):
         self.connect()
+        
+        self.rejection_reasons = np.array([0,0,0,0,0,0,0])
     
     def connect(self):     
         print 'Waiting for calibration ... '
@@ -119,9 +124,6 @@ class PointTriangulator:
         self.time_prev = time.time()
         
         
-        self.debug_text = []
-        self.upper_debug_text = []
-        
         F, pts1, pts2, self.desc1, self.desc2 = self.decode_message(sfm)
         
         """====================================================================
@@ -134,47 +136,13 @@ class PointTriangulator:
         ===================================================================="""
         self.tf_triangulate_points(pts1, pts2, sfm)
         
-        
-        self.publish_visualisation(pts1, pts2, sfm)
-        '''
         """====================================================================
-        # Plot fully tracked points
-        # Only that fit with the calculated geometry are plotted
-        # Note: This plots undistorted points on the distorted image
+        Pass visualiser data to visualiser node
         ===================================================================="""
-        img2 = stackImagesVertically(grey_previous, grey_now)
-        img2 = cv2.cvtColor(img2, cv2.COLOR_GRAY2BGR)
-        imh = grey_previous.shape[0]
-        county = 0
-        l = 120
+        self.publish_visualisation(pts1, pts2, sfm)
         
-        # Draw lines linking fully tracked points
-        for p1, p2 in zip(i1_pts_draw_final, i2_pts_draw_final):
-            county += 1
-            cv2.line(img2,(int(p1[0]), int(p1[1])), (int(p2[0]), int(p2[1] + imh)), (0, 255 , 255), 1)
+        print self.rejection_reasons
         
-        # Write debug text
-        for i, l in enumerate(self.debug_text):
-            cv2.putText(img2, str(l), (25,img2.shape[0]-25*(i+1)), cv2.FONT_HERSHEY_PLAIN, 1, (63, 63, 255))
-        for i, l in enumerate(self.upper_debug_text):
-            cv2.putText(img2, str(l), (25,25*(i+1)), cv2.FONT_HERSHEY_PLAIN, 1, (63, 63, 255))
-        
-        # Reproject triangulated points
-        for p in self.reprojected_frame1:
-            cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 0, 0), 1)
-            #cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 63, 63), 1)
-        for p in self.reprojected_frame2:
-            cv2.circle(img2, (int(p[0]),int(p[1]+imh)), 3, (0, 255, 0), 1)
-            #cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 63, 63), 1)
-        
-        # Draw
-        cv2.imshow("track", img2)
-        cv2.imwrite("temp.jpg", img2)
-        print "=============\r\nDrawn\r\n============="
-        
-        # Render Windows
-        cv2.waitKey(10)
-        '''
         print "Point Cloud Triangulated ( ", np.around(((time.time()-self.time_prev)*1000),1), "ms) "
         
     def decode_message(self, sfm):
@@ -258,7 +226,7 @@ class PointTriangulator:
             vis.reprojected1.append(x[0])
             vis.reprojected1.append(x[1])
         vis.reprojected2 = []
-        for x in self.reprojected_frame1:
+        for x in self.reprojected_frame2:
             vis.reprojected2.append(x[0])
             vis.reprojected2.append(x[1])
         self.vis_pub.publish(vis)
@@ -329,7 +297,7 @@ class PointTriangulator:
         # Image co-ordinate handling
         ===================================================================="""
         
-        position_i, qi = self.tf.lookupTransform("ardrone_base_frontcam", "world", header.stamp)
+        position_i, qi = self.tf.lookupTransform(header.frame_id, "/world", header.stamp)
         position_i = -np.array((position_i))
         quaternion_w_to_i = qi
         
@@ -352,56 +320,41 @@ class PointTriangulator:
         
         # Get relative quaternion
         # qmid = qafter.qbefore-1
-        self.relative_quat = tf.transformations.quaternion_multiply(self.quat_i_to_w1, tf.transformations.quaternion_inverse(self.quat_i_to_w2))
-        self.relative_quat2 = np.array([tf.transformations.euler_from_quaternion(self.relative_quat)]).T
-        self.relative_quat[0] = -self.relative_quat2[1]
-        self.relative_quat[1] = -self.relative_quat2[2]
-        self.relative_quat[2] = self.relative_quat2[0]
-        self.relative_quat = tf.transformations.quaternion_from_euler(self.relative_quat[0],self.relative_quat[1],self.relative_quat[2])
+        self.relative_quat = tf.transformations.quaternion_multiply(self.quat_w_to_i2, tf.transformations.quaternion_inverse(self.quat_w_to_i1))
    
     def tf_triangulate_points(self, pts1, pts2, sfm):
         time_start = time.time()
         """ Triangulates 3D points from set of matches co-ords using relative
         camera position determined from tf"""
-        # ---------------------------------------------------------------------
         # Working in image co-ordinates throughout
-        # ---------------------------------------------------------------------
         
         # These are arrays of the triangulated points reprojected back to the
         # image plane
         self.reprojected_frame1 = []
         self.reprojected_frame2 = []
         
-        
-        # Note: that the translations and rotations are reversed: 
-        # While the camera has moved by [R|t], the shift seen from the points
-        # is the inverse
-        
         # Get t from tf data
+        # Note R and t are inverted as they were calculated from frame1 to frame2
+        # in frame2 co-ordinates and we are treating frame2 as the origin
         t = -self.image_coord_trans
-        t_mag = np.sqrt(t.T.dot(t))
-        self.debug_text.append("trans: "+str(t))
         
         # Get rotation matrix
-        R = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(self.relative_quat))[:3, :3]     
-        angles = np.array(tf.transformations.euler_from_quaternion(self.relative_quat))
-        angles = angles*180./np.pi
-        self.debug_text.append("rot: "+str(angles))  
+        R = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(self.relative_quat))[:3, :3]
         
         # Bottom out if motion is insufficient
         mag = np.sqrt(t[0]*t[0]+t[1]*t[1])
         if mag < 0.2:
             print "Motion bad for triangulation :\r\n", str(t)
+            self.rejection_reasons[0] = self.rejection_reasons[0]+1
             return None
             
         # Print pre-triangulated count
         pre_triangulated = len(pts1)+0.
         print "Pre-triangulated: ", pre_triangulated
-        self.debug_text.append(pre_triangulated)
             
         # Compose dead reckoned projection matrix
         P_cam1_to_cam2 = np.hstack((R, t))        
-        print "Dead P:\r\n", P_cam1_to_cam2
+        #print "Dead P:\r\n", P_cam1_to_cam2
         
         """
         Triangulate using pixel co-ord and K[R t]
@@ -424,12 +377,12 @@ class PointTriangulator:
         self.desc_triangulated = np.reshape(self.desc_accepted[np.resize(infront.T, (self.desc_accepted.shape[1], self.desc_accepted.shape[0])).T==True], (-1, self.desc_accepted.shape[1]))
         self.kp_triangulated = np.reshape(self.kp_accepted[np.resize(infront.T,(self.kp_accepted.shape[1], self.kp_accepted.shape[0])).T==True], (self.kp_accepted.shape[0], -1))
         if points3D_image == None or len(points3D_image) == 0:
-            "No points infront of camera"
+            print "No points infront of camera"
+            self.rejection_reasons[3] = self.rejection_reasons[3]+1
             return
         
         # Output number of forward triangulated points
         forward_triangulated = len(points3D_image[0])+0.
-        self.debug_text.append(forward_triangulated)
         print "Forward triangulated: ", forward_triangulated    
         
         sq = np.square(points3D_image)
@@ -437,7 +390,8 @@ class PointTriangulator:
         sq_sum = np.sum(sq)
         avg = sq_sum/points3D_image.shape[1]
         if avg > 5.:
-            "Points too far"
+            print "Points average too far"
+            self.rejection_reasons[4] = self.rejection_reasons[4]+1
             return
         
         reasonable = sq < 4.
@@ -446,6 +400,8 @@ class PointTriangulator:
         self.desc_triangulated = np.reshape(self.desc_triangulated[np.resize(reasonable.T, (self.desc_triangulated.shape[1], self.desc_triangulated.shape[0])).T==True], (-1, self.desc_triangulated.shape[1]))
         self.kp_triangulated = np.reshape(self.kp_triangulated[np.resize(reasonable.T,(self.kp_triangulated.shape[1], self.kp_triangulated.shape[0])).T==True], (self.kp_triangulated.shape[0], -1))
         if points3D_image == None or len(points3D_image) == 0:
+            print "Points unreasonable"
+            self.rejection_reasons[5] = self.rejection_reasons[5]+1
             return
         
         
@@ -457,13 +413,9 @@ class PointTriangulator:
         self.desc_triangulated = np.reshape(self.desc_triangulated[np.resize(infront.T, (self.desc_triangulated.shape[1], self.desc_triangulated.shape[0])).T==True], (-1, self.desc_triangulated.shape[1]))
         self.kp_triangulated = np.reshape(self.kp_triangulated[np.resize(infront.T,(self.kp_triangulated.shape[1], self.kp_triangulated.shape[0])).T==True], (self.kp_triangulated.shape[0], -1))
         if points3D_image == None or len(points3D_image) == 0:
+            print "All Points too far"
+            self.rejection_reasons[6] = self.rejection_reasons[0]+1
             return
-        
-        
-        self.R = R
-        self.t = t
-        
-        print "sss", self.make_homo(points3D_image.T).T.shape
         
         # Triangulated points reprojected back to the image plane
         self.reprojected_frame1 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, R, t)        
@@ -710,7 +662,7 @@ class PointTriangulator:
         
         return np.hstack((new_x1, new_x2, E))
     
-    def triangulate_points(self, x1,x2,P1,P2, max_error = 36., max_squared_error = 256.):
+    def triangulate_points(self, x1,x2,P1,P2):
         """ Two-view triangulation of points in
         x1,x2 (2*n coordingates)"""        
         
@@ -719,7 +671,11 @@ class PointTriangulator:
         x1_homo = np.append(x1, np.array([np.ones(x1.shape[1])]), 0)
         x2_homo = np.append(x2, np.array([np.ones(x2.shape[1])]), 0)
         
+        print USE_OPTIMAL_CORRECTION
+        print OPT_ERROR_SQUARED
+        
         if (USE_OPTIMAL_CORRECTION):
+            print "bing"
             F = self.find_fundamental_from_proj(P1, P2)
             # Correct points
             corr = np.array([self.optimal_correction_triangulate_point(x1_homo[:,i],x2_homo[:,i], F) for i in range(n)])
@@ -728,30 +684,34 @@ class PointTriangulator:
             errors = corr[:, 6:7]
             
             # Create mask based on amount of shift required
-            shift = x1 - corr1
+            shift = x1_homo - corr1
             shift = shift*shift
             shift1 = shift[0]+shift[1]
-            shift = x2 - corr2
+            shift = x2_homo - corr2
             shift = shift*shift
             shift2 = shift[0]+shift[1]
-            accepted = np.logical_and(shift1<max_squared_error, shift2<max_squared_error)
+            accepted = np.logical_and(shift1<OPT_ERROR_SQUARED, shift2<OPT_ERROR_SQUARED)
             
             # Filter points with too much implied shift
             accepted = np.array([accepted]).T
             pts_mask = np.hstack((accepted, accepted, accepted)).T
-            x1_homo = np.reshape(x1[pts_mask==True], (3, -1))
-            x2_homo = np.reshape(x2[pts_mask==True], (3, -1))
-            # Filter descriptors
-            self.desc_accepted = np.reshape(self.desc1[np.resize(accepted.T, (self.desc_final.shape[1],self.desc_final.shape[0])).T==True], (-1, self.desc1[1]))
+            x1_homo = np.reshape(x1_homo[pts_mask==True], (3, -1))
+            x2_homo = np.reshape(x2_homo[pts_mask==True], (3, -1))
             
-            n = len(x1_homo.T)        
+            n = len(x1_homo.T)
+            print x1_homo.shape
             if x1_homo == None or n <= 1:
                 print "No points correctable"
+                self.rejection_reasons[1] = self.rejection_reasons[1]+1
                 return None
+            
+            # Filter descriptors
+            self.desc_accepted = np.reshape(self.desc1[np.resize(accepted.T, (self.desc1.shape[1],self.desc1.shape[0])).T==True], (-1, self.desc1.shape[1]))
+            
+            
                 
             self.corr_triangulated = n+0.
             print "Corr-triangulated: ", self.corr_triangulated
-            self.debug_text.append(self.corr_triangulated)
         else:
             self.desc_accepted = self.desc1
         
@@ -761,24 +721,22 @@ class PointTriangulator:
         # Extract 4D points
         X = Combi[:,:4]        
         # Create mask
-        accepted = Combi[:, 4] < max_error
+        accepted = Combi[:, 4] < REPRO_ERROR_SQUARED
         
         # Filter points with too low accuracy (reprojected to actual image)
         accepted = np.array([accepted]).T
         X = np.reshape(X.T[np.hstack((accepted, accepted, accepted)).T==True], (3, -1))
         # Filter descriptors and keypoints
         self.desc_accepted = np.reshape(self.desc_accepted[np.resize(accepted.T, (self.desc_accepted.shape[1],self.desc_accepted.shape[0])).T==True], (-1, self.desc_accepted.shape[1]))
-        print x1.shape
-        print accepted.shape
-        self.kp_accepted = np.reshape(x1[np.resize(accepted.T, (x1.shape[1],x1.shape[0])).T==True], (x1.shape[0], -1))
+        self.kp_accepted = np.reshape(x1_homo[np.resize(accepted.T, (x1_homo.shape[1],x1_homo.shape[0])).T==True], (x1_homo.shape[0], -1))[:2]
         
-        if X == None or len(X) == 0:
+        if X == None or len(X[0]) == 0:
             print "No points triangulatable"
+            self.rejection_reasons[2] = self.rejection_reasons[2]+1
             return None
         
         self.triangulated = len(X[0])+0.
         print "Triangulated: ", self.triangulated
-        self.debug_text.append(self.triangulated)
         
         return X
         
@@ -798,8 +756,31 @@ class PointTriangulator:
 
 def run():
     rospy.init_node('Point_Triangulator')
+    
+    # Get parameters
+    global USE_OPTIMAL_CORRECTION
+    USE_OPTIMAL_CORRECTION = rospy.get_param('~opt', False)
+    global OPT_ERROR_SQUARED
+    OPT_ERROR_SQUARED = rospy.get_param('~shift', 16.)
+    global REPRO_ERROR_SQUARED
+    REPRO_ERROR_SQUARED = rospy.get_param('~error', 10.)
+    
+    # Print startup info
+    print "\r\n"
+    print "===================== Point Triangulator =========================="
+    print " Allowing ", REPRO_ERROR_SQUARED, "reprojection error - Set with _error"
+    print " Optimal Correction : ", USE_OPTIMAL_CORRECTION, " - Set with _opt"
+    if USE_OPTIMAL_CORRECTION:
+        print " Allowing optimal correction of ", OPT_ERROR_SQUARED, " - Set with _shift"
+    print "==================================================================="
+    print "\r\n"
+    
+    OPT_ERROR_SQUARED = float(OPT_ERROR_SQUARED*OPT_ERROR_SQUARED)
+    REPRO_ERROR_SQUARED = float(REPRO_ERROR_SQUARED*REPRO_ERROR_SQUARED)
+    
     # Initialise controller
     pt = PointTriangulator()
+    
     # Begin ROS loop
     rospy.spin()
 
