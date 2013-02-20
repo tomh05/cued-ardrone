@@ -99,6 +99,8 @@ class Tester:
 		kppt2_array = np.array(list(x for x in i2_kppt))
 		i1_pts = kppt1_array[i1_indices,:]
 		i2_pts = kppt2_array[i2_indices,:]
+		i1_pts = i1_pts.astype('float32')
+		i2_pts = i2_pts.astype('float32')		
 		return i1_pts, i2_pts
 		
 	def calcObjCoord(self, kppt, Zc=1000):
@@ -108,6 +110,7 @@ class Tester:
 		Yc = Zc/self.fy*(kppt[:,1] - self.v0)
 		kpcoord = np.append(Xc.reshape([len(Xc),1]), Yc.reshape([len(Yc),1]), axis=1)
 		kpcoord = np.append(kpcoord, np.zeros([len(Xc), 1]), axis=1)
+		kpcoord = kpcoord.astype('float32')
 		return kpcoord
 		
 		
@@ -224,7 +227,9 @@ class Tester:
 		# Find template in image 2 and determine camera pose
 		rvec, tvec, inliers = cv2.solvePnPRansac(t1_matched_coords, i2_matched_pts, \
 		self.cameraMatrix, self.distCoeffs)
-		
+		print rvec
+		print tvec
+		print inliers.shape
 		
 		#~ undistorted = cv2.undistort(img, self.cameraMatrix, self.distCoeffs)
 		#~ stacked = img - undistorted
