@@ -14,8 +14,6 @@ DEG2RAD = np.pi/180.
 
 FILTERENABLE = True
 FILTERSIZE = 10
-TMDELTAT = False
-TMSTAMP = False
 PATHDIV = 20
 
 
@@ -38,8 +36,6 @@ class DeadReckoning:
         
         # Clear time values
         self.prevtime = None # time (float secs) of prev frame
-        self.prev_tm = None
-        self.offset_tm = None # This is the tm based time in seconds
         
         # Clear median buffer
         self.v_buffer = None # buffer of last FILTERSIZE frames [d.vx, d.vy]
@@ -57,14 +53,12 @@ class DeadReckoning:
         
         # Clear time values
         self.prevtime = None
-        self.prev_tm = None
-        self.offset_tm = None
         
         # Clear median buffer
         self.v_buffer = None # buffer of last 10 frames [d.vx, d.vy]
         self.buffer_index = -FILTERSIZE + 1
 
-    def navdataCallback(self, d):        
+    def navdataCallback(self, d):
         if d.batteryPercent < 25:
             print "Warning: Battery at ", d.batteryPercent, "%"
             
@@ -114,19 +108,7 @@ class DeadReckoning:
         if self.prevtime == None:
             self.reset(self)
             self.prevtime = time
-            self.prev_tm = d.tm
-            self.offset_tm = time.to_sec()
-            self.init_time = time.to_sec()
-        if TMDELTAT:
-            deltat = (float(d.tm-self.prev_tm))/1000000.
-            # If not using realtime navdata, tm has occasional large values
-            # These are incorrect and crudely removed by assuming same as prev
-            if deltat > 0.2:
-                print "De-blipping"
-                deltat = self.prev_deltat
-            self.offset_tm = self.offset_tm + deltat
-        else:
-            deltat = (time - self.prevtime).to_sec()
+        deltat = (time - self.prevtime).to_sec()
             
         #print deltat
         self.prev_deltat = deltat
@@ -161,30 +143,17 @@ class DeadReckoning:
         '''
         # Publish tf
         '''
-        if TMSTAMP:
-            self.br.sendTransform((self.x,self.y,self.z), 
+        self.br.sendTransform((self.x,self.y,self.z), 
                          # translation happens first, then rotation
                          quaternion,
-                         rospy.Time.from_sec(self.offset_tm),
+                         time,
                          "/ardrone_base_link",
                          "/world")                         
-            # (values pulled from ardrone_drive.cpp)
-            # We need to publish this when using high rate navdata to prevent
-            # front camera tf from lagging base ardrone
-            self.br.sendTransform(self.frontcam_t, self.frontcam_quat ,rospy.Time.from_sec(self.offset_tm), '/ardrone_base_frontcam', '/ardrone_base_link')
-            # NOTE: child parent order is reversed w.r.t C++
-        else:
-            self.br.sendTransform((self.x,self.y,self.z), 
-                             # translation happens first, then rotation
-                             quaternion,
-                             time,
-                             "/ardrone_base_link",
-                             "/world")                         
-            # (values pulled from ardrone_drive.cpp)
-            # We need to publish this when using high rate navdata to prevent
-            # front camera tf from lagging base ardrone
-            self.br.sendTransform(self.frontcam_t, self.frontcam_quat ,time, '/ardrone_base_frontcam', '/ardrone_base_link')
-            # NOTE: child parent order is reversed w.r.t C++
+        # (values pulled from ardrone_drive.cpp)
+        # We need to publish this when using high rate navdata to prevent
+        # front camera tf from lagging base ardrone
+        self.br.sendTransform(self.frontcam_t, self.frontcam_quat ,time, '/ardrone_base_frontcam', '/ardrone_base_link')
+        # NOTE: child parent order is reversed w.r.t C++
 
 
         '''
@@ -205,7 +174,6 @@ class DeadReckoning:
             self.pathPub.publish(self.trackPath)
         self.path_div = self.path_div + 1
 
-
 if __name__ == '__main__':
     dead_reckon = DeadReckoning() # Initialise class to preserve vars
     rospy.init_node('deadreckon_broadcaster')
@@ -220,13 +188,9 @@ if __name__ == '__main__':
     
     print "\r\n----------------------------------DEAD RECKON--------------------------------------"
     print "Use median filter (", FILTERSIZE, ") : ", FILTERENABLE, "        (set with _filtersize and _filterenable)"
-    
-    TMDELTAT = rospy.get_param('~usetm', True)
-    print "Use tm instead of headers : ", TMDELTAT, "         (set with _usetm)"
-    TMSTAMP = TMDELTAT
-    
     PATHDIV = rospy.get_param('~pathdiv', 20)
     print "Downsample path by factor of: ", PATHDIV, "         (set with _pathdiv)"
+    print "\r\n-----------------------------------------------------------------------------------"
     
     
     rospy.spin()
