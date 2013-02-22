@@ -62,22 +62,54 @@ class FeatureExtractor:
         
     def auto_scan(self, event):
         # Get latest world co-ords of drone
-        position, quat = self.tf.lookupTransform( "/world", "/ardrone_base_frontcam", rospy.Time(0))
+        self.image_lock = True
+        self.tf.waitForTransform("/world", "/ardrone_base_frontcam", self.ros_image.header.stamp, rospy.Duration(4))
+        self.position_w2, self.quat_i_to_w2 = self.tf.lookupTransform( "/world", "/ardrone_base_frontcam", self.ros_image.header.stamp)
+        self.position_w2 = np.array((self.position_w2))
+        self.position_i2, self.quat_w_to_i2 = self.tf.lookupTransform( "/ardrone_base_frontcam", "/world", self.ros_image.header.stamp)
+        self.position_i2 = -np.array((self.position_i2))
         # Fire if magnitude of motion above limit
-        diff = self.prev_position - np.array(position)
+        diff = self.position_w2 - self.position_w1
         mag = np.sqrt(diff[0]*diff[0] + diff[1]*diff[1]+diff[2]*diff[2])
-        if (mag > 0.3 and self.ros_image != None):
-            self.auto_scan_timer.shutdown()
-            self.time_prev = time.time()
-            self.image_lock = True
-            self.feature_extract()
-            self.image_lock = False
-            self.start_scanning(Empty)
+        if (mag > 0.2 and self.ros_image != None):
+            if (self.check_image_translation()):
+                self.auto_scan_timer.shutdown()
+                self.time_prev = time.time()
+                self.feature_extract()
+                self.image_lock = False
+                self.continue_scanning(Empty)
+        self.image_lock = False
+            
+    def check_image_translation(self):
+        # Rotate frame2 position into frame1 image co-ordinates
+        R = tf.transformations.quaternion_matrix(self.quat_w_to_i2)[:3, :3]
+        position_i1_i2 = R.dot(self.position_w1)
+        
+        # Difference in position in image (frame1) co-ordinates
+        trans = np.array(([(position_i1_i2[0] - self.position_i2[0])],
+                          [(position_i1_i2[1] - self.position_i2[1])],
+                          [(position_i1_i2[2] - self.position_i2[2])]))
+        t = np.array([trans[0], trans[1], trans[2]])
+        mag = np.sqrt(t[0]*t[0]+t[1]*t[1])
+        if mag < 0.2:
+            return False
+        else:
+            return True
             
     def start_scanning(self, empty):
         # Get latest world co-ord position
-        self.prev_position, self.prev_quat = self.tf.lookupTransform( "world", "ardrone_base_frontcam", rospy.Time(0))
+        self.position_w1, self.quat_i_to_w1 = self.tf.lookupTransform( "/world", "/ardrone_base_frontcam", rospy.Time(0))
+        self.position_w1 = np.array((self.position_w1))
+        self.position_i1, self.quat_w_to_i1 = self.tf.lookupTransform( "/ardrone_base_frontcam", "/world", rospy.Time(0))
+        self.position_i1 = -np.array((self.position_i1))
         # Start polling for shift at 10Hz
+        self.auto_scan_timer = rospy.Timer(rospy.Duration(0.1), self.auto_scan)
+        
+    def continue_scanning(self, empty):
+        self.position_w1 = self.position_w2
+        self.position_i1 = self.position_i2
+        self.quat_i_to_w1 = self.quat_i_to_w2
+        self.quat_w_to_i1 = self.quat_w_to_i2
         self.auto_scan_timer = rospy.Timer(rospy.Duration(0.1), self.auto_scan)
         
     def stop_scanning(self, empty):
