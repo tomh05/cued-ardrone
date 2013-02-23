@@ -1,0 +1,20 @@
+<!-- This is a sample lanuch file, please change it based on your needs -->
+<launch>
+	<node name="ardrone_driver" pkg="ardrone_autonomy" type="ardrone_driver" output="screen" clear_params="true">
+
+	<!-- Enables the standard /ardrone/navdata, imu and mag topics. If not specified, defaults to TRUE -->
+	    <param name="enable_legacy_navdata" value="true" />
+        <param name="navdata_demo" value="0" />
+
+	<!-- Tunes the speed at which the ros loop runs, and thus, the rate at which navdata is published -->
+		<param name="looprate" value="50" />        
+        
+    <!-- Do we want to publish new-style navdata when received (true), or every time the ros-loop runs (false)? -->
+	<!-- (does not affect legacy navdata, which is always published at ros-loop rate) -->
+		<param name="realtime_navdata" value="false" />
+		<param name="realtime_video" value="false" />
+        
+	</node>
+</launch>
+
+
