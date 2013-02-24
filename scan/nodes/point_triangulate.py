@@ -123,6 +123,7 @@ class PointTriangulator:
         undistorted and matched. The matches are then triangulated"""
         self.time_prev = time.time()
         
+        self.descriptors_matcher = sfm.descriptors_matcher
         
         F, pts1, pts2, self.desc1, self.desc2 = self.decode_message(sfm)
         
@@ -207,12 +208,14 @@ class PointTriangulator:
         """====================================================================
         # Relative Point Cloud with keypoints and descriptors
         ===================================================================="""
-        
+        print points.shape
         described_cloud = DescribedPointCloud()
-        described_cloud.cloud = cloud
+        described_cloud.header = cloud.header
+        described_cloud.cloud_points = points.reshape(-1,).tolist()
         described_cloud.descriptors = self.desc_triangulated.reshape(-1,).tolist()
-        described_cloud.desc_stride = self.desc_triangulated.shape[1]
-        described_cloud.kp = self.kp_triangulated.reshape(-1,).tolist()
+        described_cloud.descriptors_stride = self.desc_triangulated.shape[1]
+        described_cloud.descriptors_matcher = self.descriptors_matcher
+        described_cloud.points = self.kp_triangulated.reshape(-1,).tolist()
         self.desc_cloud_pub.publish(described_cloud)
         
     def publish_visualisation(self, pts1, pts2, sfm):

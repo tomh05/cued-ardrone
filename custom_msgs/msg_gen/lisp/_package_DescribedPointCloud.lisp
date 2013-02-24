@@ -1,10 +1,14 @@
 (cl:in-package custom_msgs-msg)
-(cl:export '(CLOUD-VAL
-          CLOUD
+(cl:export '(HEADER-VAL
+          HEADER
+          CLOUD_POINTS-VAL
+          CLOUD_POINTS
           DESCRIPTORS-VAL
           DESCRIPTORS
-          DESC_STRIDE-VAL
-          DESC_STRIDE
-          KP-VAL
-          KP
+          DESCRIPTORS_STRIDE-VAL
+          DESCRIPTORS_STRIDE
+          DESCRIPTORS_MATCHER-VAL
+          DESCRIPTORS_MATCHER
+          POINTS-VAL
+          POINTS
 ))

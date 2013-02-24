@@ -101,6 +101,7 @@ def scanAxes(d):
     t.linear.x  = 0.5 * d.axes[1]
     t.linear.y  = 0.5 * d.axes[0]
     t.linear.z  = 0.5 * 0.5 * ( d.axes[2] - d.axes[5] )
+    print t.linear.z
     t.angular.z = 0.8 * d.axes[3]
 
     twist_pub = rospy.Publisher('cmd_vel',Twist)

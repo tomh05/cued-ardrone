@@ -14,7 +14,7 @@
 
 #include "ros/assert.h"
 
-#include "sensor_msgs/PointCloud.h"
+#include "std_msgs/Header.h"
 
 namespace custom_msgs
 {
@@ -23,32 +23,42 @@ struct DescribedPointCloud_ {
   typedef DescribedPointCloud_<ContainerAllocator> Type;
 
   DescribedPointCloud_()
-  : cloud()
+  : header()
+  , cloud_points()
   , descriptors()
-  , desc_stride(0)
-  , kp()
+  , descriptors_stride(0)
+  , descriptors_matcher()
+  , points()
   {
   }
 
   DescribedPointCloud_(const ContainerAllocator& _alloc)
-  : cloud(_alloc)
+  : header(_alloc)
+  , cloud_points(_alloc)
   , descriptors(_alloc)
-  , desc_stride(0)
-  , kp(_alloc)
+  , descriptors_stride(0)
+  , descriptors_matcher(_alloc)
+  , points(_alloc)
   {
   }
 
-  typedef  ::sensor_msgs::PointCloud_<ContainerAllocator>  _cloud_type;
-   ::sensor_msgs::PointCloud_<ContainerAllocator>  cloud;
+  typedef  ::std_msgs::Header_<ContainerAllocator>  _header_type;
+   ::std_msgs::Header_<ContainerAllocator>  header;
+
+  typedef std::vector<float, typename ContainerAllocator::template rebind<float>::other >  _cloud_points_type;
+  std::vector<float, typename ContainerAllocator::template rebind<float>::other >  cloud_points;
 
   typedef std::vector<float, typename ContainerAllocator::template rebind<float>::other >  _descriptors_type;
   std::vector<float, typename ContainerAllocator::template rebind<float>::other >  descriptors;
 
-  typedef int16_t _desc_stride_type;
-  int16_t desc_stride;
+  typedef int16_t _descriptors_stride_type;
+  int16_t descriptors_stride;
 
-  typedef std::vector<float, typename ContainerAllocator::template rebind<float>::other >  _kp_type;
-  std::vector<float, typename ContainerAllocator::template rebind<float>::other >  kp;
+  typedef std::basic_string<char, std::char_traits<char>, typename ContainerAllocator::template rebind<char>::other >  _descriptors_matcher_type;
+  std::basic_string<char, std::char_traits<char>, typename ContainerAllocator::template rebind<char>::other >  descriptors_matcher;
+
+  typedef std::vector<float, typename ContainerAllocator::template rebind<float>::other >  _points_type;
+  std::vector<float, typename ContainerAllocator::template rebind<float>::other >  points;
 
 
   typedef boost::shared_ptr< ::custom_msgs::DescribedPointCloud_<ContainerAllocator> > Ptr;
@@ -79,12 +89,12 @@ template<class ContainerAllocator>
 struct MD5Sum< ::custom_msgs::DescribedPointCloud_<ContainerAllocator> > {
   static const char* value() 
   {
-    return "b7ca0258eada5ecc55971d4f1db1e74f";
+    return "fbbef13ecabc7cecbc61dcc36adea686";
   }
 
   static const char* value(const  ::custom_msgs::DescribedPointCloud_<ContainerAllocator> &) { return value(); } 
-  static const uint64_t static_value1 = 0xb7ca0258eada5eccULL;
-  static const uint64_t static_value2 = 0x55971d4f1db1e74fULL;
+  static const uint64_t static_value1 = 0xfbbef13ecabc7cecULL;
+  static const uint64_t static_value2 = 0xbc61dcc36adea686ULL;
 };
 
 template<class ContainerAllocator>
@@ -101,27 +111,12 @@ template<class ContainerAllocator>
 struct Definition< ::custom_msgs::DescribedPointCloud_<ContainerAllocator> > {
   static const char* value() 
   {
-    return "sensor_msgs/PointCloud cloud\n\
+    return "Header header\n\
+float32[] cloud_points\n\
 float32[] descriptors\n\
-int16 desc_stride\n\
-float32[] kp\n\
-\n\
-================================================================================\n\
-MSG: sensor_msgs/PointCloud\n\
-# This message holds a collection of 3d points, plus optional additional\n\
-# information about each point.\n\
-\n\
-# Time of sensor data acquisition, coordinate frame ID.\n\
-Header header\n\
-\n\
-# Array of 3d points. Each Point32 should be interpreted as a 3d point\n\
-# in the frame given in the header.\n\
-geometry_msgs/Point32[] points\n\
-\n\
-# Each channel should have the same number of elements as points array,\n\
-# and the data in each channel should correspond 1:1 with each point.\n\
-# Channel names in common practice are listed in ChannelFloat32.msg.\n\
-ChannelFloat32[] channels\n\
+int16 descriptors_stride\n\
+string descriptors_matcher\n\
+float32[] points\n\
 \n\
 ================================================================================\n\
 MSG: std_msgs/Header\n\
@@ -141,52 +136,14 @@ time stamp\n\
 # 1: global frame\n\
 string frame_id\n\
 \n\
-================================================================================\n\
-MSG: geometry_msgs/Point32\n\
-# This contains the position of a point in free space(with 32 bits of precision).\n\
-# It is recommeded to use Point wherever possible instead of Point32.  \n\
-# \n\
-# This recommendation is to promote interoperability.  \n\
-#\n\
-# This message is designed to take up less space when sending\n\
-# lots of points at once, as in the case of a PointCloud.  \n\
-\n\
-float32 x\n\
-float32 y\n\
-float32 z\n\
-================================================================================\n\
-MSG: sensor_msgs/ChannelFloat32\n\
-# This message is used by the PointCloud message to hold optional data\n\
-# associated with each point in the cloud. The length of the values\n\
-# array should be the same as the length of the points array in the\n\
-# PointCloud, and each value should be associated with the corresponding\n\
-# point.\n\
-\n\
-# Channel names in existing practice include:\n\
-#   \"u\", \"v\" - row and column (respectively) in the left stereo image.\n\
-#              This is opposite to usual conventions but remains for\n\
-#              historical reasons. The newer PointCloud2 message has no\n\
-#              such problem.\n\
-#   \"rgb\" - For point clouds produced by color stereo cameras. uint8\n\
-#           (R,G,B) values packed into the least significant 24 bits,\n\
-#           in order.\n\
-#   \"intensity\" - laser or pixel intensity.\n\
-#   \"distance\"\n\
-\n\
-# The channel name should give semantics of the channel (e.g.\n\
-# \"intensity\" instead of \"value\").\n\
-string name\n\
-\n\
-# The values array should be 1-1 with the elements of the associated\n\
-# PointCloud.\n\
-float32[] values\n\
-\n\
 ";
   }
 
   static const char* value(const  ::custom_msgs::DescribedPointCloud_<ContainerAllocator> &) { return value(); } 
 };
 
+template<class ContainerAllocator> struct HasHeader< ::custom_msgs::DescribedPointCloud_<ContainerAllocator> > : public TrueType {};
+template<class ContainerAllocator> struct HasHeader< const ::custom_msgs::DescribedPointCloud_<ContainerAllocator> > : public TrueType {};
 } // namespace message_traits
 } // namespace ros
 
@@ -199,10 +156,12 @@ template<class ContainerAllocator> struct Serializer< ::custom_msgs::DescribedPo
 {
   template<typename Stream, typename T> inline static void allInOne(Stream& stream, T m)
   {
-    stream.next(m.cloud);
+    stream.next(m.header);
+    stream.next(m.cloud_points);
     stream.next(m.descriptors);
-    stream.next(m.desc_stride);
-    stream.next(m.kp);
+    stream.next(m.descriptors_stride);
+    stream.next(m.descriptors_matcher);
+    stream.next(m.points);
   }
 
   ROS_DECLARE_ALLINONE_SERIALIZER;
@@ -220,22 +179,30 @@ struct Printer< ::custom_msgs::DescribedPointCloud_<ContainerAllocator> >
 {
   template<typename Stream> static void stream(Stream& s, const std::string& indent, const  ::custom_msgs::DescribedPointCloud_<ContainerAllocator> & v) 
   {
-    s << indent << "cloud: ";
+    s << indent << "header: ";
 s << std::endl;
-    Printer< ::sensor_msgs::PointCloud_<ContainerAllocator> >::stream(s, indent + "  ", v.cloud);
+    Printer< ::std_msgs::Header_<ContainerAllocator> >::stream(s, indent + "  ", v.header);
+    s << indent << "cloud_points[]" << std::endl;
+    for (size_t i = 0; i < v.cloud_points.size(); ++i)
+    {
+      s << indent << "  cloud_points[" << i << "]: ";
+      Printer<float>::stream(s, indent + "  ", v.cloud_points[i]);
+    }
     s << indent << "descriptors[]" << std::endl;
     for (size_t i = 0; i < v.descriptors.size(); ++i)
     {
       s << indent << "  descriptors[" << i << "]: ";
       Printer<float>::stream(s, indent + "  ", v.descriptors[i]);
     }
-    s << indent << "desc_stride: ";
-    Printer<int16_t>::stream(s, indent + "  ", v.desc_stride);
-    s << indent << "kp[]" << std::endl;
-    for (size_t i = 0; i < v.kp.size(); ++i)
+    s << indent << "descriptors_stride: ";
+    Printer<int16_t>::stream(s, indent + "  ", v.descriptors_stride);
+    s << indent << "descriptors_matcher: ";
+    Printer<std::basic_string<char, std::char_traits<char>, typename ContainerAllocator::template rebind<char>::other > >::stream(s, indent + "  ", v.descriptors_matcher);
+    s << indent << "points[]" << std::endl;
+    for (size_t i = 0; i < v.points.size(); ++i)
     {
-      s << indent << "  kp[" << i << "]: ";
-      Printer<float>::stream(s, indent + "  ", v.kp[i]);
+      s << indent << "  points[" << i << "]: ";
+      Printer<float>::stream(s, indent + "  ", v.points[i]);
     }
   }
 };

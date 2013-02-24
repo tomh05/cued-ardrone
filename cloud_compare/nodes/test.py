@@ -50,11 +50,13 @@ class CloudComparer:
                                      np.random.rand(1, count)[0]*(ymax - ymin)+ymin,
                                      np.random.rand(1, count)[0]*(zmax - zmin)+zmin])
             
-    def sample_point_model(self):  
+    def sample_point_model(self, sigma=0.):  
         mask_gen = [np.random.rand(1, self.cloud_model.shape[1])<.5]
         mask = np.resize(mask_gen, (self.cloud_model.shape[0], self.cloud_model.shape[1]))
         masked_points = np.reshape(self.cloud_model[mask==True], (self.cloud_model.shape[0],-1))
-        
+        if sigma != 0.:
+            noise = sigma*np.random.rand(masked_points.shape[0], masked_points.shape[1])
+            masked_points = masked_points + noise
         return masked_points, mask_gen
         
     def transform_points(self, pts):
@@ -67,7 +69,6 @@ class CloudComparer:
         return sub
         
     def approx_register(self, pts1, pts2, mask_a, mask_b):
-        
         # This is an absolutely horrific way of recovering ordered lists of
         # matched points. Thankfully there's no need to clean this up as this
         # node is purely for debugging
@@ -115,7 +116,7 @@ class CloudComparer:
     
     def on_timer_callback(self, event):
         a, mask_a = self.sample_point_model()
-        b, mask_b = self.sample_point_model()
+        b, mask_b = self.sample_point_model(0.5)
         b = self.transform_points(b)
         R, t = self.approx_register(a,b, mask_a, mask_b)
         c = np.add(b.T, -t.T).T

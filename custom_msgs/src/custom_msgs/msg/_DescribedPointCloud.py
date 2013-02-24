@@ -4,35 +4,18 @@ python3 = True if sys.hexversion > 0x03000000 else False
 import genpy
 import struct
 
-import geometry_msgs.msg
 import std_msgs.msg
-import sensor_msgs.msg
 
 class DescribedPointCloud(genpy.Message):
-  _md5sum = "b7ca0258eada5ecc55971d4f1db1e74f"
+  _md5sum = "fbbef13ecabc7cecbc61dcc36adea686"
   _type = "custom_msgs/DescribedPointCloud"
-  _has_header = False #flag to mark the presence of a Header object
-  _full_text = """sensor_msgs/PointCloud cloud
+  _has_header = True #flag to mark the presence of a Header object
+  _full_text = """Header header
+float32[] cloud_points
 float32[] descriptors
-int16 desc_stride
-float32[] kp
-
-================================================================================
-MSG: sensor_msgs/PointCloud
-# This message holds a collection of 3d points, plus optional additional
-# information about each point.
-
-# Time of sensor data acquisition, coordinate frame ID.
-Header header
-
-# Array of 3d points. Each Point32 should be interpreted as a 3d point
-# in the frame given in the header.
-geometry_msgs/Point32[] points
-
-# Each channel should have the same number of elements as points array,
-# and the data in each channel should correspond 1:1 with each point.
-# Channel names in common practice are listed in ChannelFloat32.msg.
-ChannelFloat32[] channels
+int16 descriptors_stride
+string descriptors_matcher
+float32[] points
 
 ================================================================================
 MSG: std_msgs/Header
@@ -52,49 +35,9 @@ time stamp
 # 1: global frame
 string frame_id
 
-================================================================================
-MSG: geometry_msgs/Point32
-# This contains the position of a point in free space(with 32 bits of precision).
-# It is recommeded to use Point wherever possible instead of Point32.  
-# 
-# This recommendation is to promote interoperability.  
-#
-# This message is designed to take up less space when sending
-# lots of points at once, as in the case of a PointCloud.  
-
-float32 x
-float32 y
-float32 z
-================================================================================
-MSG: sensor_msgs/ChannelFloat32
-# This message is used by the PointCloud message to hold optional data
-# associated with each point in the cloud. The length of the values
-# array should be the same as the length of the points array in the
-# PointCloud, and each value should be associated with the corresponding
-# point.
-
-# Channel names in existing practice include:
-#   "u", "v" - row and column (respectively) in the left stereo image.
-#              This is opposite to usual conventions but remains for
-#              historical reasons. The newer PointCloud2 message has no
-#              such problem.
-#   "rgb" - For point clouds produced by color stereo cameras. uint8
-#           (R,G,B) values packed into the least significant 24 bits,
-#           in order.
-#   "intensity" - laser or pixel intensity.
-#   "distance"
-
-# The channel name should give semantics of the channel (e.g.
-# "intensity" instead of "value").
-string name
-
-# The values array should be 1-1 with the elements of the associated
-# PointCloud.
-float32[] values
-
 """
-  __slots__ = ['cloud','descriptors','desc_stride','kp']
-  _slot_types = ['sensor_msgs/PointCloud','float32[]','int16','float32[]']
+  __slots__ = ['header','cloud_points','descriptors','descriptors_stride','descriptors_matcher','points']
+  _slot_types = ['std_msgs/Header','float32[]','float32[]','int16','string','float32[]']
 
   def __init__(self, *args, **kwds):
     """
@@ -104,7 +47,7 @@ float32[] values
     changes.  You cannot mix in-order arguments and keyword arguments.
 
     The available fields are:
-       cloud,descriptors,desc_stride,kp
+       header,cloud_points,descriptors,descriptors_stride,descriptors_matcher,points
 
     :param args: complete set of field values, in .msg order
     :param kwds: use keyword arguments corresponding to message field names
@@ -113,19 +56,25 @@ float32[] values
     if args or kwds:
       super(DescribedPointCloud, self).__init__(*args, **kwds)
       #message fields cannot be None, assign default values for those that are
-      if self.cloud is None:
-        self.cloud = sensor_msgs.msg.PointCloud()
+      if self.header is None:
+        self.header = std_msgs.msg.Header()
+      if self.cloud_points is None:
+        self.cloud_points = []
       if self.descriptors is None:
         self.descriptors = []
-      if self.desc_stride is None:
-        self.desc_stride = 0
-      if self.kp is None:
-        self.kp = []
+      if self.descriptors_stride is None:
+        self.descriptors_stride = 0
+      if self.descriptors_matcher is None:
+        self.descriptors_matcher = ''
+      if self.points is None:
+        self.points = []
     else:
-      self.cloud = sensor_msgs.msg.PointCloud()
+      self.header = std_msgs.msg.Header()
+      self.cloud_points = []
       self.descriptors = []
-      self.desc_stride = 0
-      self.kp = []
+      self.descriptors_stride = 0
+      self.descriptors_matcher = ''
+      self.points = []
 
   def _get_types(self):
     """
@@ -140,40 +89,32 @@ float32[] values
     """
     try:
       _x = self
-      buff.write(_struct_3I.pack(_x.cloud.header.seq, _x.cloud.header.stamp.secs, _x.cloud.header.stamp.nsecs))
-      _x = self.cloud.header.frame_id
+      buff.write(_struct_3I.pack(_x.header.seq, _x.header.stamp.secs, _x.header.stamp.nsecs))
+      _x = self.header.frame_id
       length = len(_x)
       if python3 or type(_x) == unicode:
         _x = _x.encode('utf-8')
         length = len(_x)
       buff.write(struct.pack('<I%ss'%length, length, _x))
-      length = len(self.cloud.points)
+      length = len(self.cloud_points)
       buff.write(_struct_I.pack(length))
-      for val1 in self.cloud.points:
-        _x = val1
-        buff.write(_struct_3f.pack(_x.x, _x.y, _x.z))
-      length = len(self.cloud.channels)
-      buff.write(_struct_I.pack(length))
-      for val1 in self.cloud.channels:
-        _x = val1.name
-        length = len(_x)
-        if python3 or type(_x) == unicode:
-          _x = _x.encode('utf-8')
-          length = len(_x)
-        buff.write(struct.pack('<I%ss'%length, length, _x))
-        length = len(val1.values)
-        buff.write(_struct_I.pack(length))
-        pattern = '<%sf'%length
-        buff.write(struct.pack(pattern, *val1.values))
+      pattern = '<%sf'%length
+      buff.write(struct.pack(pattern, *self.cloud_points))
       length = len(self.descriptors)
       buff.write(_struct_I.pack(length))
       pattern = '<%sf'%length
       buff.write(struct.pack(pattern, *self.descriptors))
-      buff.write(_struct_h.pack(self.desc_stride))
-      length = len(self.kp)
+      buff.write(_struct_h.pack(self.descriptors_stride))
+      _x = self.descriptors_matcher
+      length = len(_x)
+      if python3 or type(_x) == unicode:
+        _x = _x.encode('utf-8')
+        length = len(_x)
+      buff.write(struct.pack('<I%ss'%length, length, _x))
+      length = len(self.points)
       buff.write(_struct_I.pack(length))
       pattern = '<%sf'%length
-      buff.write(struct.pack(pattern, *self.kp))
+      buff.write(struct.pack(pattern, *self.points))
     except struct.error as se: self._check_types(se)
     except TypeError as te: self._check_types(te)
 
@@ -183,56 +124,29 @@ float32[] values
     :param str: byte array of serialized message, ``str``
     """
     try:
-      if self.cloud is None:
-        self.cloud = sensor_msgs.msg.PointCloud()
+      if self.header is None:
+        self.header = std_msgs.msg.Header()
       end = 0
       _x = self
       start = end
       end += 12
-      (_x.cloud.header.seq, _x.cloud.header.stamp.secs, _x.cloud.header.stamp.nsecs,) = _struct_3I.unpack(str[start:end])
+      (_x.header.seq, _x.header.stamp.secs, _x.header.stamp.nsecs,) = _struct_3I.unpack(str[start:end])
       start = end
       end += 4
       (length,) = _struct_I.unpack(str[start:end])
       start = end
       end += length
       if python3:
-        self.cloud.header.frame_id = str[start:end].decode('utf-8')
+        self.header.frame_id = str[start:end].decode('utf-8')
       else:
-        self.cloud.header.frame_id = str[start:end]
+        self.header.frame_id = str[start:end]
       start = end
       end += 4
       (length,) = _struct_I.unpack(str[start:end])
-      self.cloud.points = []
-      for i in range(0, length):
-        val1 = geometry_msgs.msg.Point32()
-        _x = val1
-        start = end
-        end += 12
-        (_x.x, _x.y, _x.z,) = _struct_3f.unpack(str[start:end])
-        self.cloud.points.append(val1)
+      pattern = '<%sf'%length
       start = end
-      end += 4
-      (length,) = _struct_I.unpack(str[start:end])
-      self.cloud.channels = []
-      for i in range(0, length):
-        val1 = sensor_msgs.msg.ChannelFloat32()
-        start = end
-        end += 4
-        (length,) = _struct_I.unpack(str[start:end])
-        start = end
-        end += length
-        if python3:
-          val1.name = str[start:end].decode('utf-8')
-        else:
-          val1.name = str[start:end]
-        start = end
-        end += 4
-        (length,) = _struct_I.unpack(str[start:end])
-        pattern = '<%sf'%length
-        start = end
-        end += struct.calcsize(pattern)
-        val1.values = struct.unpack(pattern, str[start:end])
-        self.cloud.channels.append(val1)
+      end += struct.calcsize(pattern)
+      self.cloud_points = struct.unpack(pattern, str[start:end])
       start = end
       end += 4
       (length,) = _struct_I.unpack(str[start:end])
@@ -242,14 +156,23 @@ float32[] values
       self.descriptors = struct.unpack(pattern, str[start:end])
       start = end
       end += 2
-      (self.desc_stride,) = _struct_h.unpack(str[start:end])
+      (self.descriptors_stride,) = _struct_h.unpack(str[start:end])
+      start = end
+      end += 4
+      (length,) = _struct_I.unpack(str[start:end])
+      start = end
+      end += length
+      if python3:
+        self.descriptors_matcher = str[start:end].decode('utf-8')
+      else:
+        self.descriptors_matcher = str[start:end]
       start = end
       end += 4
       (length,) = _struct_I.unpack(str[start:end])
       pattern = '<%sf'%length
       start = end
       end += struct.calcsize(pattern)
-      self.kp = struct.unpack(pattern, str[start:end])
+      self.points = struct.unpack(pattern, str[start:end])
       return self
     except struct.error as e:
       raise genpy.DeserializationError(e) #most likely buffer underfill
@@ -263,40 +186,32 @@ float32[] values
     """
     try:
       _x = self
-      buff.write(_struct_3I.pack(_x.cloud.header.seq, _x.cloud.header.stamp.secs, _x.cloud.header.stamp.nsecs))
-      _x = self.cloud.header.frame_id
+      buff.write(_struct_3I.pack(_x.header.seq, _x.header.stamp.secs, _x.header.stamp.nsecs))
+      _x = self.header.frame_id
       length = len(_x)
       if python3 or type(_x) == unicode:
         _x = _x.encode('utf-8')
         length = len(_x)
       buff.write(struct.pack('<I%ss'%length, length, _x))
-      length = len(self.cloud.points)
+      length = len(self.cloud_points)
       buff.write(_struct_I.pack(length))
-      for val1 in self.cloud.points:
-        _x = val1
-        buff.write(_struct_3f.pack(_x.x, _x.y, _x.z))
-      length = len(self.cloud.channels)
-      buff.write(_struct_I.pack(length))
-      for val1 in self.cloud.channels:
-        _x = val1.name
-        length = len(_x)
-        if python3 or type(_x) == unicode:
-          _x = _x.encode('utf-8')
-          length = len(_x)
-        buff.write(struct.pack('<I%ss'%length, length, _x))
-        length = len(val1.values)
-        buff.write(_struct_I.pack(length))
-        pattern = '<%sf'%length
-        buff.write(val1.values.tostring())
+      pattern = '<%sf'%length
+      buff.write(self.cloud_points.tostring())
       length = len(self.descriptors)
       buff.write(_struct_I.pack(length))
       pattern = '<%sf'%length
       buff.write(self.descriptors.tostring())
-      buff.write(_struct_h.pack(self.desc_stride))
-      length = len(self.kp)
+      buff.write(_struct_h.pack(self.descriptors_stride))
+      _x = self.descriptors_matcher
+      length = len(_x)
+      if python3 or type(_x) == unicode:
+        _x = _x.encode('utf-8')
+        length = len(_x)
+      buff.write(struct.pack('<I%ss'%length, length, _x))
+      length = len(self.points)
       buff.write(_struct_I.pack(length))
       pattern = '<%sf'%length
-      buff.write(self.kp.tostring())
+      buff.write(self.points.tostring())
     except struct.error as se: self._check_types(se)
     except TypeError as te: self._check_types(te)
 
@@ -307,56 +222,29 @@ float32[] values
     :param numpy: numpy python module
     """
     try:
-      if self.cloud is None:
-        self.cloud = sensor_msgs.msg.PointCloud()
+      if self.header is None:
+        self.header = std_msgs.msg.Header()
       end = 0
       _x = self
       start = end
       end += 12
-      (_x.cloud.header.seq, _x.cloud.header.stamp.secs, _x.cloud.header.stamp.nsecs,) = _struct_3I.unpack(str[start:end])
+      (_x.header.seq, _x.header.stamp.secs, _x.header.stamp.nsecs,) = _struct_3I.unpack(str[start:end])
       start = end
       end += 4
       (length,) = _struct_I.unpack(str[start:end])
       start = end
       end += length
       if python3:
-        self.cloud.header.frame_id = str[start:end].decode('utf-8')
+        self.header.frame_id = str[start:end].decode('utf-8')
       else:
-        self.cloud.header.frame_id = str[start:end]
+        self.header.frame_id = str[start:end]
       start = end
       end += 4
       (length,) = _struct_I.unpack(str[start:end])
-      self.cloud.points = []
-      for i in range(0, length):
-        val1 = geometry_msgs.msg.Point32()
-        _x = val1
-        start = end
-        end += 12
-        (_x.x, _x.y, _x.z,) = _struct_3f.unpack(str[start:end])
-        self.cloud.points.append(val1)
+      pattern = '<%sf'%length
       start = end
-      end += 4
-      (length,) = _struct_I.unpack(str[start:end])
-      self.cloud.channels = []
-      for i in range(0, length):
-        val1 = sensor_msgs.msg.ChannelFloat32()
-        start = end
-        end += 4
-        (length,) = _struct_I.unpack(str[start:end])
-        start = end
-        end += length
-        if python3:
-          val1.name = str[start:end].decode('utf-8')
-        else:
-          val1.name = str[start:end]
-        start = end
-        end += 4
-        (length,) = _struct_I.unpack(str[start:end])
-        pattern = '<%sf'%length
-        start = end
-        end += struct.calcsize(pattern)
-        val1.values = numpy.frombuffer(str[start:end], dtype=numpy.float32, count=length)
-        self.cloud.channels.append(val1)
+      end += struct.calcsize(pattern)
+      self.cloud_points = numpy.frombuffer(str[start:end], dtype=numpy.float32, count=length)
       start = end
       end += 4
       (length,) = _struct_I.unpack(str[start:end])
@@ -366,14 +254,23 @@ float32[] values
       self.descriptors = numpy.frombuffer(str[start:end], dtype=numpy.float32, count=length)
       start = end
       end += 2
-      (self.desc_stride,) = _struct_h.unpack(str[start:end])
+      (self.descriptors_stride,) = _struct_h.unpack(str[start:end])
+      start = end
+      end += 4
+      (length,) = _struct_I.unpack(str[start:end])
+      start = end
+      end += length
+      if python3:
+        self.descriptors_matcher = str[start:end].decode('utf-8')
+      else:
+        self.descriptors_matcher = str[start:end]
       start = end
       end += 4
       (length,) = _struct_I.unpack(str[start:end])
       pattern = '<%sf'%length
       start = end
       end += struct.calcsize(pattern)
-      self.kp = numpy.frombuffer(str[start:end], dtype=numpy.float32, count=length)
+      self.points = numpy.frombuffer(str[start:end], dtype=numpy.float32, count=length)
       return self
     except struct.error as e:
       raise genpy.DeserializationError(e) #most likely buffer underfill
@@ -381,4 +278,3 @@ float32[] values
 _struct_I = genpy.struct_I
 _struct_h = struct.Struct("<h")
 _struct_3I = struct.Struct("<3I")
-_struct_3f = struct.Struct("<3f")

@@ -1,4 +1,6 @@
-sensor_msgs/PointCloud cloud
+Header header
+float32[] cloud_points
 float32[] descriptors
-int16 desc_stride
-float32[] kp
+int16 descriptors_stride
+string descriptors_matcher
+float32[] points
