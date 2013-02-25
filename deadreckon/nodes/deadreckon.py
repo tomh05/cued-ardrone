@@ -185,12 +185,13 @@ if __name__ == '__main__':
     FILTERENABLE = rospy.get_param('~filterenable', False)
     if FILTERSIZE < 2:
         FILTERENABLE = False
-    
-    print "\r\n----------------------------------DEAD RECKON--------------------------------------"
-    print "Use median filter (", FILTERSIZE, ") : ", FILTERENABLE, "        (set with _filtersize and _filterenable)"
+    print "\r\n"
+    print "========================== Dead Reckon ============================"
+    print "Use median filter (", FILTERSIZE, ") : ", FILTERENABLE, " - (set with _filtersize and _filterenable)"
     PATHDIV = rospy.get_param('~pathdiv', 20)
-    print "Downsample path by factor of: ", PATHDIV, "         (set with _pathdiv)"
-    print "\r\n-----------------------------------------------------------------------------------"
+    print "Downsample path by factor of: ", PATHDIV, " - (set with _pathdiv)"
+    print "==================================================================="
+    print "\r\n"
     
     
     rospy.spin()

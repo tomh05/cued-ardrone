@@ -14,6 +14,7 @@
         <param name="enable_navdata_euler_angles" value="true" />
         <param name="enable_navdata_magneto" value="true" />
         <param name="enable_navdata_time" value="true" />
+        <param name="enable_navdata_altitude " value="true" />
         
         
         <param name="outdoor" value="0" />
