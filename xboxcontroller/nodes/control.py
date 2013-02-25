@@ -7,22 +7,41 @@ from sensor_msgs.msg import Joy
 from std_msgs.msg import Empty
 from geometry_msgs.msg import Twist
 
-button_state = [0] * 11; # store previous button state
+button_state = [0] * 15; # store previous button state
 
 
 def processJoy(d): # callback function
-    scanButtons(d)
     scanAxes(d) 
+    scanButtons(d)
 
 def scanButtons(d): # debounce buttons and fire events
-    for i in range(11):
+    for i in range(15):
         if d.buttons[i] != button_state[i]:
             button_state[i] = d.buttons[i] 
             if button_state[i]:
                 rospy.loginfo('Button press: %s' % (i,))
                 if i >= 0 and i < len(actions):
                     actions[i]()
+def  cross_left():
+    rospy.loginfo("Firing Left")
+    pub = rospy.Publisher('/ardrone/left',Empty);
+    pub.publish()
+    
+def  cross_right():
+    rospy.loginfo("Firing Right")
+    pub = rospy.Publisher('/ardrone/right',Empty);
+    pub.publish()
 
+def  cross_up():
+    rospy.loginfo("Firing Up")
+    pub = rospy.Publisher('/ardrone/up',Empty);
+    pub.publish()
+
+def  cross_down():
+    rospy.loginfo("Firing Down")
+    pub = rospy.Publisher('/ardrone/down',Empty);
+    pub.publish()
+    
 def takeoff():
     rospy.loginfo("Taking off")
     pub = rospy.Publisher('/ardrone/takeoff',Empty);
@@ -84,7 +103,11 @@ actions = {
     7: fire_start,
     8: reset,
     9: fire_left_pad_button,
-    10: fire_right_pad_button
+    10: fire_right_pad_button,
+    11: cross_left,
+    12: cross_right,
+    13: cross_up,
+    14: cross_down
 }
 
 def scanAxes(d):
@@ -98,11 +121,15 @@ def scanAxes(d):
 #    d.axes[7] # D-pad Y
     t = Twist()
     # 0.5 scaling factor for sensitivity
-    t.linear.x  = 0.5 * d.axes[1]
-    t.linear.y  = 0.5 * d.axes[0]
-    t.linear.z  = 0.5 * 0.5 * ( d.axes[2] - d.axes[5] )
-    print t.linear.z
-    t.angular.z = 0.8 * d.axes[3]
+    # Gating +/- 0.1 to allow hover mode with no input
+    if abs(0.5*d.axes[1]) > 0.1:
+        t.linear.x  = 0.5 * d.axes[1]
+    if abs(0.5*d.axes[0]) > 0.1:
+        t.linear.y  = 0.5 * d.axes[0]
+    if abs(0.5 * 0.5 * ( d.axes[2] - d.axes[5] )) > 0.1:
+        t.linear.z  = 0.5 * 0.5 * ( d.axes[2] - d.axes[5] )
+    if abs(0.8*d.axes[3]) > 0.1:
+        t.angular.z = 0.8 * d.axes[3]
 
     twist_pub = rospy.Publisher('cmd_vel',Twist)
     twist_pub.publish(t)
