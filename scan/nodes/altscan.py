@@ -272,6 +272,11 @@ class ScanController:
         self.feature_tracker.load_frame(1)
         self.feature_tracker.load_tf(1)
         self.frame_1_is_loaded = True
+        
+    def continue_from_cloud(self, empty):
+        print "Continuing"
+        self.feature_tracker.image_flip()
+        self.feature_tracker.continue_frame()
     
     def get_frame_2(self, empty):
         print "Loading Frame 2\r\n"
@@ -320,9 +325,7 @@ class ScanController:
         rospy.Subscriber('/ardrone/front/camera_info',sensor_msgs.msg.CameraInfo, self.feature_tracker.setCameraInfo)
         rospy.Subscriber('/xboxcontroller/button_a',Empty,self.get_frame_1)
         rospy.Subscriber('/xboxcontroller/button_b',Empty,self.get_frame_2)
-        rospy.Subscriber('/xboxcontroller/button_x',Empty,self.start_scanning)
-        rospy.Subscriber('/xboxcontroller/button_y',Empty,self.stop_scanning)
-        rospy.Subscriber('/xboxcontroller/button_back',Empty,self.crude_auto_scan)
+        rospy.Subscriber('/xboxcontroller/button_x',Empty,self.continue_from_cloud)
 
     
 
@@ -341,7 +344,7 @@ class FeatureTracker:
         self.cloud_pub = rospy.Publisher('/scan/absolute_cloud', PointCloud)
         self.cloud_pub2 = rospy.Publisher('/scan/relative_cloud', PointCloud)
         self.desc_cloud_pub = rospy.Publisher('/scan/relative_described_cloud', DescribedPointCloud)
-        self.pose_pub = rospy.Publisher('/scan/pose', gm.PoseStamped)
+        self.br = tf.TransformBroadcaster() 
         self.prev_position = None
         self.prev_quat = None
         self.prev_prev_position = None
@@ -349,6 +352,7 @@ class FeatureTracker:
         self.speech_limiter = 0
         self.corners = None
         self.time1 = None
+        self.first_continue = True
         
         self.image = None
         
@@ -424,6 +428,54 @@ class FeatureTracker:
         
         return i1_pts, i2_pts
         
+    def match_filter_known_points(self, kp1, kp2,  desc1):
+        """Matches the specified point with already triangulated points"""
+        desc2 = self.descriptor_buffer
+        # Match features        
+        matches = self.dm.match(desc1, desc2)
+        #print "matches:\r\n", matches
+        matches2 = self.dm.match(desc2, desc1)
+        #print "matches2:\r\n", matches2
+        
+        #print "desc1:\r\n", desc1
+        #print "desc2:\r\n", desc2
+
+        # Produce ordered arrays of paired points
+        i1_indices = list(x.queryIdx for x in matches)
+        i2_indices = list(x.trainIdx for x in matches)
+        i2_indices2 = list(x.queryIdx for x in matches2) 
+        i1_indices2 = list(x.trainIdx for x in matches2)
+        
+        
+        # Find pairing that are consistent in both dirs
+        comb1 = set(zip(i1_indices, i2_indices))
+        comb2 = set(zip(i1_indices2, i2_indices2))
+        comb = list(comb1.intersection(comb2))
+        comb = zip(*list(comb))
+        i1_indices = comb[0]
+        i2_indices = comb[1]
+        #print i1_indices
+        #print i2_indices
+        
+        # Order pairs
+        i2_pts_3D = np.array(list(self.location_buffer.T[i] for i in i2_indices))
+        print i1_indices
+        print kp1.shape
+        i1_pts = np.delete(kp1, i1_indices, 0)
+        i2_pts = np.delete(kp2, i1_indices, 0)
+        #print "loc buffer:\r\n", self.location_buffer
+        
+        # Find descriptors that were matched
+        print desc1.shape
+        self.desc = np.delete(desc1, i1_indices, 0)
+        print self.desc.shape
+        descb = np.array(list(desc2[i] for i in i2_indices))
+        #print "desca:\r\n", desca
+        #print "descb:\r\n", descb
+        
+        return i1_pts, i2_pts, i2_pts_3D
+        
+    
     def match_known_points(self, kp1, desc1):
         """Matches the specified point with already triangulated points"""
         desc2 = self.descriptor_buffer
@@ -466,7 +518,8 @@ class FeatureTracker:
         #print "descb:\r\n", descb
         
         return i1_pts, i2_pts_3D
-        
+     
+    
     def make_homo(self, pts):
         pts = np.append(pts,np.array([np.ones(pts.shape[0])]).T, 1)
         return pts
@@ -806,9 +859,53 @@ class FeatureTracker:
         
         return np.array([u,v]).T
 
+    def continue_frame(self):
+        """Loads a frame and extracts features"""
+        self.image_flip()
+        frame = cv2.cvtColor(self.image_buffer, cv2.COLOR_BGR2GRAY)
+        # There appears to be no way to specify the bound on no of 
+        # features detected. May be able increase no by running four
+        # times; once on each quadrant either by masking (supported by
+        # cv2 as an additional parameter) or by actually splitting the
+        # image
+        pts = self.fd.detect(frame)
+        kp, desc = self.de.compute(frame, pts)
+        success = self.position_from_cloud(kp, desc)
+        if success:
+            if (self.first_continue):
+                self.grey_now = frame
+                self.pts2 = pts
+                self.kp2 = kp
+                self.desc2 = desc
+                self.time2 = self.time_buffer
+                self.position_i2 =self.position_ic
+                self.position_w2 =self.position_wc
+                self.quat_w_to_i2 = self.quat_w_to_ic
+                self.first_continue = False
+            else:
+                self.grey_previous = self.grey_now
+                self.pts1 = self.pts2
+                self.kp1 = self.kp2
+                self.desc1 = self.desc2
+                self.time1 = self.time2
+                self.position_i1 =self.position_i2
+                self.position_w1 =self.position_w2
+                self.quat_w_to_i1 = self.quat_w_to_i2
+                self.grey_now = frame
+                self.pts2 = pts
+                self.kp2 = kp
+                self.desc2 = desc
+                self.time2 = self.time_buffer
+                self.position_i2 =self.position_ic
+                self.position_w2 =self.position_wc
+                self.quat_w_to_i2 = self.quat_w_to_ic
+                self.get_change_in_tf()
+                self.process_frames()
+            
+    
     def load_frame(self, frame_no):
         """Loads a frame and extracts features"""
-        
+        self.first_continue = True
         if (frame_no < 1 or frame_no > 2):
             print "Invalid frame number : ", frame_no
             return
@@ -837,7 +934,7 @@ class FeatureTracker:
             self.kp2 = kp
             self.desc2 = desc
             self.time2 = self.time_buffer
-            
+    
     def load_tf(self, frame_no):
         """Loads pose for specified frame"""
         
@@ -861,13 +958,12 @@ class FeatureTracker:
         """====================================================================
         # Image co-ordinate handling
         ===================================================================="""
-        
-        self.tf.waitForTransform("ardrone_base_frontcam", "world", self.time_buffer, rospy.Duration(16))
         position_i, qi = self.tf.lookupTransform("ardrone_base_frontcam", "world", rospy.Time(0))
         position_i = -np.array((position_i))
         quaternion_w_to_i = qi
         qi = tf.transformations.quaternion_inverse(qi)
         
+        print "pw: ", position_w
         
         if frame_no == 1:
             self.position_w1 = position_w
@@ -916,22 +1012,21 @@ class FeatureTracker:
         
         # Get relative quaternion
         # qmid = qafter.qbefore-1
-        self.relative_quat = tf.transformations.quaternion_multiply(self.quat_i_to_w1, tf.transformations.quaternion_inverse(self.quat_i_to_w2))
-        self.relative_quat2 = np.array([tf.transformations.euler_from_quaternion(self.relative_quat)]).T
-        self.relative_quat[0] = -self.relative_quat2[1]
-        self.relative_quat[1] = -self.relative_quat2[2]
-        self.relative_quat[2] = self.relative_quat2[0]
-        self.relative_quat = tf.transformations.quaternion_from_euler(self.relative_quat[0],self.relative_quat[1],self.relative_quat[2])
-   
-    def position_from_cloud(self):
+        self.relative_quat = tf.transformations.quaternion_multiply(self.quat_w_to_i2, tf.transformations.quaternion_inverse(self.quat_w_to_i1))
+        
+    def position_from_cloud(self, kp =None,desc=None):
         """Attempts to locate world position by matching observed image points to 
         previously triangulated points"""
         
+        if kp == None:
+            kp = self.kp1
+            desc = self.desc1
+        
         if self.descriptor_buffer == None:
             print "No previously localised points\r\n"
-            return
+            return False
         
-        i1_pts_spec, i2_pts_spec = self.match_known_points(self.kp1, self.desc1)
+        i1_pts_spec, i2_pts_spec = self.match_known_points(kp, desc)
         print "Cross matches: ", len(i1_pts_spec)
         
         #print i1_pts_spec
@@ -957,11 +1052,11 @@ class FeatureTracker:
             print "===================="
             print "Template not found"
             print "===================="
-            return
+            return False
         
         
         print "No. of inliers: ", len(inliers)   
-        if len(inliers) > 10: 
+        if len(inliers) > 16: 
             
             
             R, J = cv2.Rodrigues(R)        
@@ -980,26 +1075,27 @@ class FeatureTracker:
             point = gm.Point()
             orientation = gm.Quaternion() 
             
-            # Publish stamped pose
-            # Note we need to flip back into world axis
-            point.x = t_position[0]
-            point.y = t_position[1]
-            point.z = t_position[2]
-            pose.position = point
-            quat = tf.transformations.quaternion_from_matrix(Rhomo)
-            orientation.x = quat[0]
-            orientation.y = quat[1]
-            orientation.z = quat[2]
-            orientation.w = quat[3]
-            pose.orientation = orientation
+            # Publish tf
+            quat = tf.transformations.quaternion_inverse(tf.transformations.quaternion_from_matrix(Rhomo))
             header.stamp = self.time1
             header.frame_id = '/world'
-            poseStamped.pose = pose
-            poseStamped.header = header
             
-            self.pose_pub.publish(poseStamped)
+            self.position_wc = t_position.T[0]
+            print "wc: ", self.position_wc
+            self.quat_i_to_wc = quat
+            self.quat_w_to_ic = tf.transformations.quaternion_inverse(quat)
+            self.position_ic = tf.transformations.quaternion_matrix(self.quat_w_to_ic)[:3,:3].dot(t_position).T[0]
+            print "ic: ", self.position_ic
+            
+            self.br.sendTransform((t_position[0],t_position[1],t_position[2]), 
+                         # translation happens first, then rotation
+                         quat,
+                         header.stamp,
+                         "/ardrone_from_cloud",
+                         "/world") 
+            return True
         
-        
+        return False
         '''
         x_homo = self.make_homo(i1_pts_spec)
         X_homo = self.make_homo(i2_pts_spec)
@@ -1106,14 +1202,17 @@ class FeatureTracker:
         if i1_pts == None or len(i1_pts) < 8:
             return
         
+        print len(i1_pts), " matched points"
+        
         #Check for cross-matching with previously triangulated points
         if self.descriptor_buffer != None:
             time_debug = time.time()
-            i1_pts_spec, i2_pts_spec = self.match_known_points(self.kp1, self.desc)
-            print "Frame-frame matches already triangulated: ", len(i1_pts_spec)
+            i1_pts, i2_pts, threeD = self.match_filter_known_points(i1_pts, i2_pts, self.desc)
+            print "Frame-frame matches already triangulated: ", len(threeD)
+            print "New features: ", len(i1_pts)
             print "Matching Took: ", time.time()-time_debug
     
-        print len(i1_pts), " matched points"
+        
 
 
         time_debug = time.time()
@@ -1744,7 +1843,7 @@ class FeatureTracker:
             self.inverseCameraMatrix = np.linalg.inv(self.cameraMatrix)
             self.distCoeffs = np.array([ci.D], dtype=np.float32)
             self.P = np.array([ci.P[:4],ci.P[4:8],ci.P[8:12]])
-            self.calibrated = True    
+            self.calibrated = True
             print "Calibration Initialised"
 
 
