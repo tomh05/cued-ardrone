@@ -21,8 +21,11 @@ class IMUHandle:
         self.prev_alpha = 0.0
         self.prev_beta = 0.0
         self.prev_gamma = 0.0
+
         self.rotZoffset = 0.0 # initial value of yaw to allow for offsets
         self.isFirstFrame= True # for resetting initial yaw value
+
+        self.prevq = np.array([0.0,0.0,0.0,1.0])
 
 
     def handle_get_imu_movement(self,obj):
@@ -56,7 +59,7 @@ class IMUHandle:
         # translation
         relT.x = np.float64(vx*deltat / 1000.0)
         relT.y = np.float64(vy*deltat / 1000.0)
-        relT.z = 0.0
+        relT.z = np.float64((navdata.altd / 1000.0) - self.prev_z)
 
         absT.y = 0.0
         absT.y = 0.0
@@ -73,15 +76,23 @@ class IMUHandle:
 
         # produce quaternion
         q= tf.transformations.quaternion_from_euler(self.alpha,self.beta,self.gamma)
+        qprime = tf.transformations.quaternion_multiply(q, tf.transformations.quaternion_inverse(self.prevq))
 
+        self.prevq = q
+        self.prev_z = navdata.altd / 1000.0
 
 
         response.absoluteTransform.header=navdata.header
         response.absoluteTransform.transform.translation = absT
-        response.absoluteTransform.transform.rotation = Quaternion(x=q[0], y=q[1], z = q[2], w = q[3])
+        #response.absoluteTransform.transform.rotation = Quaternion(x=q[0], y=q[1], z = q[2], w = q[3])
+        response.absoluteTransform.transform.rotation = Quaternion(x=qprime[0], y=qprime[1], z = qprime[2], w = qprime[3])
 
         response.relativeTranslation = relT
+        
 
+        self.prev_alpha = self.alpha
+        self.prev_beta = self.beta
+        self.prev_gamma = self.gamma
         return response
 
     def imu_movement_server(self):

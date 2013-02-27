@@ -9,7 +9,7 @@ import roslib; roslib.load_manifest('dynamics')
 import rospy
 
 from dynamics.msg import Navdata
-from geometry_msgs.msg import Twist, Pose
+from geometry_msgs.msg import Twist, Pose, PoseStamped
 from std_msgs.msg import Empty
 import tf
 from time import time, sleep
@@ -26,15 +26,14 @@ class DroneMovement:
         self.resetpub = rospy.Publisher('/ardrone/reset', Empty)
         self.takeoffpub = rospy.Publisher('/ardrone/takeoff', Empty)
          
-        self.currentPos = (0.0, 0.0, 1.5)
+        self.currentPos = (0.0, 0.0, 0.0)
         self.currentYaw =0.0
-        self.targetPos = (0.0,0.0,1.5) #self.currentPos
+        self.targetPos = (0.0,0.0,1.0) #self.currentPos
         self.targetYaw = self.currentYaw
         
         self.positionController = PositionController(self.targetPos,self.targetYaw,self.currentPos,self.currentYaw)
-        self.positionController.refalon = True
-        self.positionController.yawon = False # default settings from Rujian's code
-        self.positionController.pc_timer_init()
+        self.positionController.refalon = False # compare current and target z. 
+        self.positionController.yawon = True # TODO enable yaw control once gyros fixed
 
 
 
@@ -45,12 +44,24 @@ class DroneMovement:
 
     def goToWorldPose(self, targetPose):
         self.targetPos = (targetPose.position.x, targetPose.position.y, targetPose.position.z)
+        targetQuat = (targetPose.orientation.x,
+                      targetPose.orientation.y,
+                      targetPose.orientation.z,
+                      targetPose.orientation.w)
+        targetEuler = tf.transformations.euler_from_quaternion(targetQuat)
+        self.targetYaw = targetEuler[2]
         print 'setting pose to:'
-        print targetPose.position
         self.positionController.dpw_handler(self.targetPos)
-        #TODO rotation 
+        print 'yaw is now'
+        print self.targetYaw
+        self.positionController.dyw_handler(self.targetYaw)
+        
+    def goToPoseStamped(self,targetPoseStamped):
+        targetPoseStamped.pose.position.z = 1.0 # it's zero by default
+        self.goToWorldPose(targetPoseStamped.pose) 
     
     def updatePose(self,data):
+        ###### Currently un-used: position is determined by the positionController directly
 
         if (data.transforms[0].child_frame_id == '/ardrone_base_link'):
             self.currentPos = (data.transforms[0].transform.translation.x,
@@ -66,7 +77,10 @@ class DroneMovement:
 if __name__ == '__main__':
         rospy.init_node('movementHandler')
         droneMovement = DroneMovement()
+        rospy.sleep(1.0)
+        droneMovement.positionController.pc_timer_init()
         print 'created'
         rospy.Subscriber('/targetPose',Pose,droneMovement.goToWorldPose);
+        rospy.Subscriber('/move_base_simple/goal',PoseStamped,droneMovement.goToPoseStamped);
         rospy.Subscriber('/tf',tf.msg.tfMessage,droneMovement.updatePose);
         rospy.spin()

@@ -21,7 +21,7 @@ from ar_pose.msg import ARMarkers
 from particlefilter.srv import *
 
 from sensor_msgs.msg import PointCloud, ChannelFloat32
-from geometry_msgs.msg import PoseStamped, Point32, Point
+from geometry_msgs.msg import PoseStamped, Point32, Point, Pose
 
 from visualization_msgs.msg import MarkerArray, Marker
 
@@ -31,7 +31,7 @@ from visualization_msgs.msg import MarkerArray, Marker
 
 # draws pointcloud if false, or arrows if true. 
 # use  less than 20 particles for arrows
-useArrows = False
+useArrows = True
 publishTf = True
 
 #------------------------------------------------------
@@ -52,11 +52,11 @@ gamma_offset = pickle.load(mapfile)
 print gamma_offset
 
 mapVisualisation = MarkerArray()
+#for i in range(len(worldmap.markers)):
 for i in range(len(worldmap.markers)):
     marker = Marker()
     marker.header.frame_id = '/world'
     marker.type = marker.CUBE
-    marker.action = marker.ADD
     marker.scale.x = 0.30
     marker.scale.y = 0.30
     marker.scale.z = 0.05
@@ -67,17 +67,37 @@ for i in range(len(worldmap.markers)):
     marker.id=i
     marker.pose = worldmap.markers[i].pose.pose
     mapVisualisation.markers.append(marker)
- 
+
+# draw room
+marker = Marker()
+marker.header.frame_id = '/world'
+marker.type = marker.CUBE
+marker.action = marker.ADD
+marker.scale.x = 6.3
+marker.scale.y = 5.25
+marker.scale.z = 2.8
+marker.color.a = 0.4
+marker.color.r = 1.0
+marker.color.g = 1.0
+marker.color.b = 1.0
+marker.id=99
+marker.pose.position.x = 0.1
+marker.pose.position.y = -0.175
+marker.pose.position.z = 1.4
+mapVisualisation.markers.append(marker)
+
+
 #------------------------------------------------------
 
 class ParticleFilter:
     def __init__(self):
-        self.N            = 60     # number of particles
+        self.N            = 10      # number of particles
         self.p            = []      # particle list
         self.ar_markers   = None 
         self.w            = []
         self.maxWparticle = 0
-        self.gamma_offset = gamma_offset
+        self.gamma_offset = 0.0 # gamma_offset TODO set a convention
+        self.gamma_offset = gamma_offset #TODO set a convention
         # Callbacks may overlap: make sure they don't by locking thread
         self.lock = threading.Lock()
 
@@ -110,7 +130,8 @@ class ParticleFilter:
         self.createParticles()
 
     def resetgammaCallback(self,d):
-        self.gamma_offset = math.radians(self.navdata.rotZ)
+        self.gamma_offset = 0.0 #TODO fix convention
+        self.gamma_offset = math.radians(self.navdata.rotZ) #TODO fix convention
         for i in range(self.N):
             self.p[i].pos = np.array([0.0,0.0,0.0])
         rospy.loginfo("gamma offset is now " + str(self.gamma_offset))
@@ -139,15 +160,16 @@ class ParticleFilter:
             if (len(self.ar_markers.markers)>0):
                 self.findWeights(self.ar_markers)
          
+                firstmarker = self.ar_markers.markers[0].id
                 # debug: if the markers were used, draw estimates
                 if self.w[0]!=1.0:
                     # flash marker red
-                    mapVisualisation.markers[0].color.g = 0.0
+                    mapVisualisation.markers[firstmarker].color.g = 0.0
                     self.mapMarkerPub.publish(mapVisualisation)
                     self.visualiseEstimates()
                     self.resample()
+                    mapVisualisation.markers[firstmarker].color.g = 1.0
             self.ar_markers = None
-        mapVisualisation.markers[0].color.g = 1.0
         self.mapMarkerPub.publish(mapVisualisation)
         self.broadcastTf(self.navdata.header.stamp,self.maxWparticle)
         self.lock.release()
@@ -176,6 +198,44 @@ class ParticleFilter:
                 marker.pose.position.y =  self.p[i].pos[1] 
                 marker.pose.position.z =  self.p[i].pos[2] 
                 markerArray.markers.append(marker)
+
+                marker = Marker()
+                marker.header.frame_id = '/world'
+                marker.type = marker.CUBE
+                marker.action = marker.ADD
+                marker.scale.x = 0.4
+                marker.scale.y = 0.4
+                marker.scale.z = 0.05
+                marker.color.a = 1.0
+                marker.color.r = 0.0
+                marker.color.g = 1.0
+                marker.color.b = 0.0
+                marker.id=i+self.N+1
+                marker.pose.orientation.x = self.p[i].morientation[0]
+                marker.pose.orientation.y = self.p[i].morientation[1]
+                marker.pose.orientation.z = self.p[i].morientation[2]
+                marker.pose.orientation.w = self.p[i].morientation[3]
+                marker.pose.position.x =  self.p[i].pos[0]
+                marker.pose.position.y =  self.p[i].pos[1] 
+                marker.pose.position.z =  self.p[i].pos[2] 
+                markerArray.markers.append(marker)
+                '''
+                marker = Marker()
+                marker.header.frame_id = '/world'
+                marker.type = marker.ARROW
+                marker.action = marker.ADD
+                marker.scale.x = 0.5
+                marker.scale.y = 6
+                marker.scale.z = 1
+                marker.color.a = 1.0
+                marker.color.r = 0.0
+                marker.color.g = 1.0
+                marker.color.b = 1.0
+                marker.id=i+2*self.N+5
+                marker.pose.position    = worldmap.markers[0].pose.pose.position
+                marker.pose.orientation = worldmap.markers[0].pose.pose.orientation
+                markerArray.markers.append(marker)
+                '''
             self.particleMarkerPub.publish(markerArray)
         else:
             #pc = PointCloud(header=navdata.header)
@@ -189,10 +249,12 @@ class ParticleFilter:
                 newp.y =  self.p[i].pos[1] 
                 newp.z =  self.p[i].pos[2] 
                 visualisationWeight = 1.0
-                if self.ar_markers:
-                    visualisationWeight =  self.p[i].likelihood(worldmap,self.ar_markers)
+                #if self.ar_markers:
+                #    visualisationWeight =  self.w[i] #self.p[i].likelihood(worldmap,self.ar_markers)
+                if len(self.w)>0:
+                    visualisationWeight = self.w[i]
+                    pc.channels[0].values.append(visualisationWeight)
                 pc.points.append(newp)
-                pc.channels[0].values.append(visualisationWeight)
 
             self.pclPub.publish(pc)
 
@@ -258,11 +320,17 @@ class ParticleFilter:
         if publishTf:
             #rospy.loginfo("Transmitting at x=")
             #rospy.loginfo(self.p[i].pos)
+            q = 2
             self.br.sendTransform(self.p[i].pos,
                                   # translation happens first, then rotation
-                                  self.p[i].orientation,
+                                  #(worldmap.markers[q].pose.pose.orientation.x,
+                                  #worldmap.markers[q].pose.pose.orientation.y,
+                                  #worldmap.markers[q].pose.pose.orientation.z,
+                                  #worldmap.markers[q].pose.pose.orientation.w),
+                                  self.p[i].morientation,
+                                  #(0.5,0.5,0.5,0.49),
                                   time, 
-                                  "/ardrone_base_link",
+                                  "/ardrone_base_link_particle_filter",
                                   "/world")
     #    def bestGuess(self):
     #    for i in range(self.N):

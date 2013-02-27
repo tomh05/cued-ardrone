@@ -14,6 +14,7 @@ from std_msgs.msg import Empty
 import tf
 from time import time, sleep
 import sys
+import math
 
 from positionControl import PositionController
 
@@ -40,7 +41,16 @@ class PosRequester:
             targetPose.position.x = float(raw_input('x? '))
             targetPose.position.y = float(raw_input('y? '))
             targetPose.position.z = float(raw_input('z? '))
-            self.broadcastPose(targetPose)
+            eulerz = float(raw_input('rot z? '))
+            np_Quaternion = tf.transformations.quaternion_from_euler(0.0,0.0,math.radians(eulerz))
+            targetPose.orientation.x = np_Quaternion[0]
+            targetPose.orientation.y = np_Quaternion[1]
+            targetPose.orientation.z = np_Quaternion[2]
+            targetPose.orientation.w = np_Quaternion[3]
+            print ""
+            print targetPose
+            if (raw_input('confirm y/n? ') == 'y'):
+                self.broadcastPose(targetPose)
 
 
 if __name__ == '__main__':

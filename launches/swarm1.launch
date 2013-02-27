@@ -1,0 +1,19 @@
+<launch>
+
+<group ns="pumba">
+    <node name="pumba_driver" pkg="ardrone_autonomy" type="ardrone_driver" args="-ip 172.31.193.4"/>
+
+    <group ns="ardrone/front">
+    <node name="image_proc" pkg="image_proc" type="image_proc" />
+    </group>
+</group>
+
+<group ns="wilbur">
+    <node name="wilbur_driver" pkg="ardrone_autonomy" type="ardrone_driver" args="-ip 172.31.193.1"/>
+    <group ns="ardrone/front">
+    <node name="image_proc" pkg="image_proc" type="image_proc" />
+    </group>
+</group>
+
+
+</launch>

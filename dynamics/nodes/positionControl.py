@@ -2,6 +2,9 @@
 
 '''
 PositionController.py
+
+Modified for particle filter inclusion
+
 This program receives current position and desired position in world coordinates, and calculates commands in the drone command frame, using ssm
 Also provides 'fail-safe mechanism' which uses navdata integration to arrive at estimated world positions.
 '''
@@ -19,7 +22,7 @@ import tf
 from time import time, sleep
 import sys
 from math import sin, cos, radians, degrees, pi
-import pickle
+from visualization_msgs.msg import MarkerArray, Marker
 
 
 class PositionController:
@@ -40,7 +43,7 @@ class PositionController:
         self.ref = {'al':1500}    #'al' for height
         self.error = {'al':[]}
         self.refalon = True
-        self.yawon = False
+        self.yawon = True
         
         self.twist = Twist()
         self.cmdpub = rospy.Publisher('cmd_vel', Twist)
@@ -49,14 +52,27 @@ class PositionController:
         self.takeoffpub = rospy.Publisher('/ardrone/takeoff', Empty)
         self.navdatasub = rospy.Subscriber('/ardrone/navdata', Navdata, self.navdataCallback)
         self.camselectclient = rospy.ServiceProxy('/ardrone/setcamchannel', CamSelect)
-                
+        
+        # reset z rotation offset 
+        self.resetsub = rospy.Subscriber('/xboxcontroller/button_b', Empty, self.resetZOffset)
+        self.zOffset = 0.0
+        self.resetZ = False
+        
         self.justgotpose = True
 
         # Listen for particle filter
         self.tfListener = tf.TransformListener();
-        self.kParticle = 0.0 # particle filter merging constant
+        self.kParticle = 0.3 # particle filter merging constant
+        self.kParticle = 1.0 # particle filter merging constant
 
+        self.markerPub = rospy.Publisher('positionControlMarkers',MarkerArray)
 
+        self.cleartwist()
+
+    def resetZOffset(self,data):
+        self.resetZ = True
+        self.cleartwist() 
+         
     # creates a timer that runs at 20 Hz
     def pc_timer_init(self):
         try:
@@ -95,38 +111,48 @@ class PositionController:
                 dz=(msg.altd-self.nd_log['al'][-2])/1000.0
                 #print 'dz: ', dz
 
-                drotZ=msg.rotZ - self.nd_log['ps'][-2]
+                drotZ=msg.rotZ - self.nd_log['ps'][-2] #TODO rotZ offset fix
                 if drotZ > 300:                                        #to account for discontinuity in yaw around 0
                     drotZ = drotZ - 360
                 elif drotZ<-300:
                     drotZ = drotZ + 360
                 cywnew = self.nd_log['cyw'][-1] + radians(drotZ)
                 yaw=(cywnew+self.nd_log['cyw'][-1])/2.0            #yaw refers to yaw wrt to world frame
+                print yaw
                 du=dx*cos(yaw)-dy*sin(yaw)                        #du, dv are displacement in  world frame
                 dv=dx*sin(yaw)+dy*cos(yaw)
                 
-                # bring in particle filter estimates....
-                (pfPos,pfRot) = self.tfListener.lookupTransform('/world','/ardrone_base_link_particle_filter',rospy.Time(0)) # get latest transform
+                # bring in particle filter estimates...v
+                (self.pfPos,pfRot) = self.tfListener.lookupTransform('/world','/ardrone_base_link_particle_filter',rospy.Time(0)) # get latest transform
                 # pfPos = (0.0,500.0,0.0) # debug - test an extreme position
-                du += dt * self.kParticle * (pfPos[0] - self.nd_log['cpw'][-1][0]) 
-                du += dt * self.kParticle * (pfPos[1] - self.nd_log['cpw'][-1][1]) 
+                du += dt * self.kParticle * (self.pfPos[0] - self.nd_log['cpw'][-1][0]) 
+                dv += dt * self.kParticle * (self.pfPos[1] - self.nd_log['cpw'][-1][1]) 
 
                 self.nd_log['cpw'].append((self.nd_log['cpw'][-1][0]+du, self.nd_log['cpw'][-1][1]+dv, self.nd_log['cpw'][-1][2]+dz))
                 self.nd_log['cyw'].append(cywnew)
-                #print yaw
-                #print self.nd_log['cpw'][-1]
+
+                self.drawMarkers()
         #except:
         #    #self.drone_pos_valid = False
         #    print 'navdata callback error'
             
     # throw all navdata into storage 
     def nd_logger(self,msg):
+        if (self.resetZ):
+            print 'resetting z offset to ', msg.rotZ
+            self.zOffset = msg.rotZ
+            self.nd_log['cyw'][-1] = 0.0
+            self.resetZ = False
+        
+
+        #print msg.rotZ
         self.nd_log['tm'].append(time()-self.reftm)
         self.nd_log['nd'].append(msg)
     
         self.nd_log['th'].append(msg.rotY)        # forw+ backw-
         self.nd_log['ph'].append(msg.rotX)        # left- right+
-        self.nd_log['ps'].append(msg.rotZ)        # ccw+  cw-
+        self.nd_log['ps'].append(msg.rotZ)  
+        #self.nd_log['ps'].append(msg.rotZ - self.zOffset)  #TODO review this      # ccw+  cw-
         self.nd_log['vx'].append(msg.vx)
         self.nd_log['vy'].append(msg.vy)
         self.nd_log['al'].append(msg.altd)
@@ -164,21 +190,25 @@ class PositionController:
         # emergency landing routine
         #if (self.nd_log['al'][-1]>(2000)): 
         #    self.landpub.publish(Empty())    
-        #    print 'error: altitude too high - landing'
-    
+        #    print 'error: altitude too high - landing' 
         # altitude control    
         if self.refalon == True: # true by default
             self.twist.linear.z = max(min(0.0013*self.error['al'][-1], 1.0), -1.0) # bound to +-1
         else:
+
+
             zerror = self.dpw[2]-self.nd_log['cpw'][-1][2]                        #zerror is in meters
-            #print 'zerror: ', zerror
+            #print 'zerror: ', zerror, ' is ', self.dpw[2], ' minus ', self.nd_log['cpw'][-1][2]
             #print 'dpw: ', self.dpw[2]
             self.twist.linear.z = max(min(0.0013*zerror*1000, 1.0), -1.0)
+            #print self.twist.linear.z
     
         # yaw control    
         if self.yawon == True:
             yawwerror = -self.cyd(degrees(self.nd_log['cyw'][-1]),degrees(self.dyw))        # computes error in yaw world in degrees
-            self.twist.angular.z = max(min(yawwerror/130, 0.3), -0.3)
+            print 'orientation diff is' + str(yawwerror)
+            yawspeedlimit=0.6 #0.3 was Rujian's default
+            self.twist.angular.z = max(min(yawwerror/130, yawspeedlimit), -yawspeedlimit)
             #print degrees(self.nd_log['psiw'][-1]),self.ref['ps']
             #print yawwerror
     
@@ -186,13 +216,12 @@ class PositionController:
         if True:
             (xcw, ycw, zcw) = self.nd_log['cpw'][-1] # previous xyz
 
-###############################################
             (xdw, ydw, zdw) = self.dpw               # destination xyz
             xrw = xdw - xcw # desired displacement vector
             yrw = ydw - ycw
             zrw = zdw - zcw
             psw = self.nd_log['cyw'][-1]                #psi world
-            print 'error x: ' + str(xrw) + ' y: ' +str(yrw)
+            #print 'error x: ' + str(xrw) + ' y: ' +str(yrw)
 
             # rotate xy into world coordinates    
             xrc =  xrw*cos(psw) + yrw*sin(psw) 
@@ -210,7 +239,7 @@ class PositionController:
             llim=0.5    #linear cmd limit
             self.twist.linear.x=max(min(rx,llim),-llim)
             self.twist.linear.y=max(min(ry,llim),-llim)
-            print 'resultant twist x: ' + str(self.twist.linear.x) + ' twist y: ' + str(self.twist.linear.y) 
+            #print 'resultant twist x: ' + str(self.twist.linear.x) + ' twist y: ' + str(self.twist.linear.y) 
         else:
             pass
             #print 'calculate command error'
@@ -227,7 +256,83 @@ class PositionController:
         if rem>180:
             rem=rem-360
         return rem
-            
+         
+         
+    def drawMarkers(self):
+        markerArray = MarkerArray()
+
+        # white arrow at desired position
+        marker = Marker()
+        marker.header.frame_id = '/world'
+        marker.type = marker.ARROW
+        marker.action = marker.ADD
+        marker.scale.x = 0.5
+        marker.scale.y = 5
+        marker.scale.z = 1
+        marker.color.a = 0.5
+        marker.color.r = 1.0
+        marker.color.g = 1.0
+        marker.color.b = 1.0
+        marker.id=1
+        marker.pose.orientation.x = 0.0 
+        marker.pose.orientation.y = 0.0 
+        marker.pose.orientation.z = 0.0 
+        marker.pose.orientation.w = 0.0
+        marker.pose.position.x = self.dpw[0]
+        marker.pose.position.y = self.dpw[1]
+        marker.pose.position.z = self.dpw[2]
+
+        markerArray.markers.append(marker)
+        
+        # current position
+        marker = Marker()
+        marker.header.frame_id = '/world'
+        marker.type = marker.ARROW
+        marker.action = marker.ADD
+        marker.scale.x = 0.5
+        marker.scale.y = 6
+        marker.scale.z = 0.4
+        marker.color.a = 1.0
+        marker.color.r = 0.8
+        marker.color.g = 0.8
+        marker.color.b = 1.0
+        marker.id=2
+        marker.pose.orientation.x = 0.0 
+        marker.pose.orientation.y = 0.0 
+        marker.pose.orientation.z = 0.0 
+        marker.pose.orientation.w = 0.0
+        marker.pose.position.x = self.nd_log['cpw'][-1][0]
+        marker.pose.position.y = self.nd_log['cpw'][-1][1]
+        marker.pose.position.z = self.nd_log['cpw'][-1][2]
+
+        markerArray.markers.append(marker)
+
+        # particle filter
+        marker = Marker()
+        marker.header.frame_id = '/world'
+        marker.type = marker.ARROW
+        marker.action = marker.ADD
+        marker.scale.x = 0.5
+        marker.scale.y = 3
+        marker.scale.z = 0.4
+        marker.color.a = 1.0
+        marker.color.r = 0.0
+        marker.color.g = 0.0
+        marker.color.b = 1.0
+        marker.id=3
+        marker.pose.orientation.x = 0.0 
+        marker.pose.orientation.y = 0.0 
+        marker.pose.orientation.z = 0.0 
+        marker.pose.orientation.w = 0.0
+        marker.pose.position.x = self.pfPos[0]
+        marker.pose.position.y = self.pfPos[1]
+        marker.pose.position.z = self.pfPos[2]
+
+        markerArray.markers.append(marker)
+
+        self.markerPub.publish(markerArray)
+
+
 def main(args):
     pass
 
