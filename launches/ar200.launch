@@ -8,13 +8,35 @@
         <param name="navdata_demo" value="0" />
 		<param name="realtime_navdata" value="true" />
 		<param name="realtime_video" value="true" />
-        <param name="enable_navdata_hdvideo_stream" value="true" />
-        <param name="enable_navdata_video_stream" value="true" />
-        <param name="enable_navdata_phys_measures" value="true" />
-        <param name="enable_navdata_euler_angles" value="true" />
-        <param name="enable_navdata_magneto" value="true" />
         <param name="enable_navdata_time" value="true" />
         <param name="enable_navdata_altitude " value="true" />
+        <param name="enable_navdata_time" value="true" />
+        <param name="enable_navdata_raw_measures" value="true" />
+        <param name="enable_navdata_phys_measures" value="true" />
+        <param name="enable_navdata_gyros_offsets" value="true" />
+        <param name="enable_navdata_euler_angles" value="true" />
+        <param name="enable_navdata_references" value="true" />
+        <param name="enable_navdata_trims" value="true" />
+        <param name="enable_navdata_rc_references" value="true" />
+        <param name="enable_navdata_pwm" value="true" />
+        <param name="enable_navdata_altitude" value="true" />
+        <param name="enable_navdata_vision_raw" value="true" />
+        <param name="enable_navdata_vision_of" value="true" />
+        <param name="enable_navdata_vision" value="true" />
+        <param name="enable_navdata_vision_perf" value="true" />
+        <param name="enable_navdata_trackers_send" value="true" />
+        <param name="enable_navdata_vision_detect" value="true" />
+        <param name="enable_navdata_watchdog" value="true" />
+        <param name="enable_navdata_adc_data_frame" value="true" />
+        <param name="enable_navdata_video_stream" value="true" />
+        <param name="enable_navdata_games" value="true" />
+        <param name="enable_navdata_pressure_raw" value="true" />
+        <param name="enable_navdata_magneto" value="true" />
+        <param name="enable_navdata_wind_speed" value="true" />
+        <param name="enable_navdata_kalman_pressure" value="true" />
+        <param name="enable_navdata_hdvideo_stream" value="true" />
+        <param name="enable_navdata_wifi" value="true" />
+        <param name="enable_navdata_zimmu_3000" value="true" />
         
         
         <param name="outdoor" value="0" />

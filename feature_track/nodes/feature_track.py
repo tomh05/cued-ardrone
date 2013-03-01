@@ -1193,7 +1193,7 @@ class FeatureTracker:
         
         self.image_based_P1 = P1
         self.image_based_P2 = P2
-        print P1, P2
+        print "P2:\r\n", P2
         
         R = P2[:,:3]
         self.image_based_R2 = R
@@ -1207,7 +1207,7 @@ class FeatureTracker:
         self.prev_i1_pts_final = i1_pts_final
         self.prev_i2_pts_final = i2_pts_final
         #============================================================================================================DOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOM
-        self.tf_triangulate_points(i1_pts_corr, i2_pts_corr)
+        #self.tf_triangulate_points(i1_pts_corr, i2_pts_corr)
         #if self.prev_i1_pts_final != None:
         #    self.tf_triangulate_points_3f(self.prev_i1_pts_final, self.prev_i2_pts_final, i1_pts_final, i2_pts_final)
         
@@ -1218,11 +1218,11 @@ class FeatureTracker:
         times.append(time.time()-time_offset)
         
         
-        self.debug_text.append("Dead         t: " + str(self.image_coord_trans.T[0]))
-        mag = np.sqrt(self.image_coord_trans.T.dot(self.image_coord_trans))
-        t_scaled = mag*t
-        self.debug_text.append("Image scaled t: " + str(t_scaled.T[0]))
-        self.debug_text.append("Image        t: " + str(t.T[0]))
+        #self.debug_text.append("Dead         t: " + str(self.image_coord_trans.T[0]))
+        #mag = np.sqrt(self.image_coord_trans.T.dot(self.image_coord_trans))
+        #t_scaled = mag*t
+        #self.debug_text.append("Image scaled t: " + str(t_scaled.T[0]))
+        #self.debug_text.append("Image        t: " + str(t.T[0]))
         
         '''
         """====================================================================
@@ -1313,7 +1313,7 @@ class FeatureTracker:
             cv2.rectangle(img2, (0,0), (grey_previous.shape[1],grey_previous.shape[0]), (63, 255, 63), 3)
             cv2.rectangle(img2, (0,imh), (grey_now.shape[1],grey_now.shape[0]+imh), (63, 255, 63), 3)
             
-        
+        '''
         # Reproject triangulated points
         for p in self.reprojected:
             cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (220, 20, 60), 1)
@@ -1322,7 +1322,7 @@ class FeatureTracker:
             cv2.circle(img2, (int(p[0]),int(p[1])), 3, (255, 182, 193), 1)
             #cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 63, 63), 1)
           
-        '''
+        
         # Reproject triangulated points
         for p in self.reprojected3:
             cv2.circle(img2, (int(p[0]),int(p[1])+imh), 3, (255, 165, 0), 1)
@@ -1856,7 +1856,7 @@ def connect(m):
     rospy.Subscriber('/ardrone/front/image_raw',Image,m.imgproc)
     rospy.Subscriber('/ardrone/front/camera_info',sensor_msgs.msg.CameraInfo, m.setCameraInfo)
     rospy.Subscriber('/xboxcontroller/button_y',Empty,m.speakDistance)
-    rospy.Subscriber('/xboxcontroller/button_back',Empty,m.frameLock_reset)
+    rospy.Subscriber('/xboxcontroller/button_b',Empty,m.frameLock_reset)
     rospy.Subscriber('/xboxcontroller/button_x',Empty,m.setFrame_trigger)
 
 

@@ -128,7 +128,7 @@ class ProjectionCalc:
             V = -V
         
         # Use camera1 as origin viewpoint
-        P1 = np.append(np.identity(3), [[0], [0], [0]], 1)
+        P2 = np.append(np.identity(3), [[0], [0], [0]], 1)
         
         """============================================================
         # Compute the four possible P2 projection matrices
@@ -151,9 +151,9 @@ class ProjectionCalc:
         # Produce boolean mask for best case and filter pts
         ==============================================================="""
         if self.use_prob:
-            P2, infront = self.probabilistic_projection(i1_pts_corr, i2_pts_corr, P1, projections)
+            P1, infront = self.probabilistic_projection(i1_pts_corr, i2_pts_corr, P2, projections)
         else:
-            P2, infront = self.normal_projection(i1_pts_corr, i2_pts_corr, P1, projections)
+            P1, infront = self.normal_projection(i1_pts_corr, i2_pts_corr, P2, projections)
         
         
         # Filter points

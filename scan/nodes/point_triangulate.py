@@ -131,7 +131,7 @@ class PointTriangulator:
         Rotation and translation from navdata
         ===================================================================="""
         self.get_change_in_tf(sfm.header1, sfm.header2)
-        
+        print sfm.header1.stamp, ", ", sfm.header2.stamp
         """====================================================================
         3D Triangulate matched pairs using navdata
         ===================================================================="""
@@ -157,6 +157,11 @@ class PointTriangulator:
             desc1 = np.reshape(np.array(sfm.descriptors1, np.uint8), (-1, sfm.descriptors_stride))  
             desc2 = np.reshape(np.array(sfm.descriptors2, np.uint8), (-1, sfm.descriptors_stride))
         F = np.reshape(np.array(sfm.F, np.float32), (3, 3))
+        self.image_P1 = np.reshape(np.array(sfm.P1, np.float32), (3, 4))
+        self.image_P2 = np.reshape(np.array(sfm.P2, np.float32), (3, 4))
+        print "P1:\r\n", self.image_P1
+        print "P2:\r\n", self.image_P2
+        print "rot: \r\n", np.array((tf.transformations.euler_from_matrix(self.image_P2[:3,:3])))*180./np.pi
         return F, kp1, kp2, desc1, desc2
     
     def publish_cloud(self, points, timestamp):
@@ -310,20 +315,55 @@ class PointTriangulator:
         self.position_w1, self.position_i1, self.quat_i_to_w1, self.quat_w_to_i1 = self.load_tf(header1)
         self.position_w2, self.position_i2, self.quat_i_to_w2, self.quat_w_to_i2 = self.load_tf(header2)
         
-        # Rotate frame2 position into frame1 image co-ordinates
+        # Rotate frame1 position into frame2 image co-ordinates
         R = tf.transformations.quaternion_matrix(self.quat_w_to_i2)[:3, :3]
         position_i1_i2 = R.dot(self.position_w1)
+        print "pi2i1", position_i1_i2
+        print "pi1i1", self.position_i1
         
-        # Difference in position in image (frame1) co-ordinates
+        # Difference in position in image (frame2) co-ordinates
         trans = np.array(([(position_i1_i2[0] - self.position_i2[0])],
                           [(position_i1_i2[1] - self.position_i2[1])],
                           [(position_i1_i2[2] - self.position_i2[2])]))
-        self.image_coord_trans = np.array([trans[0], trans[1], trans[2]])
+        self.image_coord_trans = -np.array([trans[0], trans[1], trans[2]])
         
+        
+        # Rotate frame2 position into frame1 image co-ordinates
+        R = tf.transformations.quaternion_matrix(self.quat_w_to_i1)[:3, :3]
+        position_i2_i1 = R.dot(self.position_w2)
+        print "pi2i1", position_i2_i1
+        print "pi1i1", self.position_i2
+        
+        # Difference in position in image (frame1) co-ordinates
+        trans = np.array(([(position_i2_i1[0] - self.position_i1[0])],
+                          [(position_i2_i1[1] - self.position_i1[1])],
+                          [(position_i2_i1[2] - self.position_i1[2])]))
+        self.image_coord_trans = np.array([trans[0], trans[1], trans[2]])
         
         # Get relative quaternion
         # qmid = qafter.qbefore-1
-        self.relative_quat = tf.transformations.quaternion_multiply(self.quat_w_to_i2, tf.transformations.quaternion_inverse(self.quat_w_to_i1))
+        self.relative_quat = tf.transformations.quaternion_inverse(tf.transformations.quaternion_multiply(self.quat_w_to_i2, tf.transformations.quaternion_inverse(self.quat_w_to_i1)))
+        print self.relative_quat
+        #self.relative_quat = tf.transformations.quaternion_multiply(self.quat_w_to_i1, tf.transformations.quaternion_inverse(self.quat_w_to_i2))
+        #print self.relative_quat
+        #self.relative_quat = tf.transformations.quaternion_multiply(self.quat_i_to_w1, tf.transformations.quaternion_inverse(self.quat_i_to_w2))
+        #print self.relative_quat
+        #self.relative_quat = tf.transformations.quaternion_inverse(tf.transformations.quaternion_multiply(self.quat_i_to_w1, tf.transformations.quaternion_inverse(self.quat_i_to_w2)))
+        #print self.relative_quat
+        #self.relative_quat = tf.transformations.quaternion_multiply(self.quat_i_to_w2, tf.transformations.quaternion_inverse(self.quat_i_to_w1))
+        #print self.relative_quat
+        #self.relative_quat = tf.transformations.quaternion_inverse(tf.transformations.quaternion_multiply(self.quat_i_to_w2, tf.transformations.quaternion_inverse(self.quat_i_to_w1)))
+        #print self.relative_quat
+        
+        # Difference in position in image (frame1) co-ordinates
+        trans = np.array(([(self.position_w2[0] - self.position_w1[0])],
+                          [(self.position_w2[1] - self.position_w1[1])],
+                          [(self.position_w2[2] - self.position_w1[2])]))
+        R = tf.transformations.quaternion_matrix(self.quat_w_to_i1)[:3, :3]
+        print trans
+        trans = R.dot(trans)
+        
+        self.image_coord_trans = np.array([trans[0], trans[1], trans[2]])
    
     def tf_triangulate_points(self, pts1, pts2, sfm):
         time_start = time.time()
@@ -339,14 +379,14 @@ class PointTriangulator:
         # Get t from tf data
         # Note R and t are inverted as they were calculated from frame1 to frame2
         # in frame2 co-ordinates and we are treating frame2 as the origin
-        t = -self.image_coord_trans
+        t = self.image_coord_trans
         
         # Get rotation matrix
-        R = tf.transformations.quaternion_matrix(tf.transformations.quaternion_inverse(self.relative_quat))[:3, :3]
+        R = tf.transformations.quaternion_matrix(self.relative_quat)[:3, :3]
         
         # Bottom out if motion is insufficient
         mag = np.sqrt(t[0]*t[0]+t[1]*t[1])
-        if mag < 0.2:
+        if mag < 0.13:
             print "Motion bad for triangulation :\r\n", str(t)
             self.rejection_reasons[0] = self.rejection_reasons[0]+1
             return None
@@ -356,8 +396,17 @@ class PointTriangulator:
         print "Pre-triangulated: ", pre_triangulated
             
         # Compose dead reckoned projection matrix
-        P_cam1_to_cam2 = np.hstack((R, t))        
-        #print "Dead P:\r\n", P_cam1_to_cam2
+        P_cam1_to_cam2 = np.hstack((R, t))    
+        print "Dead P:\r\n", P_cam1_to_cam2
+        
+        mag = np.sqrt(t[0]*t[0]+t[1]*t[1]+t[2]*t[2])
+        t2 = self.image_P1[:,3:4]
+        print "t2\r\n", t2
+        img_mag = np.sqrt(t2[0]*t2[0]+t2[1]*t2[1]+t2[2]*t2[2])
+        #R = self.image_P1[:3,:3].T
+        #t = -mag*t2/img_mag
+        #P_cam1_to_cam2 = np.hstack((R, t))
+        #print "Image P:\r\n", P_cam1_to_cam2
         
         """
         Triangulate using pixel co-ord and K[R t]
@@ -388,6 +437,7 @@ class PointTriangulator:
         forward_triangulated = len(points3D_image[0])+0.
         print "Forward triangulated: ", forward_triangulated    
         
+        '''
         sq = np.square(points3D_image)
         sq = np.sqrt(sq[0]+sq[1]+sq[2])
         sq_sum = np.sum(sq)
@@ -419,6 +469,7 @@ class PointTriangulator:
             print "All Points too far"
             self.rejection_reasons[6] = self.rejection_reasons[0]+1
             return
+        '''
         
         # Triangulated points reprojected back to the image plane
         self.reprojected_frame1 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, R, t)        
@@ -673,9 +724,6 @@ class PointTriangulator:
         # Make homogenous
         x1_homo = np.append(x1, np.array([np.ones(x1.shape[1])]), 0)
         x2_homo = np.append(x2, np.array([np.ones(x2.shape[1])]), 0)
-        
-        print USE_OPTIMAL_CORRECTION
-        print OPT_ERROR_SQUARED
         
         if (USE_OPTIMAL_CORRECTION):
             print "bing"
