@@ -59,11 +59,11 @@ class Controller:
     
     def connect(self):
         self.tf = tf.TransformListener()
-        rospy.Subscriber('/xboxcontroller/button_x', Empty, self.on_start_command)
+        rospy.Subscriber('/xboxcontroller/button_x', Empty, self.on_got_start_command)
         self.twist_pub = rospy.Publisher('cmd_vel',gm.Twist)
         self.trigger_pub = rospy.Publisher('/xboxcontroller/button_a',Empty);
 
-    def on_got_start_command():
+    def on_got_start_command(self, empty):
         print "Beginning Scan"
         
         print "Stabilising..."
