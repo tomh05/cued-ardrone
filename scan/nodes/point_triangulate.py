@@ -157,10 +157,13 @@ class PointTriangulator:
             desc1 = np.reshape(np.array(sfm.descriptors1, np.uint8), (-1, sfm.descriptors_stride))  
             desc2 = np.reshape(np.array(sfm.descriptors2, np.uint8), (-1, sfm.descriptors_stride))
         F = np.reshape(np.array(sfm.F, np.float32), (3, 3))
-        self.image_P1 = np.reshape(np.array(sfm.P1, np.float32), (3, 4))
-        self.image_P2 = np.reshape(np.array(sfm.P2, np.float32), (3, 4))
-        print "P1:\r\n", self.image_P1
-        print "P2:\r\n", self.image_P2
+        image_P1 = np.reshape(np.array(sfm.P1, np.float32), (3, 4))
+        image_P2 = np.reshape(np.array(sfm.P2, np.float32), (3, 4))
+        print "P1:\r\n", image_P1
+        print "P2:\r\n", image_P2
+        P2_homo = np.diag((1.,1.,1.,1.))
+        P2_homo[:3,:4] = image_P2
+        self.image_P2 = np.linalg.inv(P2_homo)[:3,:4]
         print "rot: \r\n", np.array((tf.transformations.euler_from_matrix(self.image_P2[:3,:3])))*180./np.pi
         return F, kp1, kp2, desc1, desc2
     
@@ -314,53 +317,18 @@ class PointTriangulator:
     def get_change_in_tf(self, header1, header2):       
         self.position_w1, self.position_i1, self.quat_i_to_w1, self.quat_w_to_i1 = self.load_tf(header1)
         self.position_w2, self.position_i2, self.quat_i_to_w2, self.quat_w_to_i2 = self.load_tf(header2)
-        
-        # Rotate frame1 position into frame2 image co-ordinates
-        R = tf.transformations.quaternion_matrix(self.quat_w_to_i2)[:3, :3]
-        position_i1_i2 = R.dot(self.position_w1)
-        print "pi2i1", position_i1_i2
-        print "pi1i1", self.position_i1
-        
-        # Difference in position in image (frame2) co-ordinates
-        trans = np.array(([(position_i1_i2[0] - self.position_i2[0])],
-                          [(position_i1_i2[1] - self.position_i2[1])],
-                          [(position_i1_i2[2] - self.position_i2[2])]))
-        self.image_coord_trans = -np.array([trans[0], trans[1], trans[2]])
-        
-        
-        # Rotate frame2 position into frame1 image co-ordinates
-        R = tf.transformations.quaternion_matrix(self.quat_w_to_i1)[:3, :3]
-        position_i2_i1 = R.dot(self.position_w2)
-        print "pi2i1", position_i2_i1
-        print "pi1i1", self.position_i2
-        
-        # Difference in position in image (frame1) co-ordinates
-        trans = np.array(([(position_i2_i1[0] - self.position_i1[0])],
-                          [(position_i2_i1[1] - self.position_i1[1])],
-                          [(position_i2_i1[2] - self.position_i1[2])]))
-        self.image_coord_trans = np.array([trans[0], trans[1], trans[2]])
-        
+                
         # Get relative quaternion
         # qmid = qafter.qbefore-1
         self.relative_quat = tf.transformations.quaternion_inverse(tf.transformations.quaternion_multiply(self.quat_w_to_i2, tf.transformations.quaternion_inverse(self.quat_w_to_i1)))
-        print self.relative_quat
-        #self.relative_quat = tf.transformations.quaternion_multiply(self.quat_w_to_i1, tf.transformations.quaternion_inverse(self.quat_w_to_i2))
-        #print self.relative_quat
-        #self.relative_quat = tf.transformations.quaternion_multiply(self.quat_i_to_w1, tf.transformations.quaternion_inverse(self.quat_i_to_w2))
-        #print self.relative_quat
-        #self.relative_quat = tf.transformations.quaternion_inverse(tf.transformations.quaternion_multiply(self.quat_i_to_w1, tf.transformations.quaternion_inverse(self.quat_i_to_w2)))
-        #print self.relative_quat
-        #self.relative_quat = tf.transformations.quaternion_multiply(self.quat_i_to_w2, tf.transformations.quaternion_inverse(self.quat_i_to_w1))
-        #print self.relative_quat
-        #self.relative_quat = tf.transformations.quaternion_inverse(tf.transformations.quaternion_multiply(self.quat_i_to_w2, tf.transformations.quaternion_inverse(self.quat_i_to_w1)))
-        #print self.relative_quat
         
-        # Difference in position in image (frame1) co-ordinates
+        # Difference in position in world co-ordinates
         trans = np.array(([(self.position_w2[0] - self.position_w1[0])],
                           [(self.position_w2[1] - self.position_w1[1])],
                           [(self.position_w2[2] - self.position_w1[2])]))
+        # Rotate into frame1 co-ordinates
         R = tf.transformations.quaternion_matrix(self.quat_w_to_i1)[:3, :3]
-        print trans
+        #print trans
         trans = R.dot(trans)
         
         self.image_coord_trans = np.array([trans[0], trans[1], trans[2]])
@@ -380,10 +348,20 @@ class PointTriangulator:
         # Note R and t are inverted as they were calculated from frame1 to frame2
         # in frame2 co-ordinates and we are treating frame2 as the origin
         t = self.image_coord_trans
+        t2 = self.image_P2[:,3:4]
+        print "trans t: ", t.T
+        mag = np.sqrt(t[0]*t[0]+t[1]*t[1]+t[2]*t[2])
+        img_mag = np.sqrt(t2[0]*t2[0]+t2[1]*t2[1]+t2[2]*t2[2])
+        scaled_t2 = mag*t2/img_mag
+        print "trans i: ", scaled_t2.T
         
         # Get rotation matrix
         R = tf.transformations.quaternion_matrix(self.relative_quat)[:3, :3]
+        print "angles t: ", 180.*np.array((tf.transformations.euler_from_matrix(R)))/np.pi
+        R2 = self.image_P2[:3,:3]
+        print "angles i: ", 180.*np.array((tf.transformations.euler_from_matrix(R2)))/np.pi
         
+                
         # Bottom out if motion is insufficient
         mag = np.sqrt(t[0]*t[0]+t[1]*t[1])
         if mag < 0.13:
@@ -398,15 +376,6 @@ class PointTriangulator:
         # Compose dead reckoned projection matrix
         P_cam1_to_cam2 = np.hstack((R, t))    
         print "Dead P:\r\n", P_cam1_to_cam2
-        
-        mag = np.sqrt(t[0]*t[0]+t[1]*t[1]+t[2]*t[2])
-        t2 = self.image_P1[:,3:4]
-        print "t2\r\n", t2
-        img_mag = np.sqrt(t2[0]*t2[0]+t2[1]*t2[1]+t2[2]*t2[2])
-        #R = self.image_P1[:3,:3].T
-        #t = -mag*t2/img_mag
-        #P_cam1_to_cam2 = np.hstack((R, t))
-        #print "Image P:\r\n", P_cam1_to_cam2
         
         """
         Triangulate using pixel co-ord and K[R t]
