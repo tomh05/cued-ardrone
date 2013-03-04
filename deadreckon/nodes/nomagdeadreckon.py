@@ -143,7 +143,7 @@ class DeadReckoning:
         self.alpha = DEG2RAD*d.rotX # roll
         self.beta  = DEG2RAD*d.rotY # pitch
         self.gamma = DEG2RAD*d.rotZ # yaw
-        self.rotZ = self.rotZ + gyrZ*deltat*DEG2RAD
+        self.rotZ = self.rotZ + (gyrZ*cos(self.alpha)*cos(self.beta) + gyrY*sin(self.alpha)*cos(self.beta) + gyrX*cos(self.alpha)*sin(self.beta))*deltat*DEG2RAD
         self.gamma = self.rotZ
         # produce quaternion
         quaternion = tf.transformations.quaternion_from_euler(self.gamma - self.rotZoffset, self.beta, self.alpha, axes='szyx')
