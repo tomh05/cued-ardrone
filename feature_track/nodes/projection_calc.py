@@ -39,9 +39,12 @@ import rospy
 import numpy as np
 import cv2
 import std_msgs.msg
+from geometry_msgs.msg import Point32
 from custom_msgs.msg import StampedFeaturesMatches
 from sensor_msgs.msg import CameraInfo
+from sensor_msgs.msg import PointCloud
 import time
+import tf
 
 class ProjectionCalc:
     
@@ -55,17 +58,35 @@ class ProjectionCalc:
         camera_info = rospy.wait_for_message('/ardrone/front/camera_info', CameraInfo)
         self.setCameraInfo(camera_info)
         rospy.Subscriber('/feature_matcher/matches',StampedFeaturesMatches,self.on_got_matches)
+        self.cloud_pub2 = rospy.Publisher('/projection_calc/relative_cloud', PointCloud)
         self.match_pub = rospy.Publisher('/projection_calc/projections',StampedFeaturesMatches)
+        self.br = tf.TransformBroadcaster()
 
     def on_got_matches(self, sfm):
+        print "---------------------------------------------------------------"
         self.time_prev = time.time()
         # Get np formatted msg
         F, pts1, pts2, desc1, desc2 = self.decode_message(sfm)
+        
+        self.header1 = sfm.header1
+        self.header2 = sfm.header2
         
         success, P1, P2, pts1_E, pts2_E, desc1_E, desc2_E = self.extract_projections(F, pts1, pts2, desc1, desc2)
         if not success or len(pts1_E) < 4:
             print "Motion failed ( ", np.around(((time.time()-self.time_prev)*1000),1), "ms) "
             return
+        
+            
+        
+        R = np.diag((1.,1.,1.,1.))
+        R[:3,:3] = P1[:3,:3]
+        quat = tf.transformations.quaternion_from_matrix(R)
+        self.br.sendTransform((0,0,0), 
+                         # translation happens first, then rotation
+                         quat,
+                         sfm.header2.stamp,
+                         "/viewprev",
+                         "/ardrone_base_frontcam")
         
         self.publish_proj(P1, P2, pts1_E, pts2_E, desc1_E, desc2_E, sfm)
         print "Motion from images done ( ", np.around(((time.time()-self.time_prev)*1000),1), "ms) "
@@ -100,13 +121,13 @@ class ProjectionCalc:
         Isolates best P2 by projecting data points
         Filters out conflicting points
         """
-        
         # Camera Matrices to extract essential matrix and then normalise
         E = self.cameraMatrix.transpose().dot(F.dot(self.cameraMatrix))
         E /= E[2,2]
         
-        W = np.array([[0, -1, 0],[1, 0, 0], [0, 0, 1]])
-        Z = np.array([[0, 1, 0],[-1, 0, 0], [0, 0, 0]])
+        W = np.array([[0., -1., 0.],[1., 0., 0.], [0., 0., 1.]])
+        Z = np.array([[0., 1., 0.],[-1., 0., 0.], [0., 0., 0.]])
+
         # SVD of E
         U,SIGMA,V = np.linalg.svd(E)
         # Contruct Diagonal
@@ -128,7 +149,7 @@ class ProjectionCalc:
             V = -V
         
         # Use camera1 as origin viewpoint
-        P2 = np.append(np.identity(3), [[0], [0], [0]], 1)
+        P1 = np.append(np.identity(3), [[0], [0], [0]], 1)
         
         """============================================================
         # Compute the four possible P2 projection matrices
@@ -151,10 +172,10 @@ class ProjectionCalc:
         # Produce boolean mask for best case and filter pts
         ==============================================================="""
         if self.use_prob:
-            P1, infront = self.probabilistic_projection(i1_pts_corr, i2_pts_corr, P2, projections)
+            P2, infront = self.probabilistic_projection(i1_pts_corr, i2_pts_corr, P1, projections)
         else:
-            P1, infront = self.normal_projection(i1_pts_corr, i2_pts_corr, P2, projections)
-        
+            P2, infront = self.normal_projection(i1_pts_corr, i2_pts_corr, P1, projections)
+
         
         # Filter points
         mask_prepped = np.resize(infront.T, (desc1.shape[1],desc1.shape[0])).T
@@ -168,30 +189,59 @@ class ProjectionCalc:
         
         return True, P1, P2, i1_pts_final, i2_pts_final, desc1_final, desc2_final
         
-    def normal_projection(self, i1_pts_corr, i2_pts_corr, P1, projections):
+    def normal_projection(self, i1_pts_corr, i2_pts_corr, P1, projections):       
+        print i1_pts_corr.T.shape[1]
         #time_prev = time.time()
         ind = 0
         maxfit = 0
         secfit = 0
+        PIs = np.array([0,0,0,0])
         for i, P2 in enumerate(projections):
-            points4D = self.unfiltered_triangulate_points(i1_pts_corr.transpose(), i2_pts_corr.transpose(),P1,P2)
-            d1 = np.dot(self.cameraMatrix.dot(P1),points4D)[2]
-            d2 = np.dot(self.cameraMatrix.dot(P2),points4D)[2]
-            PI = sum((d1>0) & (d2>0))
+            points4D = self.unfiltered_triangulate_points(i1_pts_corr.transpose(), i2_pts_corr.transpose(),self.cameraMatrix.dot(P1),self.cameraMatrix.dot(P2))
+            print points4D.T
+            # d1 = P1.dot(points4D) # d1 = points4D
+            d1 = points4D[2]
+            d2 = P2.dot(points4D)[2]
+            PI = sum(np.logical_and(d1>0,d2>0))
+            PIs[i] = PI
             #print "Support for P2 ", i, " : ", PI
             if PI > maxfit:
                 secfit = maxfit
                 maxfit = PI
                 ind = i
                 infront = (d1>0) & (d2>0)
-        print maxfit
+        #print maxfit
         #print "P2"
         #print projections[ind]
         infront = np.array([infront]).transpose()
         #print "Normal3 done ( ", np.around(((time.time()-time_prev)*1000),1), "ms) "
+        print PIs
+        
+        """====================================================================
+        # Relative Point Cloud
+        ===================================================================="""        
+        cloud = PointCloud()
+        cloud.header = self.header1
+        # Reshape for easy clouding
+        
+        points = self.unfiltered_triangulate_points(i1_pts_corr.transpose(), i2_pts_corr.transpose(),self.cameraMatrix.dot(P1),self.cameraMatrix.dot(projections[ind]))
+        
+        sub = zip(*np.vstack((points[0], points[1], points[2])))
+        
+        # Build relative cloud
+        for i, p in enumerate(sub):
+            cloud.points.append(Point32())
+            cloud.points[i].x = p[0]
+            cloud.points[i].y = p[1]
+            cloud.points[i].z = p[2]
+        self.cloud_pub2.publish(cloud) 
+        
+        
         return projections[ind], infront
         
-        
+    def make_homo(self, pts):
+        pts = np.append(pts,np.array([np.ones(pts.shape[0])]).T, 1)
+        return pts
     
     def probabilistic_projection(self, i1_pts_corr, i2_pts_corr, P1, projections):
         """====================================================================
@@ -203,29 +253,35 @@ class ProjectionCalc:
         x1 = np.append(i1_pts_corr.transpose(), np.array([np.ones(i1_pts_corr.transpose().shape[1])]), 0)
         x2 = np.append(i2_pts_corr.transpose(), np.array([np.ones(i2_pts_corr.transpose().shape[1])]), 0)
         # Initialise
-        N = 0
         PI = np.array([0,0,0,0])
         rejected = np.array([False, False, False, False])
         rejected_count = 0
         triangulators = []
         infronts = []
+        points4D = []
+        KP1 = self.cameraMatrix.dot(P1)
+        Kprojections = []
         for i, P2 in enumerate(projections):
-            triangulators.append(Triangulator(P1, P2))
+            Kprojections.append(self.cameraMatrix.dot(P2))
+            triangulators.append(Triangulator(KP1, Kprojections[i]))
             infronts.append(np.array(np.zeros((1,x1.shape[1])), dtype=np.bool).T)
+            points4D.append(np.zeros((4,x1.shape[1]),dtype=np.float32))
+        
         
         # Rejection iterate
         for i in  range(x1.shape[1]):
-            for j, P2 in enumerate(projections):
+            for j, KP2 in enumerate(Kprojections):
                 if not rejected[j]:
-                    point4D = np.array([triangulators[j].triangulate(x1[:,i],x2[:,i], P1, P2)]).T
-                    d1 = np.dot(self.cameraMatrix.dot(P1),point4D)[2]
-                    d2 = np.dot(self.cameraMatrix.dot(P2),point4D)[2]
+                    point4D = np.array([triangulators[j].triangulate(x1[:,i],x2[:,i], KP1, KP2)]).T
+                    points4D[j][:,i:i+1]=point4D
+                    d1 = point4D[2]
+                    d2 = projections[j].dot(point4D)[2]
                     front = (d1>0) and (d2>0)
                     infronts[j][i] = front
                     PI[j] = PI[j] + int(front)
-            N = N + 1
-            
-            if (N > 10 and rejected_count < 3):
+
+
+            if (i > 10 and rejected_count < 3):
                 maxpi = 0
                 index = -1
                 for k, pi in enumerate(PI):
@@ -244,6 +300,26 @@ class ProjectionCalc:
                                 rejected[k] = True
                                 rejected_count = rejected_count + 1
         #print "Probabilistic done ( ", np.around(((time.time()-time_prev)*1000),1), "ms) "
+        
+        """====================================================================
+        # Relative Point Cloud
+        ===================================================================="""        
+        cloud = PointCloud()
+        cloud.header = self.header1
+        # Reshape for easy clouding
+        points = points4D[index]
+        sub = zip(*np.vstack((points[0], points[1], points[2])))
+        
+        # Build relative cloud
+        for i, p in enumerate(sub):
+            cloud.points.append(Point32())
+            cloud.points[i].x = p[0]
+            cloud.points[i].y = p[1]
+            cloud.points[i].z = p[2]
+        self.cloud_pub2.publish(cloud) 
+        
+        
+        print PI
         return projections[index], infronts[index]
         
     def unfiltered_triangulate_points(self,x1,x2,P1,P2):

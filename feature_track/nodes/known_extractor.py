@@ -78,6 +78,7 @@ class FeatureExtractor:
     
     def load_known_data(self):
         self.positions = []
+        
         self.positions.append((0.44, -0.125, 0.28+0.05))
         self.positions.append((0.44, -0.125, 0.14+0.05))
         self.positions.append((0.44, -0.125, 0.42+0.05))
@@ -87,12 +88,21 @@ class FeatureExtractor:
         self.positions.append((0.405, -0.414, 0.14+0.05))
         self.positions.append((0.405, -0.414, 0.28+0.05))
         self.positions.append((0.405, -0.414, 0.42+0.05))
-        self.positions.append((0.44, -0.125, 0.2925+0.05))
-        self.positions.append((0.44, -0.125, 0.1525+0.05))
-        self.positions.append((0.44, -0.125, 0.4325+0.05))
+        '''
+        self.positions.append((0.2624, -0.3753, 0.28+0.05))
+        self.positions.append((0.2624, -0.3753, 0.14+0.05))
+        self.positions.append((0.2624, -0.3753, 0.42+0.05))
+        self.positions.append((0.0573, -0.6262, 0.42+0.05))
+        self.positions.append((0.0573, -0.6262, 0.28+0.05))
+        self.positions.append((0.0573, -0.6262, 0.14+0.05))
+        self.positions.append((0.0515, -0.570, 0.14+0.05))
+        self.positions.append((0.0515, -0.570, 0.28+0.05))
+        self.positions.append((0.0515, -0.570, 0.42+0.05))
+        '''
         self.times = []
         self.quats = []
         quat_zero = tf.transformations.quaternion_from_euler(0.,0.,0.)
+        #quat_zero = tf.transformations.quaternion_from_euler(0.,0.,-39.2*np.pi/180.)
         self.quats.append(quat_zero)
         self.quats.append(quat_zero)
         self.quats.append(quat_zero)
@@ -100,13 +110,10 @@ class FeatureExtractor:
         self.quats.append(quat_zero)
         self.quats.append(quat_zero)
         quat_one = tf.transformations.quaternion_from_euler(0., 0., 27.6*np.pi/180.)
+        #quat_one = tf.transformations.quaternion_from_euler(0., 0., (27.6-39.2)*np.pi/180.)
         self.quats.append(quat_one)
         self.quats.append(quat_one)
         self.quats.append(quat_one)
-        quat_two = tf.transformations.quaternion_from_euler(2.862*np.pi/180.,-1.432*np.pi/180.,0.)
-        self.quats.append(quat_two)
-        self.quats.append(quat_two)
-        self.quats.append(quat_two)
         self.times.append(rospy.Time.from_sec(1.))
         self.times.append(rospy.Time.from_sec(2.))
         self.times.append(rospy.Time.from_sec(3.))
@@ -197,10 +204,10 @@ class FeatureExtractor:
         return np.array([u,v]).T
         
     def known_data(self, d):
-        self.index = np.random.randint(1,6)#len(self.positions))
+        self.index = np.random.randint(1,9)#len(self.positions))
         
         #if self.index == 1:
-        #   self.index = 6
+        #   self.index = 2
         #else:
         #    self.index = 1
         self.time_prev = time.time()
@@ -220,17 +227,27 @@ class FeatureExtractor:
         print stamp, ", ", position
         
     def publish_tf(self, position, quat, stamp):
+        
         self.br.sendTransform(position, 
                          # translation happens first, then rotation
                          quat,
                          stamp,
                          "/ardrone_base_link",
-                         "/world")                         
+                         "/world")
+        '''
+        self.br.sendTransform(position, 
+                         # translation happens first, then rotation
+                         quat,
+                         stamp,
+                         "/ardrone_base_frontcam",
+                         "/world")     
+        '''
         # (values pulled from ardrone_drive.cpp)
         # We need to publish this when using high rate navdata to prevent
         # front camera tf from lagging base ardrone
         self.br.sendTransform(self.frontcam_t, self.frontcam_quat ,stamp, '/ardrone_base_frontcam', '/ardrone_base_link')
         # NOTE: child parent order is reversed w.r.t C++
+        #self.br.sendTransform((0,0,0), self.quats[1] ,stamp, '/world2', '/world')
         
     def publish_camera_info(self, d):
         ci = CameraInfo()
@@ -265,6 +282,7 @@ class FeatureExtractor:
         poly.points.append(deepcopy(p))
         spoly.polygon = poly
         spoly.header.frame_id = '/world'
+        #spoly.header.frame_id = '/world2'
         self.poly_pub.publish(spoly)
         
     
