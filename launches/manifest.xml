@@ -1,0 +1,14 @@
+<package>
+  <description brief="launches">
+
+     launches2
+
+  </description>
+  <author>Alex</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/launches</url>
+
+</package>
+
+
