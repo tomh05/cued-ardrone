@@ -49,6 +49,7 @@ import geometry_msgs.msg as gm
 import tf
 from std_msgs.msg import Empty
 from std_msgs.msg import Header
+from ardrone_autonomy.msg import navdata_altitude
 import math
 import time
 from copy import deepcopy
@@ -56,12 +57,17 @@ from copy import deepcopy
 class Controller:
     def __init__(self):
         self.connect()
+        self.altitude = 0.
     
     def connect(self):
         self.tf = tf.TransformListener()
         rospy.Subscriber('/xboxcontroller/button_x', Empty, self.on_got_start_command)
+        rospy.Subscriber('/ardrone/navdata_altitude', navdata_altitude, self.on_got_altitude)
         self.twist_pub = rospy.Publisher('cmd_vel',gm.Twist)
         self.trigger_pub = rospy.Publisher('/xboxcontroller/button_a',Empty);
+        
+    def on_got_altitude(self, d):
+        self.altitude = (d.altitude_raw*1.) / 1000
 
     def on_got_start_command(self, empty):
         print "Beginning Scan"
@@ -79,7 +85,7 @@ class Controller:
         # Process the first frame
         """
         print "Loading first frame"
-        self.trigger_pub.publish(Empty)
+        self.trigger_pub.publish()
         
         """
         # Ascend 0.3m
@@ -90,6 +96,7 @@ class Controller:
         position1, quaternion1 = self.tf.lookupTransform("world","ardrone_base_link", rospy.Time(0))
         
         self.start_height = position1[2]
+        self.start_altitude = self.altitude
         
         twist = gm.Twist()
         twist.linear.z  = +0.25
@@ -104,9 +111,16 @@ class Controller:
             twist = gm.Twist()
             self.twist_pub.publish(twist)
             print "Ascended"
-            rospy.sleep(0.250)
+            rospy.sleep(0.5)
+            position1, quaternion1 = self.tf.lookupTransform("world","ardrone_base_link", rospy.Time(0))
+            print "deadreckon dz: ", position1[2] - self.start_height
+            print "altitude   dz: ", self.altitude - self.start_altitude
             print "Loading next frame"
-            self.trigger_pub.publish(Empty)
+            self.trigger_pub.publish()
+        else:
+            twist = gm.Twist()
+            twist.linear.z  = +0.25
+            self.twist_pub.publish(twist)
     
 
 
