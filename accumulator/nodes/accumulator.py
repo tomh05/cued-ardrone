@@ -29,12 +29,18 @@ class Frame:
         
 class Accumulated:
     def __init__(self):
-        self.pts =  None# This will be a 3xN numpy array, which is 
-                        # arguably more efficient than a Mx3xN numpy due to less
-                        # reallocation as points are added
-        self.pts2 = None    # squared points
-        self.mean = None 
-        self.var = None 
+        # There are M Accumulateds (one per unique 3D point)
+        # There are N_m pts supporting each unique point
+        self.pts =  None # This will be a 3xN numpy array
+                         # [x_1, ...,x_N]
+                         # [y_1, ...,y_N]
+                         # [z_2, ...,z_N]
+                         # This form is mainly used for programmatic simplicity
+                         # May be more efficient than a Mx3xN due to smaller
+                         # reallocations when points are added?
+        self.pts2 = None # squared points
+        #self.mean = None # 1x3 - (x,y,z) 
+        #self.var  = None # 1x3 - (x,y,z)
 
 class Accumulator:    
     def __init__(self):
@@ -45,7 +51,9 @@ class Accumulator:
         # Initialise list of point clouds and list of descriptor sets
         self.frames = []
         self.acc = []
-        self.desc = None
+        self.mean = None # 3xM
+        self.var = None # 3xM
+        self.desc = None # Mxdesc_length
         self.first_time = True
         
     def connect(self):
@@ -76,8 +84,8 @@ class Accumulator:
                 self.acc.append(Accumulated())
                 self.acc[-1].pts = new_pts[:,i:i+1]
                 self.acc[-1].pts2 = np.square(new_pts[:,i:i+1])
-                self.acc[-1].mean = new_pts[:,i]
-                self.acc[-1].var = np.array([0.,0.,0.])#np.mean(acc.pts2, axis=1) - np.square(np.mean(acc.pts, axis=1))
+            self.mean = new_pts
+            self.var = np.zeros(self.mean.shape)
             self.desc = new.desc
             print "---\r\n",self.acc[-1].pts
             return
@@ -88,45 +96,55 @@ class Accumulator:
         #pts, desc = self.get_subset(new.position_i, new.quat_i_to_w, new.quat_w_to_i)
         
         
+        original_length = self.mean.shape[1]
+        
         # Match points
         indices1, indices2 = self.match_points(new.desc, self.desc)
         print "Matched ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
         prevtime = time.time()
         
         mask = np.ones(new_pts.shape[1])
+        merged_count = 0
         # Average matched points
         for i in range(len(indices1)):
-            # Mark point as averaged
+            # Mark point as averaged and update count
             mask[indices1[i]] = 0
+            merged_count = merged_count + 1
             # Append new info
             self.acc[indices2[i]].pts = np.hstack((self.acc[indices2[i]].pts, new_pts[:,indices1[i]:indices1[i]+1]))
-            #print "merged: ", self.acc[indices2[i]].pts
             self.acc[indices2[i]].pts2 = np.hstack((self.acc[indices2[i]].pts2, np.square(new_pts[:,indices1[i]:indices1[i]+1])))
-            #print "merged2: ", self.acc[indices2[i]].pts2
-            # This could be done iteratively instead
-            self.acc[indices2[i]].var = self.acc[indices2[i]].var + np.square(self.acc[indices2[i]].mean) # E(i)[X2] = Var(i)[X] + (E(i)[X])2
-            self.acc[indices2[i]].mean = (self.acc[indices2[i]].mean*(self.acc[indices2[i]].pts.shape[1]-1.)+self.acc[indices2[i]].pts[:,-1])/float(self.acc[indices2[i]].pts.shape[1])
-            self.acc[indices2[i]].var = (self.acc[indices2[i]].var*(self.acc[indices2[i]].pts.shape[1]-1.)+self.acc[indices2[i]].pts2[:,-1])/float(self.acc[indices2[i]].pts.shape[1]) - np.square(self.acc[indices2[i]].mean)
-            #self.acc[indices2[i]].var2 = np.mean(self.acc[indices2[i]].pts2, axis=1) - np.square(np.mean(self.acc[indices2[i]].pts, axis=1))
+            # E(i)[X2] = Var(i)[X] + (E(i)[X])^2
+            self.var[:,indices2[i]:indices2[i]+1] = self.var[:,indices2[i]:indices2[i]+1] + np.square(self.mean[:,indices2[i]:indices2[i]+1])
+            # E(i+1)[X] = (E(i)[X]*(N-1) + xnew)/N
+            self.mean[:,indices2[i]:indices2[i]+1] = (self.mean[:,indices2[i]:indices2[i]+1]*(self.acc[indices2[i]].pts.shape[1]-1.)+self.acc[indices2[i]].pts[:,-1:])/float(self.acc[indices2[i]].pts.shape[1])
+            # Var(i+1)[X] = (E(i)[X2]*(N-1)+x2new)/N - (E(i+1)[X])^2
+            self.var[:,indices2[i]:indices2[i]+1]  = (self.var[:,indices2[i]:indices2[i]+1]*(self.acc[indices2[i]].pts.shape[1]-1.)+self.acc[indices2[i]].pts2[:,-1:])/float(self.acc[indices2[i]].pts.shape[1]) - np.square(self.mean[:,indices2[i]:indices2[i]+1])
         print "Averaged ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
         prevtime = time.time()
             
         # Add non-matched (i.e. new unique) points to the buffer
+        
+        # Pre-allocate new mean and var array by adding ones for new cols
+        self.mean = np.hstack((self.mean, np.ones((3,new_pts.shape[1]-merged_count))))
+        self.var = np.hstack((self.var, np.ones((3,new_pts.shape[1]-merged_count))))
+        
+        added = 0
         for i in range(new_pts.shape[1]):
             if mask[i] == 1:
                 self.acc.append(Accumulated())
                 self.acc[-1].pts = new_pts[:,i:i+1]
                 self.acc[-1].pts2 = np.square(new_pts[:,i:i+1])
-                self.acc[-1].mean = new_pts[:,i]
-                self.acc[-1].var = np.array([0.,0.,0.])
+                self.mean[:,original_length+added] = new_pts[:,i]
+                self.var[:,original_length+added] = np.array([0.,0.,0.])
                 self.desc = np.vstack((self.desc, new.desc[i,:]))
+                added = added + 1
         print "Newed ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
         prevtime = time.time()
                 
         self.publish_cloud()
         print "Clouded ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
         prevtime = time.time()
-        print "Point Cloud Accumulated ( ", np.around(((time.time()-self.time_prev)*1000),1), "ms) "
+        print "Point Cloud Accumulated ( ", np.around(((time.time()-self.time_prev)*1000),1), "ms) - (",self.mean.shape[1]," unique points"
                 
     def publish_cloud(self):      
         cloud = PointCloud()
@@ -134,11 +152,11 @@ class Accumulator:
         cloud.header.frame_id = "/world"
         
         # Build relative cloud
-        for i, acc in enumerate(self.acc):
+        for i in range(self.mean.shape[1]):
             cloud.points.append(Point32())
-            cloud.points[-1].x = acc.mean[0]
-            cloud.points[-1].y = acc.mean[1]
-            cloud.points[-1].z = acc.mean[2]
+            cloud.points[-1].x = self.mean[0,i]
+            cloud.points[-1].y = self.mean[1,i]
+            cloud.points[-1].z = self.mean[2,i]
         self.cloud_pub.publish(cloud) 
         
     def points_to_cloud(self, pts):
