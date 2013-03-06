@@ -19,6 +19,8 @@
     (:file "_package_StampedFeaturesWithImage" :depends-on ("_package"))
     (:file "Visualisation" :depends-on ("_package_Visualisation"))
     (:file "_package_Visualisation" :depends-on ("_package"))
+    (:file "Described3DPoints" :depends-on ("_package_Described3DPoints"))
+    (:file "_package_Described3DPoints" :depends-on ("_package"))
     (:file "StampedFeaturesMatchesWithImage" :depends-on ("_package_StampedFeaturesMatchesWithImage"))
     (:file "_package_StampedFeaturesMatchesWithImage" :depends-on ("_package"))
     (:file "StampedStampedInt" :depends-on ("_package_StampedStampedInt"))

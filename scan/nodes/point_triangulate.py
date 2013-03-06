@@ -52,7 +52,7 @@ from sensor_msgs.msg import PointCloud2
 from sensor_msgs.msg import CameraInfo
 from std_msgs.msg import Empty
 from std_msgs.msg import Header
-from custom_msgs.msg import DescribedPointCloud
+from custom_msgs.msg import Described3DPoints
 from custom_msgs.msg import StampedFeaturesMatches
 from custom_msgs.msg import Visualisation
 import math
@@ -114,7 +114,7 @@ class PointTriangulator:
         rospy.Subscriber('/projection_calc/projections',StampedFeaturesMatches,self.on_got_matches)
         self.cloud_pub = rospy.Publisher('/scan/absolute_cloud', PointCloud)
         self.cloud_pub2 = rospy.Publisher('/scan/relative_cloud', PointCloud)
-        self.desc_cloud_pub = rospy.Publisher('/scan/relative_described_cloud', DescribedPointCloud)
+        self.desc_cloud_pub = rospy.Publisher('/scan/relative_described_cloud', Described3DPoints)
         self.vis_pub = rospy.Publisher('/scan/visualisation', Visualisation)
 
     def on_got_matches(self, sfm):
@@ -216,14 +216,15 @@ class PointTriangulator:
         """====================================================================
         # Relative Point Cloud with keypoints and descriptors
         ===================================================================="""
-        print points.shape
-        described_cloud = DescribedPointCloud()
+        described_cloud = Described3DPoints()
         described_cloud.header = cloud.header
-        described_cloud.cloud_points = points.reshape(-1,).tolist()
+        described_cloud.points = points.reshape(-1,).tolist()
         described_cloud.descriptors = self.desc_triangulated.reshape(-1,).tolist()
         described_cloud.descriptors_stride = self.desc_triangulated.shape[1]
         described_cloud.descriptors_matcher = self.descriptors_matcher
-        described_cloud.points = self.kp_triangulated.reshape(-1,).tolist()
+        described_cloud.position_i = self.position_i2
+        described_cloud.quat_w_to_i = self.quat_w_to_i2
+        described_cloud.quat_i_to_w = self.quat_i_to_w2
         self.desc_cloud_pub.publish(described_cloud)
         
     def publish_visualisation(self, pts1, pts2, sfm):

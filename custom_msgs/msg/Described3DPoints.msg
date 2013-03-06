@@ -1,0 +1,8 @@
+Header header
+float32[] points
+float32[] position_i
+float32[] quat_w_to_i
+float32[] quat_i_to_w
+float32[] descriptors
+int16 descriptors_stride
+string descriptors_matcher

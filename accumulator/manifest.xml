@@ -1,0 +1,16 @@
+<package>
+  <description brief="accumulator">
+
+     accumulator
+
+  </description>
+  <author>Alex</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/accumulator</url>
+  <depend package="custom_msgs"/>
+  <depend package="tf"/>
+
+</package>
+
+
