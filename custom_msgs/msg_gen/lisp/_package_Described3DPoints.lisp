@@ -1,8 +1,10 @@
 (cl:in-package custom_msgs-msg)
 (cl:export '(HEADER-VAL
           HEADER
-          POINTS-VAL
-          POINTS
+          POINTS3D-VAL
+          POINTS3D
+          POINTS2D-VAL
+          POINTS2D
           POSITION_I-VAL
           POSITION_I
           QUAT_W_TO_I-VAL

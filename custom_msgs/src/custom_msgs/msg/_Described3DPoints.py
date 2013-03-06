@@ -7,11 +7,12 @@ import struct
 import std_msgs.msg
 
 class Described3DPoints(genpy.Message):
-  _md5sum = "027af8ce1f97f9f0efb9ed891a4637a3"
+  _md5sum = "3e2fb2eb49d2fe4c12955a174579b8ad"
   _type = "custom_msgs/Described3DPoints"
   _has_header = True #flag to mark the presence of a Header object
   _full_text = """Header header
-float32[] points
+float32[] points3D
+float32[] points2D
 float32[] position_i
 float32[] quat_w_to_i
 float32[] quat_i_to_w
@@ -38,8 +39,8 @@ time stamp
 string frame_id
 
 """
-  __slots__ = ['header','points','position_i','quat_w_to_i','quat_i_to_w','descriptors','descriptors_stride','descriptors_matcher']
-  _slot_types = ['std_msgs/Header','float32[]','float32[]','float32[]','float32[]','float32[]','int16','string']
+  __slots__ = ['header','points3D','points2D','position_i','quat_w_to_i','quat_i_to_w','descriptors','descriptors_stride','descriptors_matcher']
+  _slot_types = ['std_msgs/Header','float32[]','float32[]','float32[]','float32[]','float32[]','float32[]','int16','string']
 
   def __init__(self, *args, **kwds):
     """
@@ -49,7 +50,7 @@ string frame_id
     changes.  You cannot mix in-order arguments and keyword arguments.
 
     The available fields are:
-       header,points,position_i,quat_w_to_i,quat_i_to_w,descriptors,descriptors_stride,descriptors_matcher
+       header,points3D,points2D,position_i,quat_w_to_i,quat_i_to_w,descriptors,descriptors_stride,descriptors_matcher
 
     :param args: complete set of field values, in .msg order
     :param kwds: use keyword arguments corresponding to message field names
@@ -60,8 +61,10 @@ string frame_id
       #message fields cannot be None, assign default values for those that are
       if self.header is None:
         self.header = std_msgs.msg.Header()
-      if self.points is None:
-        self.points = []
+      if self.points3D is None:
+        self.points3D = []
+      if self.points2D is None:
+        self.points2D = []
       if self.position_i is None:
         self.position_i = []
       if self.quat_w_to_i is None:
@@ -76,7 +79,8 @@ string frame_id
         self.descriptors_matcher = ''
     else:
       self.header = std_msgs.msg.Header()
-      self.points = []
+      self.points3D = []
+      self.points2D = []
       self.position_i = []
       self.quat_w_to_i = []
       self.quat_i_to_w = []
@@ -104,10 +108,14 @@ string frame_id
         _x = _x.encode('utf-8')
         length = len(_x)
       buff.write(struct.pack('<I%ss'%length, length, _x))
-      length = len(self.points)
+      length = len(self.points3D)
       buff.write(_struct_I.pack(length))
       pattern = '<%sf'%length
-      buff.write(struct.pack(pattern, *self.points))
+      buff.write(struct.pack(pattern, *self.points3D))
+      length = len(self.points2D)
+      buff.write(_struct_I.pack(length))
+      pattern = '<%sf'%length
+      buff.write(struct.pack(pattern, *self.points2D))
       length = len(self.position_i)
       buff.write(_struct_I.pack(length))
       pattern = '<%sf'%length
@@ -162,7 +170,14 @@ string frame_id
       pattern = '<%sf'%length
       start = end
       end += struct.calcsize(pattern)
-      self.points = struct.unpack(pattern, str[start:end])
+      self.points3D = struct.unpack(pattern, str[start:end])
+      start = end
+      end += 4
+      (length,) = _struct_I.unpack(str[start:end])
+      pattern = '<%sf'%length
+      start = end
+      end += struct.calcsize(pattern)
+      self.points2D = struct.unpack(pattern, str[start:end])
       start = end
       end += 4
       (length,) = _struct_I.unpack(str[start:end])
@@ -223,10 +238,14 @@ string frame_id
         _x = _x.encode('utf-8')
         length = len(_x)
       buff.write(struct.pack('<I%ss'%length, length, _x))
-      length = len(self.points)
+      length = len(self.points3D)
       buff.write(_struct_I.pack(length))
       pattern = '<%sf'%length
-      buff.write(self.points.tostring())
+      buff.write(self.points3D.tostring())
+      length = len(self.points2D)
+      buff.write(_struct_I.pack(length))
+      pattern = '<%sf'%length
+      buff.write(self.points2D.tostring())
       length = len(self.position_i)
       buff.write(_struct_I.pack(length))
       pattern = '<%sf'%length
@@ -282,7 +301,14 @@ string frame_id
       pattern = '<%sf'%length
       start = end
       end += struct.calcsize(pattern)
-      self.points = numpy.frombuffer(str[start:end], dtype=numpy.float32, count=length)
+      self.points3D = numpy.frombuffer(str[start:end], dtype=numpy.float32, count=length)
+      start = end
+      end += 4
+      (length,) = _struct_I.unpack(str[start:end])
+      pattern = '<%sf'%length
+      start = end
+      end += struct.calcsize(pattern)
+      self.points2D = numpy.frombuffer(str[start:end], dtype=numpy.float32, count=length)
       start = end
       end += 4
       (length,) = _struct_I.unpack(str[start:end])

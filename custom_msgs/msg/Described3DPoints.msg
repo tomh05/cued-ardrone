@@ -1,5 +1,6 @@
 Header header
-float32[] points
+float32[] points3D
+float32[] points2D
 float32[] position_i
 float32[] quat_w_to_i
 float32[] quat_i_to_w

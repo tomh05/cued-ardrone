@@ -218,7 +218,8 @@ class PointTriangulator:
         ===================================================================="""
         described_cloud = Described3DPoints()
         described_cloud.header = cloud.header
-        described_cloud.points = points.reshape(-1,).tolist()
+        described_cloud.points3D = points.reshape(-1,).tolist()
+        described_cloud.points2D = self.kp_triangulated.reshape(-1,).tolist()
         described_cloud.descriptors = self.desc_triangulated.reshape(-1,).tolist()
         described_cloud.descriptors_stride = self.desc_triangulated.shape[1]
         described_cloud.descriptors_matcher = self.descriptors_matcher

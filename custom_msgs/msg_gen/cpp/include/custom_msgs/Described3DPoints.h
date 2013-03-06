@@ -24,7 +24,8 @@ struct Described3DPoints_ {
 
   Described3DPoints_()
   : header()
-  , points()
+  , points3D()
+  , points2D()
   , position_i()
   , quat_w_to_i()
   , quat_i_to_w()
@@ -36,7 +37,8 @@ struct Described3DPoints_ {
 
   Described3DPoints_(const ContainerAllocator& _alloc)
   : header(_alloc)
-  , points(_alloc)
+  , points3D(_alloc)
+  , points2D(_alloc)
   , position_i(_alloc)
   , quat_w_to_i(_alloc)
   , quat_i_to_w(_alloc)
@@ -49,8 +51,11 @@ struct Described3DPoints_ {
   typedef  ::std_msgs::Header_<ContainerAllocator>  _header_type;
    ::std_msgs::Header_<ContainerAllocator>  header;
 
-  typedef std::vector<float, typename ContainerAllocator::template rebind<float>::other >  _points_type;
-  std::vector<float, typename ContainerAllocator::template rebind<float>::other >  points;
+  typedef std::vector<float, typename ContainerAllocator::template rebind<float>::other >  _points3D_type;
+  std::vector<float, typename ContainerAllocator::template rebind<float>::other >  points3D;
+
+  typedef std::vector<float, typename ContainerAllocator::template rebind<float>::other >  _points2D_type;
+  std::vector<float, typename ContainerAllocator::template rebind<float>::other >  points2D;
 
   typedef std::vector<float, typename ContainerAllocator::template rebind<float>::other >  _position_i_type;
   std::vector<float, typename ContainerAllocator::template rebind<float>::other >  position_i;
@@ -99,12 +104,12 @@ template<class ContainerAllocator>
 struct MD5Sum< ::custom_msgs::Described3DPoints_<ContainerAllocator> > {
   static const char* value() 
   {
-    return "027af8ce1f97f9f0efb9ed891a4637a3";
+    return "3e2fb2eb49d2fe4c12955a174579b8ad";
   }
 
   static const char* value(const  ::custom_msgs::Described3DPoints_<ContainerAllocator> &) { return value(); } 
-  static const uint64_t static_value1 = 0x027af8ce1f97f9f0ULL;
-  static const uint64_t static_value2 = 0xefb9ed891a4637a3ULL;
+  static const uint64_t static_value1 = 0x3e2fb2eb49d2fe4cULL;
+  static const uint64_t static_value2 = 0x12955a174579b8adULL;
 };
 
 template<class ContainerAllocator>
@@ -122,7 +127,8 @@ struct Definition< ::custom_msgs::Described3DPoints_<ContainerAllocator> > {
   static const char* value() 
   {
     return "Header header\n\
-float32[] points\n\
+float32[] points3D\n\
+float32[] points2D\n\
 float32[] position_i\n\
 float32[] quat_w_to_i\n\
 float32[] quat_i_to_w\n\
@@ -169,7 +175,8 @@ template<class ContainerAllocator> struct Serializer< ::custom_msgs::Described3D
   template<typename Stream, typename T> inline static void allInOne(Stream& stream, T m)
   {
     stream.next(m.header);
-    stream.next(m.points);
+    stream.next(m.points3D);
+    stream.next(m.points2D);
     stream.next(m.position_i);
     stream.next(m.quat_w_to_i);
     stream.next(m.quat_i_to_w);
@@ -196,11 +203,17 @@ struct Printer< ::custom_msgs::Described3DPoints_<ContainerAllocator> >
     s << indent << "header: ";
 s << std::endl;
     Printer< ::std_msgs::Header_<ContainerAllocator> >::stream(s, indent + "  ", v.header);
-    s << indent << "points[]" << std::endl;
-    for (size_t i = 0; i < v.points.size(); ++i)
+    s << indent << "points3D[]" << std::endl;
+    for (size_t i = 0; i < v.points3D.size(); ++i)
     {
-      s << indent << "  points[" << i << "]: ";
-      Printer<float>::stream(s, indent + "  ", v.points[i]);
+      s << indent << "  points3D[" << i << "]: ";
+      Printer<float>::stream(s, indent + "  ", v.points3D[i]);
+    }
+    s << indent << "points2D[]" << std::endl;
+    for (size_t i = 0; i < v.points2D.size(); ++i)
+    {
+      s << indent << "  points2D[" << i << "]: ";
+      Printer<float>::stream(s, indent + "  ", v.points2D[i]);
     }
     s << indent << "position_i[]" << std::endl;
     for (size_t i = 0; i < v.position_i.size(); ++i)
