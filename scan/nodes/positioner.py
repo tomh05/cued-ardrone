@@ -39,31 +39,7 @@ from sensor_msgs.msg import PointCloud
 from sensor_msgs.msg import CameraInfo
 from custom_msgs.msg import Described3DPoints
 
-class Frame:
-    def __init__(self):
-        self.header = None
-        self.position_i = None
-        self.quat_w_to_i = None
-        self.quat_i_to_w = None
-        self.points = None
-        self.kp = None
-        self.desc = None
-        self.desc_matcher = None
-        
-class Accumulated:
-    def __init__(self):
-        # There are M Accumulateds (one per unique 3D point)
-        # There are N_m pts supporting each unique point
-        self.pts =  None # This will be a 3xN numpy array
-                         # [x_1, ...,x_N]
-                         # [y_1, ...,y_N]
-                         # [z_2, ...,z_N]
-                         # This form is mainly used for programmatic simplicity
-                         # May be more efficient than a Mx3xN due to smaller
-                         # reallocations when points are added?
-        self.pts2 = None # squared points
-
-class Accumulator:    
+class Positioner:    
     def __init__(self):
         # Initialise ROS node
         self.connect()
@@ -200,83 +176,11 @@ class Accumulator:
         desc_masked = self.desc[mask, :]
         kp_masked = self.kp[mask, :]
         return kp_masked, desc_masked, np.cumsum(np.array(mask, dtype=np.int16))-1
-                
-    def publish_cloud(self):      
-        cloud = PointCloud()
-        cloud.header.stamp = rospy.Time.now()
-        cloud.header.frame_id = "/world"
-        
-        # Build relative cloud
-        for i in range(self.mean.shape[1]):
-            cloud.points.append(Point32())
-            cloud.points[-1].x = self.mean[0,i]
-            cloud.points[-1].y = self.mean[1,i]
-            cloud.points[-1].z = self.mean[2,i]
-        self.cloud_pub.publish(cloud)
-        
-        described_cloud = Described3DPoints()
-        described_cloud.header = cloud.header
-        described_cloud.points3D = self.mean.reshape(-1,).tolist()
-        described_cloud.points2D = self.kp.reshape(-1,).tolist()
-        described_cloud.descriptors = self.desc.reshape(-1,).tolist()
-        described_cloud.descriptors_stride = self.desc.shape[1]
-        described_cloud.descriptors_matcher = self.frames[-1].desc_matcher
-        self.desc_pub.publish(described_cloud)
-        
-    def project_virtual_keypoints(self):
-        homo_mean = np.vstack((self.mean, np.ones((1,self.mean.shape[1]))))
-        kp = self.virtual_projection.dot(homo_mean)
-        kp = (kp/kp[2])[:2]
-        return kp.T
-        
-    def points_to_cloud(self, pts):
-        cloud = PointCloud()
-        cloud.header.frame_id = "/world"
-        cloud.header.stamp = rospy.Time.from_sec(np.random.sample())
-        
-        # Reshape for easy clouding
-        sub = zip(*np.vstack((pts[0], pts[1], pts[2])))
 
-        # Build absolute cloud
-        for i, p in enumerate(sub):
-            cloud.points.append(Point32())
-            cloud.points[i].x = p[0]
-            cloud.points[i].y = p[1]
-            cloud.points[i].z = p[2]
-            
-        return cloud
-        
-    def approx_register(self, pts1, pts2):
-        # De-couple translation by subtracting centrioids
-        mean1 = np.array([np.mean(pts1, axis=1)]).T
-        mean2 = np.array([np.mean(pts2, axis=1)]).T
-        pts1_norm = np.add(pts1, -mean1)
-        pts2_norm = np.add(pts2, -mean2)
-        # Get covariance between point sets
-        r1 = np.sum(np.multiply(pts1_norm[0:1].T,(pts2_norm.T)), axis=0)
-        r2 = np.sum(np.multiply(pts1_norm[1:2].T,(pts2_norm.T)), axis=0)
-        r3 = np.sum(np.multiply(pts1_norm[2:3].T,(pts2_norm.T)), axis=0)
-        H = np.vstack((r1,r2,r3))
-        # Recover least squares R
-        U,S,Vt = np.linalg.svd(H)
-        R = Vt.T.dot(U.T)
-        # Recover t that match least squares R
-        t = mean2 - R.dot(mean1)
-        print np.hstack((R,t))
-        return R, t
-        
-    
-    def publish_matches(self, count, header1, header2):
-        stamped_stamped_int = StampedStampedInt()
-        stamped_stamped_int.header1 = header1
-        stamped_stamped_int.header2 = header2
-        stamped_stamped_int.count = count
-        self.match_pub.publish(stamped_stamped_int)
     
     def decode_and_buffer_message(self, msg):
-        frame = Frame()
         # Need to re-numpy the float32 array descriptors were transmitted in
-        frame.points = np.reshape(np.array(msg.points3D), (3, -1))
+        self.points = np.reshape(np.array(msg.points3D), (3, -1))
         frame.kp = np.reshape(np.array(msg.points2D), (2, -1)).T
         if (msg.descriptors_matcher == 'BruteForce'):
             frame.desc= np.reshape(np.array(msg.descriptors, np.float32), (-1, msg.descriptors_stride))   

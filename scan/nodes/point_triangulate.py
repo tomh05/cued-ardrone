@@ -408,7 +408,7 @@ class PointTriangulator:
         forward_triangulated = len(points3D_image[0])+0.
         print "Forward triangulated: ", forward_triangulated    
         
-        '''
+        
         sq = np.square(points3D_image)
         sq = np.sqrt(sq[0]+sq[1]+sq[2])
         sq_sum = np.sum(sq)
@@ -440,7 +440,7 @@ class PointTriangulator:
             print "All Points too far"
             self.rejection_reasons[6] = self.rejection_reasons[0]+1
             return
-        '''
+        
         
         # Triangulated points reprojected back to the image plane
         self.reprojected_frame1 = self.world_to_pixel_distorted(self.make_homo(points3D_image.T).T, R, t)        

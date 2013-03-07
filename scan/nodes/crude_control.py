@@ -58,6 +58,7 @@ class Controller:
     def __init__(self):
         self.connect()
         self.altitude = 0.
+        self.running = False
     
     def connect(self):
         self.tf = tf.TransformListener()
@@ -70,6 +71,9 @@ class Controller:
         self.altitude = (d.altitude_raw*1.) / 1000
 
     def on_got_start_command(self, empty):
+        if self.running == True:
+            return
+        self.running = True
         print "Beginning Scan"
         
         print "Stabilising..."
@@ -103,10 +107,12 @@ class Controller:
         self.twist_pub.publish(twist)
         
         self.ascend_timer = rospy.Timer(rospy.Duration(0.1), self.ascend_callback)
+        self.ascend_cutoff = rospy.Timer(rospy.Duration(6.), self.ascend_cutoff_callback, oneshot=True)
         
     def ascend_callback(self, timer):
         position1, quaternion1 = self.tf.lookupTransform("world","ardrone_base_link", rospy.Time(0))
         if position1[2] - self.start_height >= 0.3:
+            self.ascend_cutoff.shutdown()
             self.ascend_timer.shutdown()
             twist = gm.Twist()
             self.twist_pub.publish(twist)
@@ -116,11 +122,16 @@ class Controller:
             print "deadreckon dz: ", position1[2] - self.start_height
             print "altitude   dz: ", self.altitude - self.start_altitude
             print "Loading next frame"
+            self.running = False
             self.trigger_pub.publish()
         else:
             twist = gm.Twist()
             twist.linear.z  = +0.25
             self.twist_pub.publish(twist)
+            
+    def ascend_cutoff_callback(self, timer):
+        self.ascend_timer.shutdown()
+        print "ERROR: Ascent timed out"
     
 
 
