@@ -35,9 +35,12 @@ import tf
 import time
 import std_msgs.msg
 from geometry_msgs.msg import Point32
+from geometry_msgs.msg import Polygon
+from geometry_msgs.msg import PolygonStamped
 from sensor_msgs.msg import PointCloud
 from sensor_msgs.msg import CameraInfo
 from custom_msgs.msg import Described3DPoints
+from copy import deepcopy
 
 class Frame:
     def __init__(self):
@@ -85,8 +88,10 @@ class Accumulator:
         rospy.Subscriber('/scan/relative_described_cloud',Described3DPoints,self.on_got_cloud)
         self.cloud_pub = rospy.Publisher('/accumulator/absolute_cloud',PointCloud)
         self.desc_pub = rospy.Publisher('/accumulator/absolute_described_cloud', Described3DPoints)
+        self.fov_pub = rospy.Publisher('/accumulator/fov', PolygonStamped)
         
     def on_got_cloud(self, cloud):
+        self.stamp = cloud.header.stamp
         self.time_prev = time.time()
         prevtime = time.time()
         #print "Received new cloud"
@@ -118,9 +123,12 @@ class Accumulator:
         
         # Get subset of points that lie infront of new pose
         # i.e. points that could have been seen
-        kp_masked, desc_masked, shifts = self.get_subset(new.position_i, new.quat_i_to_w, new.quat_w_to_i)
+        kp_masked, desc_masked, shifts = self.get_subset_fov(new.position_i, new.quat_i_to_w, new.quat_w_to_i)
         #print "Sectioned ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
         prevtime = time.time()
+        
+        print kp_masked.shape
+        print desc_masked.shape
         
         original_length = self.mean.shape[1]
         
@@ -128,18 +136,36 @@ class Accumulator:
         kp1, kp2, indices1, indices2 = self.match_points(self.frames[-1].kp, kp_masked, new.desc, desc_masked)
         #print "Matched ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
         prevtime = time.time()
-            
         
-        # Reconstruct indices for full self.acc, self.desc     
+        # Reconstruct indices for full self.acc, self.desc
         for i in range(len(indices2)):
             indices2[i] = shifts[indices2[i]]
         #print "Rebuilt ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
         prevtime = time.time()
         
+        print "No of matches: ", len(indices2)
+        
         # Get inliers with RANSAC fitted F
-        #indices1, indices2 = self.extract_fundamental_and_filter_inliers(kp1, kp2, indices1, indices2)
+        #indices1F, indices2F = self.extract_fundamental_and_filter_inliers(kp1, kp2, indices1, indices2)
         #print "Fundamentalled ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
         #prevtime = time.time()
+        
+        #print "No of F fits: ", len(indices1F)
+        
+        
+        
+        #if len(indices1F) > 8:
+        #    R, t = self.approx_register(self.mean[:,indices2F], new_pts[:,indices1F])
+        #    print R
+        #    print t
+        #    new_pts = np.add(new_pts, -t)
+        #    new_pts = R.T.dot(new_pts)
+        
+        # Get inliers with RANSAC fitted F
+        #indices1F, indices2F = self.extract_fundamental_and_filter_inliers(kp1, kp2, indices1, indices2)
+        #print "Fundamentalled ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
+        #prevtime = time.time()
+        #print len(indices1F)
         
         mask = np.ones(new_pts.shape[1])
         Ns = np.zeros(len(indices2), dtype=np.float32)
@@ -199,6 +225,45 @@ class Accumulator:
         mask = camera_relative[2] > 0
         desc_masked = self.desc[mask, :]
         kp_masked = self.kp[mask, :]
+        return kp_masked, desc_masked, np.cumsum(np.array(mask, dtype=np.int16))-1
+        
+    def get_subset_fov(self, position_i, quat_i_to_w, quat_w_to_i):
+        camera_relative = np.add(tf.transformations.quaternion_matrix(quat_w_to_i)[:3,:3].dot(self.mean), -position_i)
+        normed_z = camera_relative/camera_relative[2]
+        
+        bottom_left =  self.inverseCameraMatrix.dot(np.array([[-80.],[405.],[ 1.]]))
+        print "bl: ", bottom_left
+        top_right =  self.inverseCameraMatrix.dot(np.array([[720.],[-45.],[1.]]))
+        print "tr: ", top_right
+        
+        offset = tf.transformations.quaternion_matrix(quat_i_to_w)[:3,:3].dot(position_i)
+        spoly = PolygonStamped()
+        poly = Polygon()
+        p = Point32()
+        p.x = bottom_left[0]*10.; p.y = 0.; p.z = 10.
+        poly.points.append(deepcopy(p))
+        p.x = 0.01; p.y = 0.01; p.z = 0.01
+        poly.points.append(deepcopy(p))
+        p.x = top_right[0]*10.; p.y = 0.; p.z = 10.
+        poly.points.append(deepcopy(p))
+        spoly.polygon = poly
+        spoly.header.frame_id = '/ardrone_base_frontcam'
+        spoly.header.stamp = self.stamp
+        #spoly.header.frame_id = '/world2'
+        self.fov_pub.publish(spoly)
+        
+        mask_left = camera_relative[0,:] > bottom_left[0]
+        mask_bottom = camera_relative[1,:] < bottom_left[1]
+        mask_right = camera_relative[0,:] < top_right[0]
+        mask_top = camera_relative[1,:] > top_right[1]
+        mask_hori = np.logical_and(mask_left, mask_right)
+        mask_vert = np.logical_and(mask_top, mask_bottom)
+        mask = np.logical_and(mask_hori, mask_vert)
+        
+        
+        desc_masked = self.desc[mask, :]
+        kp_masked = self.kp[mask, :]
+        
         return kp_masked, desc_masked, np.cumsum(np.array(mask, dtype=np.int16))-1
                 
     def publish_cloud(self):      
@@ -308,8 +373,6 @@ class Accumulator:
         i2_indices2 = list(x.queryIdx for x in matches2) 
         i1_indices2 = list(x.trainIdx for x in matches2)
         
-         
-        
         # Find pairing that are consistent in both dirs
         comb1 = set(zip(i1_indices, i2_indices))
         comb2 = set(zip(i1_indices2, i2_indices2))
@@ -317,7 +380,6 @@ class Accumulator:
         comb = zip(*list(comb))
         if len(comb) == 0:
             return None, None, [], []
-        
         
         i1_indices = comb[0]
         i2_indices = comb[1]
