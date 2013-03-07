@@ -204,7 +204,7 @@ class FeatureExtractor:
         return np.array([u,v]).T
         
     def known_data(self, d):
-        self.index = np.random.randint(0,9)#len(self.positions))
+        self.index = np.random.randint(0,6)#len(self.positions))
         
         #if self.index == 0:
         #   self.index = 2
