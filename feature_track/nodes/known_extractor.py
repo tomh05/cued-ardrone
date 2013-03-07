@@ -204,12 +204,12 @@ class FeatureExtractor:
         return np.array([u,v]).T
         
     def known_data(self, d):
-        self.index = np.random.randint(1,9)#len(self.positions))
+        self.index = np.random.randint(0,9)#len(self.positions))
         
-        #if self.index == 1:
+        #if self.index == 0:
         #   self.index = 2
         #else:
-        #    self.index = 1
+        #    self.index = 0
         self.time_prev = time.time()
         img = cv2.imread(self.directory+'/images/frame'+str(5*self.index+1).zfill(4)+'.jpg', cv2.CV_LOAD_IMAGE_GRAYSCALE)
         self.box_overlay(img,self.index)

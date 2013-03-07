@@ -83,6 +83,7 @@ class Accumulator:
         self.setCameraInfo(camera_info)
         rospy.Subscriber('/scan/relative_described_cloud',Described3DPoints,self.on_got_cloud)
         self.cloud_pub = rospy.Publisher('/accumulator/absolute_cloud',PointCloud)
+        self.desc_pub = rospy.Publisher('/accumulator/absolute_described_cloud', Described3DPoints)
         
     def on_got_cloud(self, cloud):
         self.time_prev = time.time()
@@ -208,6 +209,15 @@ class Accumulator:
             cloud.points[-1].z = self.mean[2,i]
         self.cloud_pub.publish(cloud)
         
+        described_cloud = Described3DPoints()
+        described_cloud.header = cloud.header
+        described_cloud.points3D = self.mean.reshape(-1,).tolist()
+        described_cloud.points2D = self.kp.reshape(-1,).tolist()
+        described_cloud.descriptors = self.desc.reshape(-1,).tolist()
+        described_cloud.descriptors_stride = self.desc.shape[1]
+        described_cloud.descriptors_matcher = self.frames[-1].desc_matcher
+        self.desc_pub.publish(described_cloud)
+        
     def project_virtual_keypoints(self):
         homo_mean = np.vstack((self.mean, np.ones((1,self.mean.shape[1]))))
         kp = self.virtual_projection.dot(homo_mean)
@@ -328,8 +338,16 @@ class Accumulator:
 
 def run():
     rospy.init_node('Accumulator')
+    
+    # Print startup info
+    print "\r\n"
+    print "=========================== Accumulator ==========================="
+    print " "
+    print "==================================================================="
+    print "\r\n"
+    
     # Initialise controller
-    a = Accumulator()
+    a = Accumulator()    
     # Begin ROS loop
     rospy.spin()
 
