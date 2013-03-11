@@ -16,7 +16,9 @@ import cv2
 import tf
 import time
 import std_msgs.msg
+from geometry_msgs.msg import Pose
 from geometry_msgs.msg import Point32
+from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import PointCloud
 from sensor_msgs.msg import CameraInfo
 from custom_msgs.msg import Described3DPoints
@@ -37,6 +39,7 @@ class Positioner:
         self.br = tf.TransformBroadcaster() 
         rospy.Subscriber('/accumulator/absolute_described_cloud',Described3DPoints,self.on_got_cloud)
         rospy.Subscriber('/feature_extractor/features', StampedFeaturesWithImage, self.on_got_features)
+        self.pose_pub = rospy.Publisher('/positioner/pose', PoseStamped)
         
     def on_got_cloud(self, cloud):
         #print "Received new cloud"
@@ -76,6 +79,7 @@ class Positioner:
             return False
         
         
+        
         print "No. of inliers: ", len(inliers)   
         if len(inliers) > 16: 
             
@@ -102,6 +106,17 @@ class Positioner:
                          header.stamp,
                          "/ardrone_from_cloud",
                          "/world")
+                         
+            ps = PoseStamped()
+            ps.pose.position.x  = t_position[0]
+            ps.pose.position.y  = t_position[1]
+            ps.pose.position.z  = t_position[2]
+            ps.pose.orientation.x = quat[0]
+            ps.pose.orientation.y = quat[1]
+            ps.pose.orientation.z = quat[2]
+            ps.pose.orientation.w = quat[3]
+            ps.header = sfwi.header
+            self.pose_pub.publish(ps)
     
     
     def get_keypoints_and_descriptors(self, sfwi):
