@@ -10,6 +10,9 @@
   <url>http://ros.org/wiki/floor_gridder</url>
   <depend package="opencv2"/>
   <depend package="custom_msgs"/>
+  <depend package="image_transport"/>
+  <depend package="ardrone_autonomy"/>
+  <depend package="cv_bridge"/>
 
 </package>
 
