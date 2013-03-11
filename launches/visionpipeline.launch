@@ -1,0 +1,19 @@
+<!-- This is a sample lanuch file, please change it based on your needs -->
+<launch>
+    
+    <node name="featureextract" pkg="feature_track" type="feature_manual_extractor.py" output="screen" clear_params="true">
+        <param name="desc" value="SIFT"/>
+    </node>
+    
+    <node name="featurematch" pkg="feature_track" type="feature_matcher.py" output="screen" clear_params="true">
+    </node>
+    
+    <node name="projcalc" pkg="feature_track" type="projection_calc.py" output="screen" clear_params="true">
+    </node>    
+    
+    <node name="tri" pkg="scan" type="point_triangulate.py" output="screen" clear_params="true">
+    </node> 
+    
+</launch>
+
+
