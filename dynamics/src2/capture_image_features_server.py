@@ -31,20 +31,28 @@ class ImageCapturer:
 		self.capture_ok = False
 		self.capture_request = False
 		
+		self.kppt = Float32MultiArray()
+		self.desc = Float32MultiArray()
+		self.results_ok = False
+		
 		s = rospy.Service('capture_image_features', capture_image_features, self.handle_capture_image_features)
 		print "capture_image_features_server.py: Server ready."
 		rospy.spin()
 		
 	def handle_capture_image_features(self, req):
-		print "Handling capture image features request."
-		kppt = Float32MultiArray(); kppt.data = np.zeros(2);
-		desc = Float32MultiArray(); desc.data = np.ones(2);
+		print "capture_image_features_server.py: Handling capture image features request."
+		self.capture_request = True
+		while self.results_ok == False:
+			pass
+		kppt = self.kppt
+		desc = self.desc
+		self.results_ok = False
 		return capture_image_featuresResponse(kppt, desc)
 
-		self.capture_request = True
 		
 	def navdataCallback(self, msg):
 		self.check_capture(msg)
+		print 'navdata callback'
 		
 	def check_capture(self,navd):
 		"""Check if capture flag should be set to tell imgproc to 
