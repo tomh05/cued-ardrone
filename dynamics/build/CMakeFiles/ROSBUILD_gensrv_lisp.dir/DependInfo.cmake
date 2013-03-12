@@ -9,6 +9,7 @@ SET(CMAKE_MULTIPLE_OUTPUT_PAIRS
   "/home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv_gen/lisp/_package_CamSelect.lisp" "/home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv_gen/lisp/CamSelect.lisp"
   "/home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv_gen/lisp/_package_HullSelect.lisp" "/home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv_gen/lisp/HullSelect.lisp"
   "/home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv_gen/lisp/_package_LedAnim.lisp" "/home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv_gen/lisp/LedAnim.lisp"
+  "/home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv_gen/lisp/_package_capture_image_features.lisp" "/home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv_gen/lisp/capture_image_features.lisp"
   )
 
 

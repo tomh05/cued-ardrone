@@ -12,13 +12,16 @@ fc85e456b7b44f3e284f2d2946cbeebf ../src/dynamics/msg/__init__.py
 f351f89f42f76e59c5eace7f80d738c6 ../src/dynamics/srv/_CamSelect.py
 6ac3276761bcb9f5acba98aed58a5ffb ../src/dynamics/srv/_HullSelect.py
 5eb74cd4aa080ccfb7bc091f53924d92 ../src/dynamics/srv/_LedAnim.py
-e313b030935bb4aef3a223cec1b1dccb ../src/dynamics/srv/__init__.py
+c0385c4869cd3b65f08f5761232ac7e1 ../src/dynamics/srv/__init__.py
+1fdcb2aafdd4397a6403f58cb76f2fd8 ../src/dynamics/srv/_capture_image_features.py
 252f2d87f93b8b193d0c6fbf6a632723 ../srv_gen/cpp/include/dynamics/CamSelect.h
 d901a4494dee86b4d14eb6faad9186ad ../srv_gen/cpp/include/dynamics/HullSelect.h
 e4b23af2cd74aaa1574d19c7bfe4fc71 ../srv_gen/cpp/include/dynamics/LedAnim.h
+6d568b4f756c51d6ddd485d467a90ef0 ../srv_gen/cpp/include/dynamics/capture_image_features.h
 3547c165757777ed73fa7a10282dde5c ../srv_gen/lisp/CamSelect.lisp
 d18abeaffe102486e12497f5ed1eccd2 ../srv_gen/lisp/HullSelect.lisp
 5895c067825cf60cff8a9c45e9f0ba24 ../srv_gen/lisp/LedAnim.lisp
+7cab594d1c6e3c4a5192e340156f63f2 ../srv_gen/lisp/capture_image_features.lisp
 78e79c2f393544e0dea61cd778ef8487 CMakeFiles/ROSBUILD_genmsg_cpp
 78e79c2f393544e0dea61cd778ef8487 CMakeFiles/ROSBUILD_genmsg_lisp
 78e79c2f393544e0dea61cd778ef8487 CMakeFiles/ROSBUILD_genmsg_py

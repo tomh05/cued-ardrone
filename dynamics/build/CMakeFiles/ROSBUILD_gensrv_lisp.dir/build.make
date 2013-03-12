@@ -48,6 +48,9 @@ CMakeFiles/ROSBUILD_gensrv_lisp: ../srv_gen/lisp/_package_CamSelect.lisp
 CMakeFiles/ROSBUILD_gensrv_lisp: ../srv_gen/lisp/HullSelect.lisp
 CMakeFiles/ROSBUILD_gensrv_lisp: ../srv_gen/lisp/_package.lisp
 CMakeFiles/ROSBUILD_gensrv_lisp: ../srv_gen/lisp/_package_HullSelect.lisp
+CMakeFiles/ROSBUILD_gensrv_lisp: ../srv_gen/lisp/capture_image_features.lisp
+CMakeFiles/ROSBUILD_gensrv_lisp: ../srv_gen/lisp/_package.lisp
+CMakeFiles/ROSBUILD_gensrv_lisp: ../srv_gen/lisp/_package_capture_image_features.lisp
 CMakeFiles/ROSBUILD_gensrv_lisp: ../srv_gen/lisp/LedAnim.lisp
 CMakeFiles/ROSBUILD_gensrv_lisp: ../srv_gen/lisp/_package.lisp
 CMakeFiles/ROSBUILD_gensrv_lisp: ../srv_gen/lisp/_package_LedAnim.lisp
@@ -142,6 +145,54 @@ CMakeFiles/ROSBUILD_gensrv_lisp: ../srv_gen/lisp/_package_LedAnim.lisp
 
 ../srv_gen/lisp/_package_HullSelect.lisp: ../srv_gen/lisp/HullSelect.lisp
 
+../srv_gen/lisp/capture_image_features.lisp: ../srv/capture_image_features.srv
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/share/roslisp/rosbuild/scripts/genmsg_lisp.py
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/share/roslib/bin/gendeps
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/share/std_msgs/msg/Float32MultiArray.msg
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/share/std_msgs/msg/MultiArrayLayout.msg
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/share/std_msgs/msg/MultiArrayDimension.msg
+../srv_gen/lisp/capture_image_features.lisp: ../manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/share/geometry_msgs/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/share/sensor_msgs/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/stacks/vision_opencv/opencv2/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/share/roslang/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/share/roscpp/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/stacks/vision_opencv/cv_bridge/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/share/rospy/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/share/std_msgs/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/share/ros/core/rosbuild/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/share/roslib/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/share/rosconsole/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/stacks/pluginlib/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/share/message_filters/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/stacks/image_common/image_transport/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/share/std_srvs/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/stacks/bullet/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/stacks/geometry/angles/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/share/rostest/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/share/roswtf/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/stacks/geometry/tf/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/stacks/common_rosdeps/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/stacks/image_common/camera_calibration_parsers/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/stacks/image_common/camera_info_manager/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /home/rujian/fuerte_workspace/ccny_vision/artoolkit/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/share/visualization_msgs/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/stacks/robot_model/resource_retriever/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/manifest.xml
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/stacks/geometry/tf/msg_gen/generated
+../srv_gen/lisp/capture_image_features.lisp: /opt/ros/fuerte/stacks/geometry/tf/srv_gen/generated
+../srv_gen/lisp/capture_image_features.lisp: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/msg_gen/generated
+../srv_gen/lisp/capture_image_features.lisp: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/srv_gen/generated
+../srv_gen/lisp/capture_image_features.lisp: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/msg_gen/generated
+	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_3)
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Generating ../srv_gen/lisp/capture_image_features.lisp, ../srv_gen/lisp/_package.lisp, ../srv_gen/lisp/_package_capture_image_features.lisp"
+	/opt/ros/fuerte/share/roslisp/rosbuild/scripts/genmsg_lisp.py /home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv/capture_image_features.srv
+
+../srv_gen/lisp/_package.lisp: ../srv_gen/lisp/capture_image_features.lisp
+
+../srv_gen/lisp/_package_capture_image_features.lisp: ../srv_gen/lisp/capture_image_features.lisp
+
 ../srv_gen/lisp/LedAnim.lisp: ../srv/LedAnim.srv
 ../srv_gen/lisp/LedAnim.lisp: /opt/ros/fuerte/share/roslisp/rosbuild/scripts/genmsg_lisp.py
 ../srv_gen/lisp/LedAnim.lisp: /opt/ros/fuerte/share/roslib/bin/gendeps
@@ -179,7 +230,7 @@ CMakeFiles/ROSBUILD_gensrv_lisp: ../srv_gen/lisp/_package_LedAnim.lisp
 ../srv_gen/lisp/LedAnim.lisp: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/msg_gen/generated
 ../srv_gen/lisp/LedAnim.lisp: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/srv_gen/generated
 ../srv_gen/lisp/LedAnim.lisp: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/msg_gen/generated
-	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_3)
+	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_4)
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Generating ../srv_gen/lisp/LedAnim.lisp, ../srv_gen/lisp/_package.lisp, ../srv_gen/lisp/_package_LedAnim.lisp"
 	/opt/ros/fuerte/share/roslisp/rosbuild/scripts/genmsg_lisp.py /home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv/LedAnim.srv
 
@@ -194,6 +245,9 @@ ROSBUILD_gensrv_lisp: ../srv_gen/lisp/_package_CamSelect.lisp
 ROSBUILD_gensrv_lisp: ../srv_gen/lisp/HullSelect.lisp
 ROSBUILD_gensrv_lisp: ../srv_gen/lisp/_package.lisp
 ROSBUILD_gensrv_lisp: ../srv_gen/lisp/_package_HullSelect.lisp
+ROSBUILD_gensrv_lisp: ../srv_gen/lisp/capture_image_features.lisp
+ROSBUILD_gensrv_lisp: ../srv_gen/lisp/_package.lisp
+ROSBUILD_gensrv_lisp: ../srv_gen/lisp/_package_capture_image_features.lisp
 ROSBUILD_gensrv_lisp: ../srv_gen/lisp/LedAnim.lisp
 ROSBUILD_gensrv_lisp: ../srv_gen/lisp/_package.lisp
 ROSBUILD_gensrv_lisp: ../srv_gen/lisp/_package_LedAnim.lisp
