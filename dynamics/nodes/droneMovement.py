@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 
 '''
-HoverController.py
-This program performs high level control of marker hovering: 
-sets up transform trees, defines world coordinate, works out current pose and sets desired pose, and sends these to position_controller
 '''
 import roslib; roslib.load_manifest('dynamics')
 import rospy
@@ -55,11 +52,17 @@ class DroneMovement:
         print 'yaw is now'
         print self.targetYaw
         self.positionController.dyw_handler(self.targetYaw)
+
         
     def goToPoseStamped(self,targetPoseStamped):
         targetPoseStamped.pose.position.z = 1.0 # it's zero by default
         self.goToWorldPose(targetPoseStamped.pose) 
     
+    #crazy debug data format 
+    def setK(self,targetPose):
+        self.positionController.kParticle    = targetPose.position.x
+        self.positionController.kParticleRot = targetPose.position.y
+
     def updatePose(self,data):
         ###### Currently un-used: position is determined by the positionController directly
 
@@ -80,7 +83,8 @@ if __name__ == '__main__':
         rospy.sleep(1.0)
         droneMovement.positionController.pc_timer_init()
         print 'created'
-        rospy.Subscriber('/targetPose',Pose,droneMovement.goToWorldPose);
+        #rospy.Subscriber('/targetPose',Pose,droneMovement.goToWorldPose);
+        rospy.Subscriber('/targetPose',Pose,droneMovement.setK);
         rospy.Subscriber('/move_base_simple/goal',PoseStamped,droneMovement.goToPoseStamped);
         rospy.Subscriber('/tf',tf.msg.tfMessage,droneMovement.updatePose);
         rospy.spin()

@@ -4,7 +4,6 @@
     </group>
     
    <node name="IMU_parser" pkg="particlefilter" type="imu_movement.py" />
-    
     <node name="ar_pose" pkg="ar_pose" type="ar_multi" output="screen">
         <remap from="/usb_cam/camera_info" to="ardrone/front/camera_info" />
         <remap from="/usb_cam/image_raw" to="ardrone/front/image_rect" />
@@ -16,9 +15,25 @@
 
     <node name="Particle_Filter" pkg="particlefilter" type="particlefilter.py">
         <param name="map_path" type="string" value="$(find particlefilter)/maps/lab1.map" />
-        <param name="translation_noise" type="double" value="0.01" />
-        <param name="rotation_noise" type="double" value="0.01" />
-        <param name="marker_noise" type="double" value="0.8" />
+        <param name="xy_noise" type="double" value="0.005" />
+        <param name="altitude_noise" type="double" value="0.05" />
+        <param name="pitch_noise" type="double" value="0.005" />
+        <param name="yaw_noise" type="double" value="0.005" />
+        <param name="roll_noise" type="double" value="0.005" />
+        <param name="marker_noise_p" type="double" value="0.8" />
+        <param name="marker_noise_r" type="double" value="0.05" />
+
+
+
+
+        <!-- <param name="xy_noise" type="double" value="0.1" />
+        <param name="altitude_noise" type="double" value="0.03" />
+        <param name="pitch_noise" type="double" value="0.01" />
+        <param name="yaw_noise" type="double" value="0.05" />
+        <param name="roll_noise" type="double" value="0.01" />
+        <param name="marker_noise_p" type="double" value="1.8" />
+        <param name="marker_noise_r" type="double" value="0.8" />
+        -->
         <!-- 0.2 marker noise before and 0.04 translation and 0.1 rotation noise -->
         <!-- 0.5 marker noise before and 0.01 translation and 0.1 rotation noise -->
     </node>

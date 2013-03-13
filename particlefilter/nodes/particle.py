@@ -32,15 +32,22 @@ class Particle:
         #self.gamma = -2.0 + (random.random() * 4.0)
         self.orientation = tf.transformations.quaternion_from_euler(self.alpha, self.beta, self.gamma)
         self.morientation = tf.transformations.quaternion_from_euler(self.alpha, self.beta, self.gamma)
+        self.xy_noise           = 0.0
+        self.altitude_noise     = 0.0
+        self.pitch_noise        = 0.0
+        self.yaw_noise          = 0.0
+        self.roll_noise         = 0.0
+        self.marker_noise_p     = 0.0
+        self.marker_noise_r     = 0.0
 
-        self.translationNoise       = 0.0 # 0.02
-        self.rotationNoise          = 0.0 # 0.1
-        self.markerNoise            = 0.0# 0.2 #10.0
-
-    def setNoise(self,translationNoise,rotationNoise,markerNoise):
-            self.translationNoise   = translationNoise
-            self.rotationNoise      = rotationNoise
-            self.markerNoise        = markerNoise
+    def setNoise(self,xy,alt,roll,pitch,yaw,marker_p,marker_r):
+            self.xy_noise           = xy
+            self.altitude_noise     = alt
+            self.pitch_noise        = pitch
+            self.yaw_noise          = yaw
+            self.roll_noise         = roll
+            self.marker_noise_p     = marker_p
+            self.marker_noise_r     = marker_r
 
     def move(self,movement):
         # rosbag: reset if time starts again
@@ -59,6 +66,7 @@ class Particle:
             self.pos = np.array([x,y,z])
             self.orientation = tf.transformations.quaternion_from_euler(0.0,0.0,0.0)
 
+        # work out relative displacement
         # convert translation to numpy format
         t = movement.relativeTranslation
         displacement = np.array([t.x,t.y,t.z])
@@ -67,39 +75,65 @@ class Particle:
         q = movement.absoluteTransform.transform.rotation
         #np_quaternion = np.array([q.x,q.y,q.z,q.w])
         new_quaternion = np.array([q.x,q.y,q.z,q.w])
-        k = 0.5 # 0.1 worked well
+        #k = 0.5 # 0.1 worked well
         #np_quaternion = np.add(k * new_quaternion,(1-k) * self.orientation)
-        
-        np_quaternion = tf.transformations.quaternion_multiply(new_quaternion, self.orientation)
 
+
+        # ROTATION
+        # make 10% of particles rotate much more
+        if (random.random() > 0.1):
+            boostfactor = 1.0
+        else:
+            boostfactor = 10.0
+        new_quaternion = self.addRotNoise(new_quaternion,self.roll_noise*boostfactor,self.pitch_noise*boostfactor,self.yaw_noise*boostfactor)
+        #np_quaternion = np.add(new_quaternion,[nx,ny,nz,0.0]) 
+
+        # integrate up orientation and normalise
+        new_quaternion = tf.transformations.quaternion_multiply(new_quaternion, self.orientation)
+        new_quaternion /= np.sqrt(np.inner(new_quaternion,new_quaternion))
+
+        self.orientation = new_quaternion
+
+
+
+        # POSITION 
+        # For 90% of particles, add small amount of noise
+        # For 10%, add a large amount of noise
+        if (random.random() > 0.1):
+            xyboostfactor = 1.0
+            zboostfactor = 1.0
+        else:
+            xyboostfactor = 10.0
+            zboostfactor = 1.0
+        
+        nx = random.gauss(0.0,xyboostfactor*self.xy_noise)
+        ny = random.gauss(0.0,xyboostfactor*self.xy_noise)
+        nz = random.gauss(0.0,zboostfactor*self.altitude_noise)
+ 
         # add noise
-        nx = random.gauss(0.0,self.translationNoise)
-        ny = random.gauss(0.0,self.translationNoise)
-        nz = random.gauss(0.0,self.translationNoise)
         translationNoise = np.array([nx,ny,nz])
 
-        nx = random.gauss(0.0,self.rotationNoise)
-        ny = random.gauss(0.0,self.rotationNoise)
-        nz = random.gauss(0.0,self.rotationNoise)
-        np_quaternion = np.add(np_quaternion,[nx,ny,nz,0.0]) 
-        np_quaternion /= np.sqrt(np.inner(np_quaternion[:3],np_quaternion[:3]))
-        # TODO normalise this!
-
-        # quaternion_matrix() will renormalise np_quaternion for us
-
-        # combination of current rotation and deadreckon        
-        #np_quaternionrot = tf.transformations.quaternion_multiply(np_quaternion,self.orientation)
-
-
-        self.orientation = np_quaternion
-
         # perform position update
-        rotationmat = tf.transformations.quaternion_matrix(np_quaternion)[:3,:3]
+        rotationmat = tf.transformations.quaternion_matrix(new_quaternion)[:3,:3]
         self.pos = self.pos + np.dot(rotationmat,displacement) + translationNoise
-        # absolute altitude
-        #self.pos[2] = movement.absoluteTransform.transform.translation.z
-        #self.pos = self.pos + translationNoise
+        # for 10% of particles, use absolute altitude measurement
+        if (random.random() < 0.1):
+            self.pos[2] = movement.absoluteTransform.transform.translation.z
+            self.pos[2] += nz
 
+
+
+    def addRotNoise(self,quaternion,roll,pitch,yaw):
+
+        nx = random.gauss(0.0,roll)
+        ny = random.gauss(0.0,pitch)
+        nz = random.gauss(0.0,yaw)
+
+        noise_quaternion = tf.transformations.quaternion_from_euler(nx, ny, nz)
+
+        return tf.transformations.quaternion_multiply(quaternion, noise_quaternion)
+
+        
     def clone(self):
         # return new particle at the current position
         newself = Particle()
@@ -115,13 +149,17 @@ class Particle:
     def likelihood(self,worldmap,ar_markers):
         #TODO use covariance data?
         weight = 1.0
+        #print '---- start of likelihood ------'
+        #print 'weight', weight
         # markers are currently relative to base. Set up transform to particle base location...
         rot_mat_world_to_base = tf.transformations.quaternion_matrix(self.orientation)[:3,:3]
         # ...and from particle to front camera frame
         q_base_frontcam = np.array([-0.5,0.5,-0.5,0.5])
         rot_mat_base_to_frontcam = tf.transformations.quaternion_matrix(q_base_frontcam)[:3,:3]
-
-        for i in range(len(ar_markers.markers)):
+        #print 'MARKERS', len(ar_markers.markers)
+        #for i in range(len(ar_markers.markers)):
+        for i in range(1):
+            i = len(ar_markers.markers) - 1
             # convert marker position to numpy format
             t = ar_markers.markers[i].pose.pose.position
             displacement = np.array([t.x,t.y,t.z])
@@ -145,17 +183,18 @@ class Particle:
                 if (worldmap.markers[j].id == ar_markers.markers[i].id):
                     mapPosition    = worldmap.markers[j].pose.pose.position
                     mapOrientation = worldmap.markers[j].pose.pose.orientation
-                    #print "I'm looking at marker " + str(worldmap.markers[j].id)
                     break
 
             conf = ar_markers.markers[i].confidence
 
             if (mapPosition is not None and conf>70):
+                print "I'm looking at marker " + str(worldmap.markers[j].id)
                 error2 = (mapPosition.x-self.markerPos[0])**2 + (mapPosition.y-self.markerPos[1])**2 + (mapPosition.z-self.markerPos[2])**2
                 error2 = np.sqrt(error2)
-                weight *= self.gauss(0,self.markerNoise,error2) #/ (1.01-0.01*conf)
-                
-                
+                #print 'prior w', weight 
+                weight *= self.gauss(0,self.marker_noise_p,error2) #/ (1.01-0.01*conf)
+                #print 'err2 ',error2 
+                #print 'final w' ,weight
                 
                 #print error2
                 #weight *= 1.0/error2
@@ -168,31 +207,27 @@ class Particle:
                 self.morientation = np_quaternion
                 # transform from camera frame to base
                 self.morientation = tf.transformations.quaternion_multiply(q_base_frontcam,self.morientation)
-                #self.morientation = tf.transformations.quaternion_multiply(np.array([0.707,0.0,0.0,0.707]),np_quaternion)
-                #self.morientation = tf.transformations.quaternion_multiply(np.array([0.0,0.0,0.0,1.0]),np_quaternion)
-                #self.morientation = tf.transformations.quaternion_multiply(np.array([0.0,0.0,0.0,1.0]),np_quaternion)
                 # transform from base to world
                 self.morientation = tf.transformations.quaternion_multiply(self.orientation,self.morientation)
                 
-                #self.morientation = np_quaternion
-                #self.morientation = tf.transformations.quaternion_multiply(np.array([0.0,0.0,0.707,0.707]),self.morientation)
-                #self.morientation = tf.transformations.quaternion_multiply(np.array([0.707,0.0,0.0,0.707]),self.morientation)
                 
-                
-                #below code works for 1 wall!
-                #self.morientation = tf.transformations.quaternion_multiply(np.array([0.5,-0.5,1.0,0.0]),self.morientation)
-                #self.morientation = tf.transformations.quaternion_multiply(np.array([-0.5,0.5,0.5,0.5]),self.morientation)
-                #self.morientation = tf.transformations.quaternion_multiply(np.array([0.707,0.0,0.0,0.707]),self.morientation)
-                #print 'morientation ', self.morientation
-                #print 'pose         ', mapOrientation
-                np_mapOrientation = np.array([mapOrientation.x,mapOrientation.y,mapOrientation.z,mapOrientation.w])
-                quaternionerror = 1.0 - abs(np.inner(self.morientation,np_mapOrientation))
-                #print 'err ', quaternionerror
-                    
-                orientationlik = self.gauss(0.0,01.2,quaternionerror)
-                if (orientationlik > 0.001):
-                    weight *= orientationlik
 
+                np_mapOrientation = np.array([mapOrientation.x,mapOrientation.y,mapOrientation.z,mapOrientation.w])
+                np_mapOrientation /= np.sqrt(np.inner(np_mapOrientation,np_mapOrientation))
+                self.morientation /= np.sqrt(np.inner(self.morientation,self.morientation))
+                quaternionerror = abs(1.0 - abs(np.inner(self.morientation,np_mapOrientation)))
+                '''
+                print '----'
+                print 'starting weight', weight
+                print 'mapOrientation', np_mapOrientation
+                print 'selfOrientation',self.morientation 
+                print 'error',quaternionerror
+                '''
+                orientationlik = self.gauss(0.0,self.marker_noise_r,quaternionerror)
+                #print 'gauss func' , orientationlik
+                #if (orientationlik > 0.001):
+                weight *= orientationlik
+                #print 'end weight', weight
                 #weight = 1.0
         return weight
 

@@ -36,9 +36,13 @@ publishTf = True
 
 #------------------------------------------------------
 # Params setup
-transNoise = rospy.get_param("/Particle_Filter/translation_noise",0.0)
-rotNoise = rospy.get_param("/Particle_Filter/rotation_noise",0.0)
-markerNoise = rospy.get_param("/Particle_Filter/marker_noise",0.0)
+xyNoise     = rospy.get_param("/Particle_Filter/xy_noise",0.0)
+altNoise    = rospy.get_param("/Particle_Filter/altitude_noise",0.0)
+pitchNoise  = rospy.get_param("/Particle_Filter/pitch_noise",0.0)
+yawNoise    = rospy.get_param("/Particle_Filter/yaw_noise",0.0)
+rollNoise   = rospy.get_param("/Particle_Filter/roll_noise",0.0)
+markerNoiseP= rospy.get_param("/Particle_Filter/marker_noise_p",0.0)
+markerNoiseR= rospy.get_param("/Particle_Filter/marker_noise_r",0.0)
 
 #------------------------------------------------------
 # Map Setup
@@ -91,10 +95,10 @@ mapVisualisation.markers.append(marker)
 
 class ParticleFilter:
     def __init__(self):
-        self.N            = 10      # number of particles
+        self.N            = 20      # number of particles
         self.p            = []      # particle list
         self.ar_markers   = None 
-        self.w            = []
+        self.w            = [1.0]*self.N
         self.maxWparticle = 0
         self.gamma_offset = 0.0 # gamma_offset TODO set a convention
         self.gamma_offset = gamma_offset #TODO set a convention
@@ -112,6 +116,7 @@ class ParticleFilter:
         # visualisation publishers
         if (useArrows):
             self.particleMarkerPub = rospy.Publisher('particle_markers',MarkerArray)
+            self.markerEstimatesPub = rospy.Publisher('particle_estimates',MarkerArray)
         else:
             self.pclPub = rospy.Publisher('point_cloud',PointCloud)
         self.pclBPub = rospy.Publisher('point_cloudB',PointCloud)
@@ -133,14 +138,16 @@ class ParticleFilter:
         self.gamma_offset = 0.0 #TODO fix convention
         self.gamma_offset = math.radians(self.navdata.rotZ) #TODO fix convention
         for i in range(self.N):
-            self.p[i].pos = np.array([0.0,0.0,0.0])
+            #self.p[i].pos = np.array([0.0,0.0,0.0])
+            self.p[i].pos = np.array([-5.0 + (random.random() * 10.0),-5.0 + (random.random() * 10.0),random.random()])
+            self.p[i].orientation = tf.transformations.quaternion_from_euler(-3.14 + 6.28*random.random(), -3.14 + 6.28*random.random(), -3.14 + 6.28*random.random())
         rospy.loginfo("gamma offset is now " + str(self.gamma_offset))
 
     def createParticles(self):
         print "creating particles"
         for i in range(self.N):
             x = particle.Particle()
-            x.setNoise(transNoise,rotNoise,markerNoise)
+            x.setNoise(xyNoise,altNoise,rollNoise,pitchNoise,yawNoise,markerNoiseP,markerNoiseR)
             self.p.append(x)
 
     def navdataCallback(self,navdata):
@@ -154,12 +161,15 @@ class ParticleFilter:
             self.p[i].move(movement)
 
         self.visualiseParticles()
-
-        if (self.ar_markers is not None):
+        if (self.ar_markers is not None ):
             #weigh and resample
-            if (len(self.ar_markers.markers)>0):
+            # only do this for marker data that is older than the current deadreckon data - if deadreckoning is behind, skip the
+            # marker data and catch up on position
+            if (len(self.ar_markers.markers)>0 and cmp(self.ar_markers.markers[0].header.stamp,navdata.header.stamp)<0):
                 self.findWeights(self.ar_markers)
-         
+                print 'now',rospy.Time.now() 
+                print 'mark',self.ar_markers.markers[0].header
+                print 'nav',navdata.header
                 firstmarker = self.ar_markers.markers[0].id
                 # debug: if the markers were used, draw estimates
                 if self.w[0]!=1.0:
@@ -169,7 +179,7 @@ class ParticleFilter:
                     self.visualiseEstimates()
                     self.resample()
                     mapVisualisation.markers[firstmarker].color.g = 1.0
-            self.ar_markers = None
+        self.ar_markers = None
         self.mapMarkerPub.publish(mapVisualisation)
         self.broadcastTf(self.navdata.header.stamp,self.maxWparticle)
         self.lock.release()
@@ -177,17 +187,21 @@ class ParticleFilter:
     def visualiseParticles(self):
         if (useArrows):
             markerArray = MarkerArray()
-            for i in range(self.N):
+            #for i in range(self.N):
+            for i in range(4):
+
+                #print self.w[i]
+
                 marker = Marker()
                 marker.header.frame_id = '/world'
                 marker.type = marker.ARROW
                 marker.action = marker.ADD
-                marker.scale.x = 0.5
-                marker.scale.y = 6
-                marker.scale.z = 1
+                marker.scale.x = 0.1
+                marker.scale.y = 3
+                marker.scale.z = 0.6
                 marker.color.a = 1.0
                 marker.color.r = 1.0
-                marker.color.g = 1.0
+                marker.color.g = self.w[i]*10
                 marker.color.b = 0.0
                 marker.id=i
                 marker.pose.orientation.x = self.p[i].orientation[0]
@@ -198,7 +212,7 @@ class ParticleFilter:
                 marker.pose.position.y =  self.p[i].pos[1] 
                 marker.pose.position.z =  self.p[i].pos[2] 
                 markerArray.markers.append(marker)
-
+                '''
                 marker = Marker()
                 marker.header.frame_id = '/world'
                 marker.type = marker.CUBE
@@ -215,10 +229,11 @@ class ParticleFilter:
                 marker.pose.orientation.y = self.p[i].morientation[1]
                 marker.pose.orientation.z = self.p[i].morientation[2]
                 marker.pose.orientation.w = self.p[i].morientation[3]
-                marker.pose.position.x =  self.p[i].pos[0]
-                marker.pose.position.y =  self.p[i].pos[1] 
-                marker.pose.position.z =  self.p[i].pos[2] 
+                marker.pose.position.x =  self.p[i].markerPos[0]
+                marker.pose.position.y =  self.p[i].markerPos[1] 
+                marker.pose.position.z =  self.p[i].markerPos[2] 
                 markerArray.markers.append(marker)
+                '''
                 '''
                 marker = Marker()
                 marker.header.frame_id = '/world'
@@ -263,34 +278,46 @@ class ParticleFilter:
         # feed in new markers for processing on next navdata
         self.ar_markers = ar_markers 
         self.lock.release()
-        '''
-        if (len(ar_markers.markers)>0):
-            self.findWeights(ar_markers)
-         
-            # debug: if the markers were used, draw estimates
-            if self.w[0]!=1.0:
-                # flash marker red
-                mapVisualisation.markers[0].color.g = 0.0
-                self.mapMarkerPub.publish(mapVisualisation)
-                self.visualiseEstimates()
-                
-            self.resample()
-
-        mapVisualisation.markers[0].color.g = 1.0
-        self.mapMarkerPub.publish(mapVisualisation)
-        '''
-
+      
         
     def visualiseEstimates(self):
-        pcB = PointCloud(header	= self.ar_markers.header)
-        pcB.header.frame_id = "/world"
-        for i in range(self.N):
-            newp = Point32()
-            newp.x =  self.p[i].markerPos[0]
-            newp.y =  self.p[i].markerPos[1] 
-            newp.z =  self.p[i].markerPos[2] 
-            pcB.points.append(newp)
-        self.pclBPub.publish(pcB)
+        if (useArrows):
+            markerArray = MarkerArray()
+            #for i in range(self.N):
+            for i in range(4):
+
+                marker = Marker()
+                marker.header.frame_id = '/world'
+                marker.type = marker.CUBE
+                marker.action = marker.ADD
+                marker.scale.x = 0.4
+                marker.scale.y = 0.4
+                marker.scale.z = 0.05
+                marker.color.a = 1.0
+                marker.color.r = 0.0
+                marker.color.g = 1.0
+                marker.color.b = 0.0
+                marker.id=i+self.N+1
+                marker.pose.orientation.x = self.p[i].morientation[0]
+                marker.pose.orientation.y = self.p[i].morientation[1]
+                marker.pose.orientation.z = self.p[i].morientation[2]
+                marker.pose.orientation.w = self.p[i].morientation[3]
+                marker.pose.position.x =  self.p[i].markerPos[0]
+                marker.pose.position.y =  self.p[i].markerPos[1] 
+                marker.pose.position.z =  self.p[i].markerPos[2] 
+                markerArray.markers.append(marker)
+
+            self.markerEstimatesPub.publish(markerArray)
+        else:       
+            pcB = PointCloud(header	= self.ar_markers.header)
+            pcB.header.frame_id = "/world"
+            for i in range(self.N):
+                newp = Point32()
+                newp.x =  self.p[i].markerPos[0]
+                newp.y =  self.p[i].markerPos[1] 
+                newp.z =  self.p[i].markerPos[2] 
+                pcB.points.append(newp)
+            self.pclBPub.publish(pcB)
 
     def findWeights(self,ar_markers):
         self.w = []
@@ -311,23 +338,57 @@ class ParticleFilter:
                 index = (index+1) % self.N # increment and wrap
 
             clonedParticle = self.p[index].clone()
-            clonedParticle.setNoise(transNoise,rotNoise,markerNoise)
+            clonedParticle.setNoise(xyNoise,altNoise,rollNoise,pitchNoise,yawNoise,markerNoiseP,markerNoiseR)
+            # add random noise after resample
+            #clonedParticle.pos[0] += random.gauss(0.0,0.05)
+            #clonedParticle.pos[1] += random.gauss(0.0,0.05)
+            #clonedParticle.orientation = clonedParticle.addRotNoise(clonedParticle.orientation,0.00,0.00,0.1)
             new_p.append(clonedParticle)
         self.p = new_p
         self.maxWparticle = self.w.index(mw)
 
     def broadcastTf(self,time,i):
         if publishTf:
+            #meanPos = (0.0,0.0,0.0)
+            meanPx = meanPy = meanPz = 0.0
+            meanRx = meanRy = meanRz = 0.0
+            meanRw = 0.0
+            for i in range(self.N):
+                #meanPos += self.p[i].pos
+                meanPx += self.p[i].pos[0]
+                meanPy += self.p[i].pos[1]
+                meanPz += self.p[i].pos[2]
+                meanRx += self.p[i].orientation[0]
+                meanRy += self.p[i].orientation[1]
+                meanRz += self.p[i].orientation[2]
+                meanRw += self.p[i].orientation[3]
+
+            meanPx /= self.N
+            meanPy /= self.N
+            meanPz /= self.N
+            meanRx /= self.N
+            meanRy /= self.N
+            meanRz /= self.N
+            meanRw /= self.N
+            #quatSize = np.sqrt(meanRx**2 + meanRy**2 + meanRz**2 + meanRw**2)
+            #meanRx /= quatSize
+            #meanRy /= quatSize
+            #meanRz /= quatSize
+            #meanRw /= quatSize
+
+
             #rospy.loginfo("Transmitting at x=")
             #rospy.loginfo(self.p[i].pos)
-            q = 2
-            self.br.sendTransform(self.p[i].pos,
+            #q = 2
+            self.br.sendTransform((meanPx,meanPy,meanPz),
+                                  (meanRx,meanRy,meanRz,meanRw),
+                                  #self.p[i].pos,
                                   # translation happens first, then rotation
                                   #(worldmap.markers[q].pose.pose.orientation.x,
                                   #worldmap.markers[q].pose.pose.orientation.y,
                                   #worldmap.markers[q].pose.pose.orientation.z,
                                   #worldmap.markers[q].pose.pose.orientation.w),
-                                  self.p[i].morientation,
+                                  #self.p[i].morientation,
                                   #(0.5,0.5,0.5,0.49),
                                   time, 
                                   "/ardrone_base_link_particle_filter",

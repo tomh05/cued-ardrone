@@ -37,7 +37,11 @@ class PosRequester:
 
     def askPose(self):
         while (True):
+
             targetPose = Pose()
+            targetPose.position.x = float(raw_input('kParticle? '))
+            targetPose.position.y = float(raw_input('kRot     ? '))
+            '''
             targetPose.position.x = float(raw_input('x? '))
             targetPose.position.y = float(raw_input('y? '))
             targetPose.position.z = float(raw_input('z? '))
@@ -49,6 +53,7 @@ class PosRequester:
             targetPose.orientation.w = np_Quaternion[3]
             print ""
             print targetPose
+            '''
             if (raw_input('confirm y/n? ') == 'y'):
                 self.broadcastPose(targetPose)
 
