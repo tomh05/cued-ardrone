@@ -13,7 +13,7 @@ from cv_bridge import CvBridge
 import numpy as np
 from sensor_msgs.msg import Image
 import sensor_msgs.msg
-from std_msgs.msg import Float32MultiArray
+from std_msgs.msg import Float32MultiArray, MultiArrayDimension
 from nav_msgs.msg import Path
 import math
 import pickle
@@ -27,13 +27,18 @@ class ImageCapturer:
 		rospy.Subscriber('/ardrone/bottom/image_raw',Image,self.imgproc)
 		rospy.Subscriber('/ardrone/navdata', Navdata, self.navdataCallback)
 		
+		self.bridge = CvBridge()
+		self.fd = cv2.FeatureDetector_create('SIFT')
+		self.de = cv2.DescriptorExtractor_create('SIFT')
+		self.dm = cv2.DescriptorMatcher_create('BruteForce')
+		
 		self.capture_count = 0
 		self.capture_ok = False
 		self.capture_request = False
 		
 		self.kppt = Float32MultiArray()
 		self.desc = Float32MultiArray()
-		self.results_ok = False
+		self.tstamp = time()-10
 		
 		s = rospy.Service('capture_image_features', capture_image_features, self.handle_capture_image_features)
 		print "capture_image_features_server.py: Server ready."
@@ -42,17 +47,17 @@ class ImageCapturer:
 	def handle_capture_image_features(self, req):
 		print "capture_image_features_server.py: Handling capture image features request."
 		self.capture_request = True
-		while self.results_ok == False:
+		while time()-self.tstamp > 1:
+			# print 'capture_image_features_server.py: waiting for feature captures'
 			pass
+		self.capture_request = False
 		kppt = self.kppt
 		desc = self.desc
-		self.results_ok = False
 		return capture_image_featuresResponse(kppt, desc)
-
-		
+	
 	def navdataCallback(self, msg):
 		self.check_capture(msg)
-		print 'navdata callback'
+		#print 'navdata callback'
 		
 	def check_capture(self,navd):
 		"""Check if capture flag should be set to tell imgproc to 
@@ -68,7 +73,7 @@ class ImageCapturer:
 			vel_ok = 1
 			
 		if alt_ok == 1 and ang_ok ==1 and vel_ok ==1:
-			print 'capture_ok. alt, rotx, roty = ', navd.altd, navd.rotX, navd.rotY
+			#print 'capture_ok. alt, rotx, roty = ', navd.altd, navd.rotX, navd.rotY
 			self.capture_ok = True
 		else:
 			self.capture_ok = False
@@ -80,14 +85,44 @@ class ImageCapturer:
 		if self.capture_ok == True and self.capture_request == True:
 			self.capture_request = False
 			self.capture_count += 1
-			# ROS to cv image
+			# ROS to cv image to cv2 numpy array image
 			bridge = CvBridge()
 			cvimg = bridge.imgmsg_to_cv(d,"bgr8")
-			# cv to cv2 numpy array image
-			npimg = np.asarray(cvimg)
+			img = np.asarray(cvimg)
 			print 'captured image. capture_count = ', self.capture_count
+			
+			# capture image, extract features (keypoints and descriptors), undistort keypoint points (kppt)
+			img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+			img_pts = self.fd.detect(img)
+			img_kp, img_desc = self.de.compute(img, img_pts)
+			img_kppt = np.array(list(x.pt for x in img_kp))
+			img_kppt = self.myUndistortPoints(img_kppt)
+			
+			# mould kppt and desc into Float32MultiArray messages
+			self.kppt = self.toFloat32MultiArray(img_kppt)
+			self.desc = self.toFloat32MultiArray(img_desc)
+			
+			self.tstamp = time()
+			
 			#capture_image_featuresResponse(np.zeros(2),np.ones(2))
+	
+	def myUndistortPoints(self, pts):
+		# Undistort matched points
+		n = pts.size/2
+		undist_pts = cv2.undistortPoints(pts.reshape([n,1,2]), self.cameraMatrix, self.distCoeffs)
+		undist_pts = undist_pts.reshape([n,2])
+		# 'Un-normalize' points
+		undist_pts[:,0] = undist_pts[:,0]*self.fx+self.u0
+		undist_pts[:,1] = undist_pts[:,1]*self.fy+self.v0
+		return undist_pts
 		
+	def toFloat32MultiArray(self, somearray):
+		msg = Float32MultiArray()
+		somearray_dim = np.shape(somearray)
+		msg.layout.dim.append(MultiArrayDimension('nrows, ncols', somearray_dim[0], somearray_dim[1]))
+		somearray_aslist=list(np.reshape(somearray,np.size(somearray)))
+		msg.data = somearray_aslist
+		return msg
 
 	def loadCameraInfo(self):
 		fh = open('CameraInfo.pickle', 'r')
