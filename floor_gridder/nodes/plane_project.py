@@ -20,7 +20,7 @@ from custom_msgs.msg import Described3DPoints
 from copy import deepcopy
 
 GRIDFACTOR = 100.
-SEGMENTS = 2.
+SEGMENTS = 3.
 
 class FloorGridder():
     def __init__(self):        

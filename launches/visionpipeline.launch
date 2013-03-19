@@ -12,6 +12,9 @@
     </node>    
     
     <node name="tri" pkg="scan" type="point_triangulate.py" output="screen" clear_params="true">
+        <param name="opt" value="True"/>
+        <param name="shift" value="8"/>
+        <param name="error" value="8"/>
     </node> 
     
 </launch>

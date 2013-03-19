@@ -448,7 +448,7 @@ class PointTriangulator:
         
         # Publish Cloud
         # Note: img2 camera is taken to be the origin, so time2 is used
-        if forward_triangulated != 0 and (float(forward_triangulated)/pre_triangulated > 0.0):
+        if forward_triangulated != 0 and points3D_image.shape[1] > 16:
             print "Publishing Point cloud---------------------------------------------------------"
             self.publish_cloud(points3D_image, sfm.header2.stamp)
         else:
