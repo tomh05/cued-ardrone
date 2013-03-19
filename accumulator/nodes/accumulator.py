@@ -96,6 +96,7 @@ class Accumulator:
         self.testa_pub = rospy.Publisher('/cloud_compare/test_a',PointCloud)
         self.testb_pub = rospy.Publisher('/cloud_compare/test_b',PointCloud)
         self.testc_pub = rospy.Publisher('/cloud_compare/test_c', PointCloud)
+        self.sub_pub = rospy.Publisher('/accumulator/sub', PointCloud)
         
     def on_got_cloud(self, cloud):        
         self.stamp = cloud.header.stamp
@@ -110,9 +111,15 @@ class Accumulator:
         #print "Decoded ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
         prevtime = time.time()
         
+        """
         # Transform new points into world frame
+        """
         sub = np.add(new.points, new.position_i)
         new_pts = tf.transformations.quaternion_matrix(new.quat_i_to_w)[:3,:3].dot(sub)
+        
+        
+        
+               
         #print "Worlded ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
         prevtime = time.time()
         
@@ -129,17 +136,39 @@ class Accumulator:
             self.desc = new.desc
             self.kp = self.project_virtual_keypoints()
             self.publish_cloud()
+            self.prev_pts = new_pts
             return
+            
+        #self.position_from_cloud_iterative(new_pts, self.frames[-1].kp)
+            
+        '''    
+        # Build relative cloud
+        for i in range(new_pts.shape[1]):
+            cloud.points.append(Point32())
+            cloud.points[-1].x = new_pts[0,i]
+            cloud.points[-1].y = new_pts[1,i]
+            cloud.points[-1].z = new_pts[2,i]
+        self.testa_pub.publish(cloud)
+        
+        # Build relative cloud
+        for i in range(self.prev_pts.shape[1]):
+            cloud.points.append(Point32())
+            cloud.points[-1].x = self.prev_pts[0,i]
+            cloud.points[-1].y = self.prev_pts[1,i]
+            cloud.points[-1].z = self.prev_pts[2,i]
+        self.testa_pub.publish(cloud)
+        
+        self.prev_pts = new_pts
+        '''
         
         """
         # Get subset of points that lie infront of new pose
         """
         # i.e. points that could have been seen
-        kp_masked, desc_masked, shifts = self.get_subset_fov(new.position_i, new.quat_i_to_w, new.quat_w_to_i)
+        pts_masked, kp_masked, desc_masked, shifts = self.get_subset_fov(new.position_i, new.quat_i_to_w, new.quat_w_to_i)
+        print shifts
         #print "Sectioned ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
         prevtime = time.time()
-        
-        
         
         original_length = self.mean.shape[1]
         """
@@ -149,18 +178,52 @@ class Accumulator:
         #print "Matched ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
         prevtime = time.time()
         
+        '''
+        cloud = PointCloud()
+        cloud.header.stamp = cloud.header.stamp
+        cloud.header.frame_id = "/world"
+        
+        # Build active subset cloud
+        for i in range(pts_masked.shape[1]):
+            cloud.points.append(Point32())
+            cloud.points[-1].x = pts_masked[0,i]
+            cloud.points[-1].y = pts_masked[1,i]
+            cloud.points[-1].z = pts_masked[2,i]
+        self.sub_pub.publish(cloud)
+        '''
+        
         """
-        # Reconstruct indices for full self.acc, self.desc (are currently for fov subset)
+        # Reconstruct indices for full self.mean, self.desc (are currently for fov subset)
         """
+        print indices2
         for i in range(len(indices2)):
-            indices2[i] = shifts[indices2[i]]
+            indices2[i] = indices2[i] + shifts[indices2[i]]
         #print "Rebuilt ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
         prevtime = time.time()
         
+        
+        cloud = PointCloud()
+        cloud.header.stamp = cloud.header.stamp
+        cloud.header.frame_id = "/world"
+        
+        print indices2
+        # Build active subset cloud
+        for i in range(self.mean[:,indices2].shape[1]):
+            cloud.points.append(Point32())
+            cloud.points[-1].x = (self.mean[:,indices2])[0,i]
+            cloud.points[-1].y = (self.mean[:,indices2])[1,i]
+            cloud.points[-1].z = (self.mean[:,indices2])[2,i]
+            #print cloud.points[-1]
+        self.sub_pub.publish(cloud)
+        
+        
         print "No of matches: ", len(indices2)
         
+        merged_count = 0
+        mask = np.ones(new_pts.shape[1])
+        Ns = np.zeros(len(indices2), dtype=np.float32)
         
-        if len(indices2 > 0):
+        if len(indices2) > 0:
             """
             # Get inliers with RANSAC fitted F
             """
@@ -171,35 +234,73 @@ class Accumulator:
             print "No of F fits: ", len(indices1F)
             
             # Attempt to position from existing points
-            self.position_from_cloud(self.mean[:,indices2], kp1, new.position_i)
+            #self.position_from_cloud(self.mean[:,indices2], kp1, new.position_i)
+            
+
             
             '''
             """
-            # Rigid body alignment (trans only for now)
+            # 2D overhead Rigid body alignment
             """
             if len(indices1F) > 8:
-                R, t = self.very_approx_register(self.mean[:,indices2F], new_pts[:,indices1F])
+                
+                
+                pts1 = new_pts[:,indices1F]
+                pts2 = self.mean[:,indices2F]
+                
+                cloud = PointCloud()
+                cloud.header.stamp = cloud.header.stamp
+                cloud.header.frame_id = "/world"
+                
+                # Build relative cloud
+                for i in range(pts1.shape[1]):
+                    cloud.points.append(Point32())
+                    cloud.points[-1].x = pts1[0,i]
+                    cloud.points[-1].y = pts1[1,i]
+                    cloud.points[-1].z = pts1[2,i]
+                self.testa_pub.publish(cloud)
+                
+                cloud = PointCloud()
+                cloud.header.stamp = cloud.header.stamp
+                cloud.header.frame_id = "/world"
+                
+                # Build relative cloud
+                for i in range(pts2.shape[1]):
+                    cloud.points.append(Point32())
+                    cloud.points[-1].x = pts2[0,i]
+                    cloud.points[-1].y = pts2[1,i]
+                    cloud.points[-1].z = pts2[2,i]
+                self.testb_pub.publish(cloud)
+                
+                
+                R, t = self.approx_register_2D_t(new_pts[:,indices1F],self.mean[:,indices2F])
                 print R
                 print t
-                new_pts = np.add(new_pts, -t)
-                new_pts = R.T.dot(new_pts)
+                new_pts = R.dot(new_pts)
+                new_pts = np.add(new_pts, t)
                 self.R = R
                 self.t = t
                 
                 cloud = PointCloud()
                 cloud.header.stamp = cloud.header.stamp
                 cloud.header.frame_id = "/world"
-            
+                
+                
                 # Build relative cloud
                 for i in range(new_pts.shape[1]):
                     cloud.points.append(Point32())
                     cloud.points[-1].x = new_pts[0,i]
                     cloud.points[-1].y = new_pts[1,i]
                     cloud.points[-1].z = new_pts[2,i]
-                self.testa_pub.publish(cloud)
+                self.testc_pub.publish(cloud)
+                
+                
+                cloud = PointCloud()
+                cloud.header.stamp = cloud.header.stamp
+                cloud.header.frame_id = "/world"
             else:
-                new_pts = np.add(new_pts, -self.t)
-                new_pts = self.R.T.dot(new_pts)
+                #new_pts = self.R.dot(new_pts)
+                new_pts = np.add(new_pts, self.t)
             '''
             
             # Get inliers with RANSAC fitted F
@@ -208,9 +309,8 @@ class Accumulator:
             #prevtime = time.time()
             #print len(indices1F)
             
-            mask = np.ones(new_pts.shape[1])
-            Ns = np.zeros(len(indices2), dtype=np.float32)
-            merged_count = 0
+            
+            
             for i in range(len(indices1)):
                 # Mark point as averaged and update count
                 mask[indices1[i]] = 0
@@ -259,7 +359,7 @@ class Accumulator:
         prevtime = time.time()
         self.kp = self.project_virtual_keypoints()
         #print "Re-projected ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
-        print "Point Cloud Accumulated ( ", np.around(((time.time()-self.time_prev)*1000),1), "ms) - (",self.mean.shape[1]," unique points out of ", self.count," )"
+        print "Point Cloud Accumulated ( ", np.around(((time.time()-self.time_prev)*1000),1), "ms) - (",self.mean.shape[1]," unique points out of ", self.count," )"  
         
     def position_from_cloud(self, pts3D_matched, kp_matched, position_i):
 
@@ -272,8 +372,6 @@ class Accumulator:
             "Not enough matches to localise"
             return
         
-        print pts3D_matched.shape
-        print kp_matched.shape
         
         R, t, inliers = cv2.solvePnPRansac(np.array(pts3D_matched, dtype=np.float32).T, np.array(kp_matched, dtype=np.float32), self.cameraMatrix, self.distCoeffs, reprojectionError=15.)
         
@@ -305,6 +403,44 @@ class Accumulator:
             quat = tf.transformations.quaternion_inverse(tf.transformations.quaternion_from_matrix(Rhomo))
             self.position_i = t_position
             self.quat_w_to_i = quat 
+            
+    def position_from_cloud_iterative(self, new_pts, new_kp):
+        """ This operates by cycling through all previous frames as recieved
+        with the intention of producing an averaged pose estimate. This is
+        incredibly costly as it requires a full matching for every frame in
+        the index
+        
+        Fundamental extraction is NOT necessary nor desirable"""
+        
+        Rinit = tf.transformations.quaternion_matrix(self.frames[-1].quat_w_to_i)[:3,:3].T
+        tinit = tf.transformations.quaternion_matrix(self.frames[-1].quat_i_to_w)[:3.,:3].dot(self.frames[-1].position_i)
+        print "tinit: ", tinit
+        print "Rinit:\r\n", Rinit
+        Rinit, jacobian = cv2.Rodrigues(Rinit)
+        print Rinit
+        
+        print "Attempting to position from all previous frames"
+        for i, frame in enumerate(self.frames):
+            if i < len(self.frames)-1:
+            # For each previous frame
+                # Transform to world frame
+                sub = np.add(frame.points, frame.position_i)
+                pts = tf.transformations.quaternion_matrix(frame.quat_i_to_w)[:3,:3].dot(sub)
+                # Match
+                kp1, kp2, indices1, indices2 = self.match_points(new_kp, frame.kp, self.frames[-1].desc, frame.desc)
+                if len(indices1) > 8:
+                    # Attempt to extract pose
+                    
+                    R, t, inliers = cv2.solvePnPRansac(np.array(pts[:,indices2], dtype=np.float32).T, np.array(kp1, dtype=np.float32), self.cameraMatrix, self.distCoeffs, rvec=Rinit, tvec=tinit, useExtrinsicGuess=True, reprojectionError=15.)
+                    print "No. of inliers: ", len(inliers)  
+                     
+                    if inliers != None and len(inliers) > 8: 
+                        R, J = cv2.Rodrigues(R)        
+                        Rhomo = np.diag((1., 1., 1., 1.))
+                        Rhomo[:3, :3] = R
+                        t_position = -R.T.dot(t)
+                        print "t: ", t_position
+                        print "R:\r\n", R.T    
         
     def get_subset(self, position_i, quat_i_to_w, quat_w_to_i):
         camera_relative = np.add(tf.transformations.quaternion_matrix(quat_w_to_i)[:3,:3].dot(self.mean), -position_i)
@@ -314,7 +450,9 @@ class Accumulator:
         return kp_masked, desc_masked, np.cumsum(np.array(mask, dtype=np.int16))-1
         
     def get_subset_fov(self, position_i, quat_i_to_w, quat_w_to_i):
+        # Convert accumulated points into local camera frame
         camera_relative = np.add(tf.transformations.quaternion_matrix(quat_w_to_i)[:3,:3].dot(self.mean), -position_i)
+        mask_infront = camera_relative[2,:] > 0.
         camera_relative = camera_relative/camera_relative[2]
         
         bottom_left =  self.inverseCameraMatrix.dot(np.array([[-80.],[405.],[ 1.]]))
@@ -324,11 +462,27 @@ class Accumulator:
         spoly = PolygonStamped()
         poly = Polygon()
         p = Point32()
-        p.x = bottom_left[0]*10.; p.y = 0.; p.z = 10.
+        p.x = bottom_left[0]*10.; p.y = top_right[1]*10; p.z = 10.
+        poly.points.append(deepcopy(p))
+        p.x = bottom_left[0]*10.; p.y = bottom_left[1]*10; p.z = 10.
+        poly.points.append(deepcopy(p))
+        p.x = top_right[0]*10.; p.y = bottom_left[1]*10; p.z = 10.
+        poly.points.append(deepcopy(p))
+        p.x = top_right[0]*10.; p.y = top_right[1]*10; p.z = 10.
+        poly.points.append(deepcopy(p))
+        p.x = bottom_left[0]*10.; p.y = top_right[1]*10; p.z = 10.
         poly.points.append(deepcopy(p))
         p.x = 0.01; p.y = 0.01; p.z = 0.01
         poly.points.append(deepcopy(p))
-        p.x = top_right[0]*10.; p.y = 0.; p.z = 10.
+        p.x = bottom_left[0]*10.; p.y = bottom_left[1]*10; p.z = 10.
+        poly.points.append(deepcopy(p))
+        p.x = 0.01; p.y = 0.01; p.z = 0.01
+        poly.points.append(deepcopy(p))
+        p.x = top_right[0]*10.; p.y = bottom_left[1]*10; p.z = 10.
+        poly.points.append(deepcopy(p))
+        p.x = 0.01; p.y = 0.01; p.z = 0.01
+        poly.points.append(deepcopy(p))
+        p.x = top_right[0]*10.; p.y = top_right[1]*10; p.z = 10.
         poly.points.append(deepcopy(p))
         spoly.polygon = poly
         spoly.header.frame_id = '/ardrone_base_frontcam'
@@ -336,6 +490,7 @@ class Accumulator:
         #spoly.header.frame_id = '/world2'
         self.fov_pub.publish(spoly)
         
+        print camera_relative.shape
         mask_left = camera_relative[0,:] > bottom_left[0]
         mask_bottom = camera_relative[1,:] < bottom_left[1]
         mask_right = camera_relative[0,:] < top_right[0]
@@ -343,12 +498,24 @@ class Accumulator:
         mask_hori = np.logical_and(mask_left, mask_right)
         mask_vert = np.logical_and(mask_top, mask_bottom)
         mask = np.logical_and(mask_hori, mask_vert)
+        mask = np.logical_and(mask, mask_infront)
+        
+        # Invert mask so high for skipped values
+        shifts = np.invert(mask)
+        # Cumulative sum inverted mask to get shifts
+        shifts = np.cumsum(np.array(shifts, dtype=np.int16))
+        # Filter out non-skipped shifts
+        shifts = shifts[mask]
+        
+        # shifts is such that the index in the full (self.mean) = index in the 
+        # fov (pts_masked) + shifts[index in fov]
         
         
         desc_masked = self.desc[mask, :]
         kp_masked = self.kp[mask, :]
+        pts_masked = self.mean[:,mask]
         
-        return kp_masked, desc_masked, np.cumsum(np.array(mask, dtype=np.int16))-1
+        return pts_masked, kp_masked, desc_masked, shifts
                 
     def publish_cloud(self):      
         cloud = PointCloud()
@@ -413,7 +580,50 @@ class Accumulator:
         t = mean2 - R.dot(mean1)
         return R, t
         
-    def very_approx_register(self, pts1, pts2):
+    def approx_register_2D(self, pts1, pts2):
+        # Pts are 3D world co-ords
+        # Gets only R and t in rotation about z and t in x-y plane
+        # De-couple translation by subtracting centrioids
+        
+        
+        
+        # pts1 = new points
+        # pts2 = target frame points
+        mean1 = np.array([np.mean(pts1, axis=1)]).T
+        print mean1
+        mean2 = np.array([np.mean(pts2, axis=1)]).T
+        print mean2
+        pts1_norm = np.add(pts1, -mean1)[:2]
+        pts2_norm = np.add(pts2, -mean2)[:2]
+        # Get covariance between point sets
+        H = pts1_norm.dot(pts2_norm.T)
+        print H
+        # Recover least squares R
+        U,S,Vt = np.linalg.svd(H)
+        det = np.linalg.det(Vt.T.dot(U.T))
+        R2 = Vt.T.dot(np.diag((1.,det)).dot(U.T))
+        R = np.diag((1.,1.,1.))
+        R[:2,:2] = R2
+        print R
+        # Recover t that match least squares R
+        t = np.zeros((3,1))
+        t = (mean2 - R.dot(mean1))
+        print t
+        
+        return R, t
+        
+    def approx_register_2D_t(self, pts1, pts2):
+        # Pts are 3D world co-ords
+        
+        mean1 = np.array([np.mean(pts1, axis=1)]).T
+        mean2 = np.array([np.mean(pts2, axis=1)]).T
+        t = np.zeros((3,1))
+        t[:2] = (mean2 - mean1)[:2]
+        R = np.diag((1.,1.,1.))
+        
+        return R, t
+        
+    def approx_register_t(self, pts1, pts2):
         # De-couple translation by subtracting centrioids
         delta = np.add(-pts1, pts2)
         t = np.array([np.mean(delta, axis=1)]).T
