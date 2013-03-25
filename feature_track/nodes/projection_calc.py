@@ -279,15 +279,12 @@ class ProjectionCalc:
                     front = (d1>0) and (d2>0)
                     infronts[j][i] = front
                     PI[j] = PI[j] + int(front)
+            
+            
+            index = np.argmax(PI)
+            maxpi = PI[index]
 
-
-            if (i > 10 and rejected_count < 3):
-                maxpi = 0
-                index = -1
-                for k, pi in enumerate(PI):
-                    if not rejected[k] and pi >= maxpi:
-                        maxpi = pi
-                        index = k
+            if (i > 10 and rejected_count < 3):                
                 if maxpi > 0:
                     p_test = maxpi/float(x1.shape[1])
                     sigma = np.sqrt(p_test*(1.-p_test)/float(x1.shape[1]))
