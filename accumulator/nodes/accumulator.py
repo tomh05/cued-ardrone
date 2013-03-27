@@ -32,7 +32,9 @@ import rospy
 import numpy as np
 import cv2
 import tf
+import os
 import time
+import math
 import std_msgs.msg
 import message_filters
 from geometry_msgs.msg import Point32
@@ -42,6 +44,8 @@ from geometry_msgs.msg import PolygonStamped
 from sensor_msgs.msg import PointCloud
 from sensor_msgs.msg import CameraInfo
 from custom_msgs.msg import Described3DPoints
+from visualization_msgs.msg import Marker
+from visualization_msgs.msg import MarkerArray
 from copy import deepcopy
 
 class Frame:
@@ -70,6 +74,7 @@ class Accumulated:
 
 class Accumulator:    
     def __init__(self):
+        
         # Initialise ROS node
         self.connect()
         # Set up descriptor matcher
@@ -84,6 +89,8 @@ class Accumulator:
         self.count = 0
         self.R = np.diag((1.,1.,1.))
         self.t = np.zeros((3,1))
+        # Get nodes folder
+        self.directory = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))+'/debug'
         
     def connect(self):
         print 'Waiting for calibration ... '
@@ -97,8 +104,10 @@ class Accumulator:
         self.testb_pub = rospy.Publisher('/cloud_compare/test_b',PointCloud)
         self.testc_pub = rospy.Publisher('/cloud_compare/test_c', PointCloud)
         self.sub_pub = rospy.Publisher('/accumulator/sub', PointCloud)
+        self.marker_pub = rospy.Publisher('/accumulator/marker', MarkerArray)
         
-    def on_got_cloud(self, cloud):        
+    def on_got_cloud(self, cloud):
+        self.links = []
         self.stamp = cloud.header.stamp
         self.time_prev = time.time()
         prevtime = time.time()
@@ -117,8 +126,12 @@ class Accumulator:
         sub = np.add(new.points, new.position_i)
         new_pts = tf.transformations.quaternion_matrix(new.quat_i_to_w)[:3,:3].dot(sub)
         
-        
-        
+        """
+        # Refine cloud world position using accumulated R,t
+        """
+        #new_pts = np.add(new_pts, self.t)
+        #new_pts
+
                
         #print "Worlded ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
         prevtime = time.time()
@@ -138,6 +151,26 @@ class Accumulator:
             self.publish_cloud()
             self.prev_pts = new_pts
             return
+            
+            
+        self.print_to_file(new_pts)
+        self.match_to_prev_frame()   
+        
+        
+        
+        
+        
+        
+        
+             
+        return #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+            
+            
+            
+        """
+        # Publish accumulated-cloud pre-update
+        """
+        self.publish_cloud()
             
         #self.position_from_cloud_iterative(new_pts, self.frames[-1].kp)
             
@@ -166,7 +199,6 @@ class Accumulator:
         """
         # i.e. points that could have been seen
         pts_masked, kp_masked, desc_masked, shifts = self.get_subset_fov(new.position_i, new.quat_i_to_w, new.quat_w_to_i)
-        print shifts
         #print "Sectioned ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
         prevtime = time.time()
         
@@ -195,7 +227,6 @@ class Accumulator:
         """
         # Reconstruct indices for full self.mean, self.desc (are currently for fov subset)
         """
-        print indices2
         for i in range(len(indices2)):
             indices2[i] = indices2[i] + shifts[indices2[i]]
         #print "Rebuilt ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
@@ -206,7 +237,6 @@ class Accumulator:
         cloud.header.stamp = cloud.header.stamp
         cloud.header.frame_id = "/world"
         
-        print indices2
         # Build active subset cloud
         for i in range(self.mean[:,indices2].shape[1]):
             cloud.points.append(Point32())
@@ -219,11 +249,26 @@ class Accumulator:
         
         print "No of matches: ", len(indices2)
         
+
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         merged_count = 0
         mask = np.ones(new_pts.shape[1])
         Ns = np.zeros(len(indices2), dtype=np.float32)
         
         if len(indices2) > 0:
+            
+            self.position_from_cloud(self.mean[:,indices2], kp1)
+            
             """
             # Get inliers with RANSAC fitted F
             """
@@ -233,8 +278,78 @@ class Accumulator:
             
             print "No of F fits: ", len(indices1F)
             
+            if indices1F != None and len(indices1F) > 0:
+                """
+                # Publish matches for Rviz
+                """
+                
+                line_list = Marker()
+                line_list.header.frame_id = "/world"
+                line_list.header.stamp = cloud.header.stamp
+                line_list.action = 0 # Add/modify
+                line_list.pose.orientation.w = 1.0
+                line_list.type = 5 # LINE_LIST
+                # LINE_STRIP/LINE_LIST markers use only the x component of scale, for the line width
+                line_list.scale.x = 0.01;
+
+                # Line list is red
+                line_list.color.r = 1.0;
+                line_list.color.a = 1.0;
+
+
+
+                # Create the vertices for the points and lines
+                for i, ind in enumerate(indices1):
+                
+                  p = Point32()
+                  p.x = new_pts[0,indices1[i]]
+                  p.y = new_pts[1,indices1[i]]
+                  p.z = new_pts[2,indices1[i]]
+                  line_list.points.append(deepcopy(p))
+                  p.x = self.mean[0,indices2[i]]
+                  p.y = self.mean[1,indices2[i]]
+                  p.z = self.mean[2,indices2[i]]
+                  line_list.points.append(deepcopy(p))
+                
+                self.marker_pub.publish(line_list)
+                
+            if indices1F != None and len(indices1F) > 0:
+                """
+                # Publish matches for Rviz
+                """
+                
+                line_list = Marker()
+                line_list.header.frame_id = "/world"
+                line_list.header.stamp = cloud.header.stamp
+                line_list.action = 0 # Add/modify
+                line_list.pose.orientation.w = 1.0
+                line_list.type = 5 # LINE_LIST
+                # LINE_STRIP/LINE_LIST markers use only the x component of scale, for the line width
+                line_list.scale.x = 0.01;
+
+                # Line list is red
+                line_list.color.b = 1.0;
+                line_list.color.a = 1.0;
+
+
+
+                # Create the vertices for the points and lines
+                for i, ind in enumerate(indices1F):
+                
+                  p = Point32()
+                  p.x = new_pts[0,indices1F[i]]
+                  p.y = new_pts[1,indices1F[i]]
+                  p.z = new_pts[2,indices1F[i]]
+                  line_list.points.append(deepcopy(p))
+                  p.x = self.mean[0,indices2F[i]]
+                  p.y = self.mean[1,indices2F[i]]
+                  p.z = self.mean[2,indices2F[i]]
+                  line_list.points.append(deepcopy(p))
+                
+                self.marker2_pub.publish(line_list)
+            
             # Attempt to position from existing points
-            #self.position_from_cloud(self.mean[:,indices2], kp1, new.position_i)
+            #self.position_from_cloud(self.mean[:,indices2], kp1)
             
 
             
@@ -354,14 +469,232 @@ class Accumulator:
         #print "Newed ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
         prevtime = time.time()
                 
-        self.publish_cloud()
+        #self.publish_cloud()
         #print "Clouded ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
         prevtime = time.time()
         self.kp = self.project_virtual_keypoints()
         #print "Re-projected ( ", np.around(((time.time()-prevtime)*1000),2), "ms) "
         print "Point Cloud Accumulated ( ", np.around(((time.time()-self.time_prev)*1000),1), "ms) - (",self.mean.shape[1]," unique points out of ", self.count," )"  
         
-    def position_from_cloud(self, pts3D_matched, kp_matched, position_i):
+    def print_to_file(self, pts3D):
+        """ Takes 3D points in a 3xN arrangement and produces a 1cm resolution
+        z flattened mono bitmap. x-y position is recorded relative to the min
+        & max instances in the point set"""
+        mins = np.floor(100*np.min(pts3D[:2,:],1))
+        maxs = np.ceil(100*np.max(pts3D[:2,:],1))
+        minx = int(mins[0])
+        maxx = int(maxs[0])
+        miny = int(mins[1])
+        maxy = int(maxs[1])
+        
+        # Re-map pts3D into map co-ordinate system
+        # Strip z
+        pts = pts3D[:2]
+        # Scale to integer cm
+        pts = np.array(100.*pts, dtype=np.int16)
+        # Flip y (np y is down, which confuses visualisation) & shift x
+        pts[1,:] = pts[1,:] - miny
+        pts[1,:] = (maxy - miny) - pts[1,:]
+        pts[0,:] = pts[0,:] - minx
+        # Pre-allocate white image
+        img = 255*np.ones(shape=(maxy-miny+1,maxx-minx+1), dtype = np.uint8)
+        
+        # Draw points (this indexes the image using the prepared 2D points)
+        img[pts[1,:],pts[0,:]] = 0
+        cv2.imwrite(self.directory+'\\'+str(len(self.frames))+'.png', img)
+        #cv2.imshow('test',img)
+        #cv2.waitKey(100)
+    
+    
+    def publish_links(self, pts1, pts2, indices1, indices2, rgba):
+        """
+        # Publish matches for Rviz
+        """
+        line_list = Marker()
+        line_list.id = -(len(self.links) + 1)
+        line_list.header.frame_id = "/world"
+        line_list.header.stamp = self.stamp
+        line_list.action = 0 # Add/modify
+        line_list.pose.orientation.w = 1.0
+        line_list.type = 5 # LINE_LIST
+        # LINE_STRIP/LINE_LIST markers use only the x component of scale, for the line width
+        line_list.scale.x = 0.001*(rgba[0]+6*rgba[1]+3*rgba[2]);
+
+        # Line list is red
+        line_list.color.r = rgba[0]
+        line_list.color.g = rgba[1]
+        line_list.color.b = rgba[2]
+        line_list.color.a = rgba[3]
+
+        # Create the vertices for the points and lines
+        for i, ind in enumerate(indices1):
+        
+          p = Point32()
+          p.x = pts1[0,indices1[i]]
+          p.y = pts1[1,indices1[i]]
+          p.z = pts1[2,indices1[i]]
+          line_list.points.append(deepcopy(p))
+          p.x = pts2[0,indices2[i]]
+          p.y = pts2[1,indices2[i]]
+          p.z = pts2[2,indices2[i]]
+          line_list.points.append(deepcopy(p))
+        
+        self.links.append(line_list)
+    
+    def match_to_prev_frame(self):
+        new = self.frames[-1]
+        old = self.frames[-2]
+        kp1, kp2, indices1, indices2 = self.match_points(new.kp, old.kp, new.desc, old.desc)
+        
+        # Convert 3D points to world space
+        sub = np.add(new.points, new.position_i)
+        pts1 = tf.transformations.quaternion_matrix(new.quat_i_to_w)[:3,:3].dot(sub)
+        sub = np.add(old.points, old.position_i)
+        pts2 = tf.transformations.quaternion_matrix(old.quat_i_to_w)[:3,:3].dot(sub)
+        
+        cloud = PointCloud()
+        cloud.header.stamp = self.stamp
+        cloud.header.frame_id = "/world"
+        
+        # Build new pts cloud
+        for i in range(pts1.shape[1]):
+            cloud.points.append(Point32())
+            cloud.points[-1].x = pts1[0,i]
+            cloud.points[-1].y = pts1[1,i]
+            cloud.points[-1].z = pts1[2,i]
+        self.testa_pub.publish(cloud)
+        print "Published a"
+        
+        cloud = PointCloud()
+        cloud.header.stamp = self.stamp
+        cloud.header.frame_id = "/world"
+        
+        # Build old pts cloud
+        for i in range(pts2.shape[1]):
+            cloud.points.append(Point32())
+            cloud.points[-1].x = pts2[0,i]
+            cloud.points[-1].y = pts2[1,i]
+            cloud.points[-1].z = pts2[2,i]
+        self.testb_pub.publish(cloud)
+        print "Published b"
+        
+        if indices1 != None and len(indices1) > 0:
+            # This sorting has no functional effect but is useful for
+            # debugging and has negligible cost
+            argindex = indices1.argsort()
+            indices1 = indices1[argindex]
+            indices2 = indices2[argindex]
+            print "No of Matches: ", len(indices1)
+            self.publish_links(pts1, pts2, indices1, indices2, (1.,0.,0.,1.))
+            
+            """
+            # Filter mismatched based on height, 3D distances and 
+            """
+            deltas = pts1[:,indices1]-pts2[:,indices2]
+            median = np.array([np.median(deltas, 1)]).T
+            
+            # Filter on z
+            maskz = np.abs(deltas[2,:]) < 0.25
+            indices1D = indices1[maskz]
+            indices2D = indices2[maskz]
+            print "No of z ed: ", len(indices1D)
+            
+            # Update deltas & medians
+            deltas = pts1[:,indices1D]-pts2[:,indices2D]
+            median = np.array([np.median(deltas, 1)]).T
+            
+            # Filter on angle in x-y plane
+            thetas = np.arctan2(deltas[1,:],deltas[0,:])
+            median_theta = np.arctan2(median[1],median[0])
+            
+            dthetas = np.abs(thetas - median_theta)
+            premask = dthetas > np.pi
+            dthetas[premask] = np.abs(dthetas[premask] - 2*np.pi)
+            maskt = dthetas < 22.5*np.pi/180.
+            indices1D = indices1D[maskt]
+            indices2D = indices2D[maskt]
+            print "No of thetaed: ", len(indices1D)
+            
+            # Update deltas & medians
+            deltas = pts1[:,indices1D]-pts2[:,indices2D]
+            median = np.array([np.median(deltas, 1)]).T
+            
+            # Filter on magnitude in x-y plane
+            # Note: Calculation is done on squared magnitudes so ratios are not
+            # as they appear. A factor of 2 in this space is sqrt(2)
+            median2 = np.sum(np.square(median[:2,:]),0)
+            deltas2 = np.sum(np.square(deltas[:2,:]),0)
+            mask1 = deltas2 < np.square(2.)*median2
+            mask2 = deltas2 > np.square(0.5)*median2
+            mask = np.logical_and(mask1, mask2)
+            indices1D = indices1D[mask]
+            indices2D = indices2D[mask]
+            print "No of mag ed: ", len(indices1D)            
+            
+            self.publish_links(pts1, pts2, indices1D, indices2D, (0.,0.,1.,1.))
+            
+            """================================================================
+            # Get inliers with RANSAC fitted F
+            ================================================================"""
+            subkp1 = new.kp[indices1D,:]
+            subkp2 = old.kp[indices2D,:]
+            indices1F, indices2F = self.extract_fundamental_and_filter_inliers(subkp1,subkp2, indices1D, indices2D)
+            
+            
+            self.publish_links(pts1, pts2, indices1F, indices2F, (0.,1.,0.,1.))
+            if indices1F != None and len(indices1F) > 0:
+                print "No of F fits: ", len(indices1F)
+                
+                """
+                # 2D overhead Rigid body alignment
+                """
+                if len(indices1F) > 4:
+                    
+                    # Care on subpoints
+                    # R and t are calculated on subpts but apply to all pts
+                    
+                    # pts1 are the new pts
+                    # pts2 are the old pts
+                    # We need to shift the new pts onto the old pts
+                    
+                    R, t = self.approx_register_2D(pts1[:,indices1F],pts2[:,indices2F])
+                    print "R\r\n", R
+                    print "t\r\n", t
+                    new_pts = R.dot(pts1)
+                    new_pts = np.add(new_pts, t)
+                    
+                    
+                    self.R = R
+                    self.t = t
+
+                    posw = tf.transformations.quaternion_matrix(new.quat_i_to_w)[:3,:3].dot(new.position_i)
+                    print "Original position\r\n", posw
+                    posw = R.dot(posw)
+                    posw = np.add(posw, t)
+                    print "Refined position\r\n", posw
+                    
+                    
+                    cloud = PointCloud()
+                    cloud.header.stamp = self.stamp
+                    cloud.header.frame_id = "/world"
+                    
+                    
+                    # Build relative cloud
+                    for i in range(new_pts.shape[1]):
+                        cloud.points.append(Point32())
+                        cloud.points[-1].x = new_pts[0,i]
+                        cloud.points[-1].y = new_pts[1,i]
+                        cloud.points[-1].z = new_pts[2,i]
+                    self.testc_pub.publish(cloud)
+                    
+                    
+                    cloud = PointCloud()
+                    cloud.header.stamp = self.stamp
+                    cloud.header.frame_id = "/world"
+                    
+        self.marker_pub.publish(self.links)
+    
+    def position_from_cloud(self, pts3D_matched, kp_matched):
 
         
         """================================================================
@@ -384,7 +717,7 @@ class Accumulator:
         
         
         print "No. of inliers: ", len(inliers)   
-        if len(inliers) > 16: 
+        if len(inliers) > 4: 
             
             
             R, J = cv2.Rodrigues(R)        
@@ -393,16 +726,15 @@ class Accumulator:
             
             t_position = -R.T.dot(t)
             print "t: ", t_position
-            print "i: ", position_i
         
             
   
-            header = sfwi.header
+            #header = sfwi.header
             
             # Publish tf
-            quat = tf.transformations.quaternion_inverse(tf.transformations.quaternion_from_matrix(Rhomo))
-            self.position_i = t_position
-            self.quat_w_to_i = quat 
+            #quat = tf.transformations.quaternion_inverse(tf.transformations.quaternion_from_matrix(Rhomo))
+            #self.position_i = t_position
+            #self.quat_w_to_i = quat 
             
     def position_from_cloud_iterative(self, new_pts, new_kp):
         """ This operates by cycling through all previous frames as recieved
@@ -590,25 +922,24 @@ class Accumulator:
         # pts1 = new points
         # pts2 = target frame points
         mean1 = np.array([np.mean(pts1, axis=1)]).T
-        print mean1
         mean2 = np.array([np.mean(pts2, axis=1)]).T
-        print mean2
+        print "dmean:\r\n", mean2-mean1
         pts1_norm = np.add(pts1, -mean1)[:2]
         pts2_norm = np.add(pts2, -mean2)[:2]
         # Get covariance between point sets
         H = pts1_norm.dot(pts2_norm.T)
-        print H
         # Recover least squares R
         U,S,Vt = np.linalg.svd(H)
         det = np.linalg.det(Vt.T.dot(U.T))
+        print "det: ", det
         R2 = Vt.T.dot(np.diag((1.,det)).dot(U.T))
         R = np.diag((1.,1.,1.))
         R[:2,:2] = R2
-        print R
         # Recover t that match least squares R
         t = np.zeros((3,1))
+        print mean1
+        print mean2
         t = (mean2 - R.dot(mean1))
-        print t
         
         return R, t
         
@@ -643,9 +974,10 @@ class Accumulator:
         frame = Frame()
         # Need to re-numpy the float32 array descriptors were transmitted in
         frame.points = np.reshape(np.array(msg.points3D), (3, -1))
+        print "Duplicate Test: ", len(np.unique(frame.points[0,:])) - len(frame.points[0,:])
         frame.kp = np.reshape(np.array(msg.points2D), (2, -1)).T
         if (msg.descriptors_matcher == 'BruteForce'):
-            frame.desc= np.reshape(np.array(msg.descriptors, np.float32), (-1, msg.descriptors_stride))   
+            frame.desc= np.reshape(np.array(msg.descriptors, np.float32), (-1, msg.descriptors_stride))
         elif (msg.descriptors_matcher == 'BruteForce-Hamming'):
             frame.desc = np.reshape(np.array(msg.descriptors, np.uint8), (-1, msg.descriptors_stride))
         # Switch matcher if necessary
@@ -719,7 +1051,7 @@ class Accumulator:
         
     def extract_fundamental_and_filter_inliers(self, i1_pts_undistorted, i2_pts_undistorted, indices1, indices2):
         """Extract fundamental matrix and then remove outliers"""        
-        F, mask = cv2.findFundamentalMat(i1_pts_undistorted, i2_pts_undistorted, cv2.FM_RANSAC, param1 = 15, param2 = 0.99)
+        F, mask = cv2.findFundamentalMat(i1_pts_undistorted, i2_pts_undistorted, cv2.FM_RANSAC, param1 = 10, param2 = 0.99)
         # Filter indices
         indices1_corr = indices1[mask.flatten()==1]
         indices2_corr = indices2[mask.flatten()==1]
