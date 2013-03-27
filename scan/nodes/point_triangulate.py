@@ -177,7 +177,6 @@ class PointTriangulator:
         cloud.header.stamp = timestamp
         cloud.header.frame_id = "/world"
         
-        
         #print "Pre-shift points:\r\n ", points
         sub = np.add(points.T, self.position_i2).T
         sub = tf.transformations.quaternion_matrix(self.quat_i_to_w2)[:3,:3].dot(sub)
@@ -185,7 +184,6 @@ class PointTriangulator:
         
         # Reshape for easy clouding
         sub = zip(*np.vstack((sub[0], sub[1], sub[2])))
-
         # Build absolute cloud
         for i, p in enumerate(sub):
             cloud.points.append(gm.Point32())
@@ -373,7 +371,6 @@ class PointTriangulator:
             
         # Print pre-triangulated count
         pre_triangulated = len(pts1)+0.
-        print "Pre-triangulated: ", pre_triangulated
             
         # Compose dead reckoned projection matrix
         P_cam1_to_cam2 = np.hstack((R, t))    
@@ -394,11 +391,10 @@ class PointTriangulator:
         
         # Filter points that are behind the camera
         infront = points3D_image[2] > 0
-        infront = np.array([infront]).transpose()
-        points3D_image = np.reshape(points3D_image[np.hstack((infront, infront, infront)).T==True], (3, -1))
+        points3D_image = points3D_image[:,infront]
         # Filter descriptors
-        self.desc_triangulated = np.reshape(self.desc_accepted[np.resize(infront.T, (self.desc_accepted.shape[1], self.desc_accepted.shape[0])).T==True], (-1, self.desc_accepted.shape[1]))
-        self.kp_triangulated = np.reshape(self.kp_accepted[np.resize(infront.T,(self.kp_accepted.shape[1], self.kp_accepted.shape[0])).T==True], (self.kp_accepted.shape[0], -1))
+        self.desc_triangulated = self.desc_accepted[infront,:]
+        self.kp_triangulated = self.kp_accepted[:,infront]
         if points3D_image == None or len(points3D_image) == 0:
             print "No points infront of camera"
             self.rejection_reasons[3] = self.rejection_reasons[3]+1
@@ -419,10 +415,9 @@ class PointTriangulator:
             return
         
         reasonable = sq < 4.
-        reasonable = np.array([reasonable]).transpose()
-        points3D_image = np.reshape(points3D_image[np.hstack((reasonable, reasonable, reasonable)).T==True], (3, -1))
-        self.desc_triangulated = np.reshape(self.desc_triangulated[np.resize(reasonable.T, (self.desc_triangulated.shape[1], self.desc_triangulated.shape[0])).T==True], (-1, self.desc_triangulated.shape[1]))
-        self.kp_triangulated = np.reshape(self.kp_triangulated[np.resize(reasonable.T,(self.kp_triangulated.shape[1], self.kp_triangulated.shape[0])).T==True], (self.kp_triangulated.shape[0], -1))
+        points3D_image = points3D_image[:,reasonable]
+        self.desc_triangulated = self.desc_triangulated[reasonable,:]
+        self.kp_triangulated = self.kp_triangulated[:,reasonable]
         if points3D_image == None or len(points3D_image) == 0:
             print "Points unreasonable"
             self.rejection_reasons[5] = self.rejection_reasons[5]+1
@@ -430,12 +425,11 @@ class PointTriangulator:
         
         
         # Filter points that are too far in front
-        infront = points3D_image[2] < 5.        
-        infront = np.array([infront]).transpose()
-        points3D_image = np.reshape(points3D_image[np.hstack((infront, infront, infront)).T==True], (3, -1))
+        infront = points3D_image[2] < 5.
+        points3D_image = points3D_image[:,infront]
         # Filter descriptors
-        self.desc_triangulated = np.reshape(self.desc_triangulated[np.resize(infront.T, (self.desc_triangulated.shape[1], self.desc_triangulated.shape[0])).T==True], (-1, self.desc_triangulated.shape[1]))
-        self.kp_triangulated = np.reshape(self.kp_triangulated[np.resize(infront.T,(self.kp_triangulated.shape[1], self.kp_triangulated.shape[0])).T==True], (self.kp_triangulated.shape[0], -1))
+        self.desc_triangulated = self.desc_triangulated[infront,:]
+        self.kp_triangulated = self.kp_triangulated[:,infront]
         if points3D_image == None or len(points3D_image) == 0:
             print "All Points too far"
             self.rejection_reasons[6] = self.rejection_reasons[0]+1
@@ -715,10 +709,8 @@ class PointTriangulator:
             accepted = np.logical_and(shift1<OPT_ERROR_SQUARED, shift2<OPT_ERROR_SQUARED)
             
             # Filter points with too much implied shift
-            accepted = np.array([accepted]).T
-            pts_mask = np.hstack((accepted, accepted, accepted)).T
-            x1_homo = np.reshape(x1_homo[pts_mask==True], (3, -1))
-            x2_homo = np.reshape(x2_homo[pts_mask==True], (3, -1))
+            x1_homo = x1_homo[:,accepted]
+            x2_homo = x2_homo[:,accepted]
             
             n = len(x1_homo.T)
             print x1_homo.shape
@@ -728,7 +720,7 @@ class PointTriangulator:
                 return None
             
             # Filter descriptors
-            self.desc_accepted = np.reshape(self.desc1[np.resize(accepted.T, (self.desc1.shape[1],self.desc1.shape[0])).T==True], (-1, self.desc1.shape[1]))
+            self.desc_accepted = self.desc1[accepted,:]
             
             
                 
@@ -746,11 +738,10 @@ class PointTriangulator:
         accepted = Combi[:, 4] < REPRO_ERROR_SQUARED
         
         # Filter points with too low accuracy (reprojected to actual image)
-        accepted = np.array([accepted]).T
-        X = np.reshape(X.T[np.hstack((accepted, accepted, accepted)).T==True], (3, -1))
+        X = X[accepted,:].T
         # Filter descriptors and keypoints
-        self.desc_accepted = np.reshape(self.desc_accepted[np.resize(accepted.T, (self.desc_accepted.shape[1],self.desc_accepted.shape[0])).T==True], (-1, self.desc_accepted.shape[1]))
-        self.kp_accepted = np.reshape(x1_homo[np.resize(accepted.T, (x1_homo.shape[1],x1_homo.shape[0])).T==True], (x1_homo.shape[0], -1))[:2]
+        self.desc_accepted = self.desc_accepted[accepted,:]
+        self.kp_accepted = x1_homo[:,accepted][:2]
         
         if X == None or len(X[0]) == 0:
             print "No points triangulatable"
