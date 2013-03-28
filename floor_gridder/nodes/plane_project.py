@@ -21,6 +21,7 @@ from copy import deepcopy
 
 GRIDFACTOR = 100.
 SEGMENTS = 3.
+ACCUMULATED = False
 
 class FloorGridder():
     def __init__(self):        
@@ -32,12 +33,15 @@ class FloorGridder():
         
     
     def connect(self):
+        global ACCUMULATED
         print 'Waiting for calibration ... '
         camera_info = rospy.wait_for_message('/ardrone/front/camera_info', CameraInfo)
         self.setCameraInfo(camera_info)
-        rospy.Subscriber('/scan/relative_described_cloud',Described3DPoints,self.on_got_cloud)
-        self.cloud_pub = rospy.Publisher('/accumulator/absolute_cloud',PointCloud)
-        self.desc_pub = rospy.Publisher('/accumulator/absolute_described_cloud', Described3DPoints)
+        if ACCUMULATED:
+            print "Using Accumulated"
+            rospy.Subscriber('/accumulator/shifted_described_cloud',Described3DPoints,self.on_got_cloud)
+        else:
+            rospy.Subscriber('/scan/relative_described_cloud',Described3DPoints,self.on_got_cloud)
         self.poly_pub = rospy.Publisher('/accumulator/polygon', PolygonStamped)
         
     def clear_maps(self):
@@ -76,33 +80,6 @@ class FloorGridder():
         points = np.reshape(np.array(msg.points3D), (3, -1))
         position_i = np.array([msg.position_i]).T
         quat_i_to_w = msg.quat_i_to_w
-        
-        '''
-        # Get 10th percentile in image z
-        mean = np.mean(points[2,:])
-        variance = np.var(points[2,:])
-        z = mean - 1.75*variance
-        print z
-        
-        
-        bottom_left =  self.inverseCameraMatrix.dot(np.array([[0.],[360.],[ 1.]]))
-        top_right =  self.inverseCameraMatrix.dot(np.array([[640.],[0.],[1.]]))
-        
-        # Get x,y co-ords of floor projected plane bounds
-        left =  np.array([bottom_left[0]*z,[0.],[z]])
-        right =  self.inverseCameraMatrix.dot(np.array([[640.],[180.],[z]]))
-        right =  np.array([top_right[0]*z,[0.],[z]])
-        back_left = self.inverseCameraMatrix.dot(np.array([[0.],[180.],[ 25.]]))
-        back_left =  np.array([bottom_left[0]*25,[0.],[25]])
-        back_right = self.inverseCameraMatrix.dot(np.array([[640.],[180.],[ 25.]]))
-        back_right =  np.array([top_right[0]*25,[0.],[25]])
-        pts_i = np.hstack((left, right, back_right, back_left))
-        print pts_i
-        
-        pts_m = self.image_to_map(pts_i, position_i, quat_i_to_w)
-        print pts_m
-        cv2.fillConvexPoly(self.gridded_map, pts_m, (0,0,0))
-        '''
         
         for i in range(int(SEGMENTS)):
             print "i: ", i
@@ -188,9 +165,18 @@ class FloorGridder():
         
         print "                    Calibration Initialised\r\n"
 
-def run():    
+def run():  
+    global ACCUMULATED  
     rospy.init_node('Plane_Project')
-
+    
+    # Get parameters
+    ACCUMULATED = rospy.get_param('~acc', False)
+    print "\r\n"
+    print "===================== Plane Project ======================="
+    print "Use accumulated clouds: ", ACCUMULATED," - (set with _acc)"
+    print "==================================================================="
+    print "\r\n"
+    
     fg = FloorGridder()
     # Begin ROS loop
     rospy.spin()
