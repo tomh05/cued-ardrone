@@ -51,8 +51,8 @@ class ImageCapturer:
 		while time()-self.capture_tstamp > 0.5:
 			# print 'capture_image_features_server.py: waiting for feature captures'
 			# if no updated image captures for 1 second, return with error
-			if time()-tref>1:
-				print 'wait for image timeout'
+			if time()-tref>5:
+				print 'timeout'
 				self.capture_request = False
 				return CaptureImageFeaturesResponse(1,Float32MultiArray(),Float32MultiArray())
 		

@@ -10,14 +10,19 @@ import roslib; roslib.load_manifest('dynamics')
 import rospy
 
 from dynamics.msg import Navdata
-from dynamics.srv import CamSelect
+from dynamics.srv import CamSelect, CaptureImageFeatures
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Empty, UInt8
+from std_msgs.msg import Float32MultiArray, MultiArrayDimension
+from nav_msgs.msg import Path
 
+import math
+import pickle
+import numpy as np
 from time import time, sleep
 from PositionController2 import PositionController
 
-class MapExplorer:
+class MapExplorer2:
 		
 	def __init__(self):
 		self.cmdpub = rospy.Publisher('cmd_vel', Twist)
@@ -25,8 +30,14 @@ class MapExplorer:
 		self.landpub = rospy.Publisher('/ardrone/land', Empty)
 		self.resetpub = rospy.Publisher('/ardrone/reset', Empty)
 		self.takeoffpub = rospy.Publisher('/ardrone/takeoff', Empty)
-		#rospy.Subscriber('/ardrone/navdata', Navdata, self.navdataCallback)
+		#~ rospy.Subscriber('/ardrone/navdata', Navdata, self.navdataCallback)
 		self.camselectclient = rospy.ServiceProxy('/ardrone/setcamchannel', CamSelect)
+		
+		# Set up capture_feature proxy.
+		# Initialize lists for storing found template keypoints and template descriptors
+		self.capture_image_features = rospy.ServiceProxy('CaptureImageFeatures', CaptureImageFeatures)
+		self.tempskppt = []
+		self.tempsdesc = []
 		sleep(1)
 		
 		# make sure cmd_vel topic is clear and drone is reset
@@ -44,49 +55,62 @@ class MapExplorer:
 		self.run()
 	
 	def run(self):
-		# take off
+		# 1. Take off. Instantiate PositionController
 		self.takeoffpub.publish(Empty()); print 'takeoff'
 		sleep(4)
 		pc=PositionController(self.dpw,self.dyw,self.cpw,self.cyw, 1.0/3000, -0.010, -0.0002); print 'construct position controller'
-		#pc.yawon = True
 		sleep(1)
 		
-		# start position control
+		# 2. Start position control by starting pc_timer
 		pc.pc_timer_init(); print 'start PC timer; enable control system'
 		sleep(4)
 		
-		# hover and time to take template
+		# 3. Hover and request to take template
 		pc.pc_timer_shutdown(); print 'stop pc timer; hover'
+		resp = self.capture_image_features(0)
+		
+		if resp.error == 0:
+			self.tempskppt.append(self.resolveFromFloat32MultiArray(resp.kppt))
+			self.tempsdesc.append(self.resolveFromFloat32MultiArray(resp.desc))
+		
+		print self.tempskppt[0].shape
+		print self.tempsdesc[0].shape
 		sleep(1)
 		pass
 		
-		# restart position control, move left x meters
+		# 4. Restart position control, move left x meters
 		cpw=(0,0,1); pc.cpw_handler(cpw)
 		dpw=(0,0.4,1); pc.dpw_handler(dpw);
 		pc.pc_timer_init(); print 'start PC timer; enable control system'
 		sleep(5)
 		
-		# hover and time to take template
+		# 5. Hover and request template
 		pc.pc_timer_shutdown(); print 'stop pc timer; hover'
 		sleep(1)
 		pass
 		
-		# reset position and move right x meters
-		cpw=(0,0.4,1); pc.cpw_handler(cpw)
-		dpw=(0,0,1); pc.dpw_handler(dpw)
-		pc.pc_timer_init(); print 'start PC timer; enable control system'
-		sleep(5)
-		
-		# hover and time to match template
-		pc.pc_timer_shutdown(); print 'stop pc timer; hover'
-		sleep(1)
-		pass
+		#~ # reset position and move right x meters
+		#~ cpw=(0,0.4,1); pc.cpw_handler(cpw)
+		#~ dpw=(0,0,1); pc.dpw_handler(dpw)
+		#~ pc.pc_timer_init(); print 'start PC timer; enable control system'
+		#~ sleep(5)
+		#~ 
+		#~ # hover and time to match template
+		#~ pc.pc_timer_shutdown(); print 'stop pc timer; hover'
+		#~ sleep(1)
+		#~ pass
 		
 		# land
 		self.landpub.publish(Empty()); print 'finished - land'
 		
 		#rospy.spin()
-		
+	
+	def resolveFromFloat32MultiArray(self, msg):
+		nrows = msg.layout.dim[0].size
+		ncols = msg.layout.dim[0].stride
+		array = np.reshape(msg.data, [nrows, ncols])
+		return array
+	
 	def navdataCallback(self, msg):
 		self.check_capture(msg)
 
@@ -113,6 +137,6 @@ class MapExplorer:
 		self.good_to_capture = False
 
 if __name__=='__main__':
-	map_explorer=MapExplorer()
+	map_explorer2=MapExplorer2()
 	
 	
