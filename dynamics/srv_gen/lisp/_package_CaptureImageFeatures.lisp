@@ -7,4 +7,6 @@
           KPPT
           DESC-VAL
           DESC
+          ALT-VAL
+          ALT
 ))

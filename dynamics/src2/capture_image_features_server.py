@@ -35,32 +35,36 @@ class ImageCapturer:
 		self.capture_count = 0
 		self.capture_ok = False
 		self.capture_request = False
+		self.timeout_value = 10		# wait 10 seconds for capture (need both capture_ok and capture_request on)
 		
 		self.kppt = Float32MultiArray()
 		self.desc = Float32MultiArray()
-		self.capture_tstamp = time()-10
+		self.alt = -1000
+		self.t_latest_capture = time()-10
 		
 		s = rospy.Service('CaptureImageFeatures', CaptureImageFeatures, self.handleCaptureImageFeatures)
 		print "capture_image_features_server.py: Server ready."
 		rospy.spin()
 		
 	def handleCaptureImageFeatures(self, req):
-		print "capture_image_features_server.py: Handling capture image features request."
+		print "capture_image_features_server.py: Capture image features request Received."
 		self.capture_request = True
-		tref=time()
-		while time()-self.capture_tstamp > 0.5:
+		treq = time()
+		while time()-self.t_latest_capture > 0.4:
 			# print 'capture_image_features_server.py: waiting for feature captures'
 			# if no updated image captures for 1 second, return with error
-			if time()-tref>5:
-				print 'timeout'
+			if time()-treq > self.timeout_value:
+				print 'Timeout. ', self.timeout_value, ' seconds'
 				self.capture_request = False
-				return CaptureImageFeaturesResponse(1,Float32MultiArray(),Float32MultiArray())
+				return CaptureImageFeaturesResponse(1,Float32MultiArray(),Float32MultiArray(),-1000)
 		
 		# while loop exits with met condition, capture successful
+		print 'time to capture = ', time()-treq
 		self.capture_request = False
 		kppt = self.kppt
 		desc = self.desc
-		return CaptureImageFeaturesResponse(0, kppt, desc)
+		alt = self.alt
+		return CaptureImageFeaturesResponse(0, kppt, desc, alt)
 	
 	def navdataCallback(self, msg):
 		self.check_capture(msg)
@@ -72,17 +76,19 @@ class ImageCapturer:
 		alt_ok = 0
 		ang_ok = 0
 		vel_ok = 0
-		if abs(navd.altd - 1000) < 50:
+		if abs(navd.altd - 1000) < 100:
 			alt_ok = 1
-		if abs(navd.rotX) < 0.1 and abs(navd.rotY) < 0.1:
+		if abs(navd.rotX) < 0.4 and abs(navd.rotY) < 0.4:
 			ang_ok = 1
 		if abs(navd.vx) < 50 and abs(navd.vy) < 50:
 			vel_ok = 1
 			
 		if alt_ok == 1 and ang_ok ==1 and vel_ok ==1:
-			#print 'capture_ok. alt, rotx, roty = ', navd.altd, navd.rotX, navd.rotY
+			self.alt = navd.altd
 			self.capture_ok = True
 		else:
+			#~ if self.capture_request == True:
+				#~ print 'alt, ang, vel: \n', alt_ok, ang_ok, vel_ok
 			self.capture_ok = False
 		
 	def imgproc(self, d):
@@ -109,7 +115,7 @@ class ImageCapturer:
 			self.kppt = self.toFloat32MultiArray(img_kppt)
 			self.desc = self.toFloat32MultiArray(img_desc)
 			
-			self.capture_tstamp = time()
+			self.t_latest_capture = time()
 			
 			#capture_image_featuresResponse(np.zeros(2),np.ones(2))
 	

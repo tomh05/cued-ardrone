@@ -105,12 +105,13 @@ import struct
 import std_msgs.msg
 
 class CaptureImageFeaturesResponse(genpy.Message):
-  _md5sum = "148b2e2545cc147094c5195bc3092aa7"
+  _md5sum = "39445debd8780fece36d10c1049eec15"
   _type = "dynamics/CaptureImageFeaturesResponse"
   _has_header = False #flag to mark the presence of a Header object
   _full_text = """uint8 error
 std_msgs/Float32MultiArray kppt
 std_msgs/Float32MultiArray desc
+int32 alt
 
 
 ================================================================================
@@ -156,8 +157,8 @@ string label   # label of given dimension
 uint32 size    # size of given dimension (in type units)
 uint32 stride  # stride of given dimension
 """
-  __slots__ = ['error','kppt','desc']
-  _slot_types = ['uint8','std_msgs/Float32MultiArray','std_msgs/Float32MultiArray']
+  __slots__ = ['error','kppt','desc','alt']
+  _slot_types = ['uint8','std_msgs/Float32MultiArray','std_msgs/Float32MultiArray','int32']
 
   def __init__(self, *args, **kwds):
     """
@@ -167,7 +168,7 @@ uint32 stride  # stride of given dimension
     changes.  You cannot mix in-order arguments and keyword arguments.
 
     The available fields are:
-       error,kppt,desc
+       error,kppt,desc,alt
 
     :param args: complete set of field values, in .msg order
     :param kwds: use keyword arguments corresponding to message field names
@@ -182,10 +183,13 @@ uint32 stride  # stride of given dimension
         self.kppt = std_msgs.msg.Float32MultiArray()
       if self.desc is None:
         self.desc = std_msgs.msg.Float32MultiArray()
+      if self.alt is None:
+        self.alt = 0
     else:
       self.error = 0
       self.kppt = std_msgs.msg.Float32MultiArray()
       self.desc = std_msgs.msg.Float32MultiArray()
+      self.alt = 0
 
   def _get_types(self):
     """
@@ -232,6 +236,7 @@ uint32 stride  # stride of given dimension
       buff.write(_struct_I.pack(length))
       pattern = '<%sf'%length
       buff.write(struct.pack(pattern, *self.desc.data))
+      buff.write(_struct_i.pack(self.alt))
     except struct.error as se: self._check_types(se)
     except TypeError as te: self._check_types(te)
 
@@ -309,6 +314,9 @@ uint32 stride  # stride of given dimension
       start = end
       end += struct.calcsize(pattern)
       self.desc.data = struct.unpack(pattern, str[start:end])
+      start = end
+      end += 4
+      (self.alt,) = _struct_i.unpack(str[start:end])
       return self
     except struct.error as e:
       raise genpy.DeserializationError(e) #most likely buffer underfill
@@ -354,6 +362,7 @@ uint32 stride  # stride of given dimension
       buff.write(_struct_I.pack(length))
       pattern = '<%sf'%length
       buff.write(self.desc.data.tostring())
+      buff.write(_struct_i.pack(self.alt))
     except struct.error as se: self._check_types(se)
     except TypeError as te: self._check_types(te)
 
@@ -432,15 +441,19 @@ uint32 stride  # stride of given dimension
       start = end
       end += struct.calcsize(pattern)
       self.desc.data = numpy.frombuffer(str[start:end], dtype=numpy.float32, count=length)
+      start = end
+      end += 4
+      (self.alt,) = _struct_i.unpack(str[start:end])
       return self
     except struct.error as e:
       raise genpy.DeserializationError(e) #most likely buffer underfill
 
 _struct_I = genpy.struct_I
+_struct_i = struct.Struct("<i")
 _struct_B = struct.Struct("<B")
 _struct_2I = struct.Struct("<2I")
 class CaptureImageFeatures(object):
   _type          = 'dynamics/CaptureImageFeatures'
-  _md5sum = '28b1941d1b0f79162798fe518cc30bc6'
+  _md5sum = 'c1e4356bc562947c4dacade537cc17ce'
   _request_class  = CaptureImageFeaturesRequest
   _response_class = CaptureImageFeaturesResponse

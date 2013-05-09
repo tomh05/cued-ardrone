@@ -22,6 +22,13 @@ import numpy as np
 from time import time, sleep
 from PositionController2 import PositionController
 
+	
+def resolveFromFloat32MultiArray(self, msg):
+	nrows = msg.layout.dim[0].size
+	ncols = msg.layout.dim[0].stride
+	array = np.reshape(msg.data, [nrows, ncols])
+	return array
+
 class MapExplorer2:
 		
 	def __init__(self):
@@ -67,27 +74,27 @@ class MapExplorer2:
 		
 		# 3. Hover and request to take template
 		pc.pc_timer_shutdown(); print 'stop pc timer; hover'
+		
 		resp = self.capture_image_features(0)
+		self.handleCapturedFeatures(resp)
 		
-		if resp.error == 0:
-			self.tempskppt.append(self.resolveFromFloat32MultiArray(resp.kppt))
-			self.tempsdesc.append(self.resolveFromFloat32MultiArray(resp.desc))
-		
-		print self.tempskppt[0].shape
-		print self.tempsdesc[0].shape
-		sleep(1)
-		pass
+		sleep(0.2)
 		
 		# 4. Restart position control, move left x meters
 		cpw=(0,0,1); pc.cpw_handler(cpw)
-		dpw=(0,0.4,1); pc.dpw_handler(dpw);
+		dpw=(0,0.5,1); pc.dpw_handler(dpw);
 		pc.pc_timer_init(); print 'start PC timer; enable control system'
 		sleep(5)
 		
 		# 5. Hover and request template
 		pc.pc_timer_shutdown(); print 'stop pc timer; hover'
-		sleep(1)
-		pass
+		
+		resp = self.capture_image_features(1)
+		
+		sleep(0.2)
+		
+		# 6. Match template
+		
 		
 		#~ # reset position and move right x meters
 		#~ cpw=(0,0.4,1); pc.cpw_handler(cpw)
@@ -105,12 +112,13 @@ class MapExplorer2:
 		
 		#rospy.spin()
 	
-	def resolveFromFloat32MultiArray(self, msg):
-		nrows = msg.layout.dim[0].size
-		ncols = msg.layout.dim[0].stride
-		array = np.reshape(msg.data, [nrows, ncols])
-		return array
-	
+	def handleCapturedFeatures(self, resp):
+		if resp.error == 0:
+			self.tempskppt.append(self.resolveFromFloat32MultiArray(resp.kppt))
+			self.tempsdesc.append(self.resolveFromFloat32MultiArray(resp.desc))		
+		print resp.alt
+		
+			
 	def navdataCallback(self, msg):
 		self.check_capture(msg)
 
