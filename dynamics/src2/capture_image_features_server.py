@@ -38,29 +38,36 @@ class ImageCapturer:
 		
 		self.kppt = Float32MultiArray()
 		self.desc = Float32MultiArray()
-		self.tstamp = time()-10
+		self.capture_tstamp = time()-10
 		
-		s = rospy.Service('capture_image_features', capture_image_features, self.handle_capture_image_features)
+		s = rospy.Service('CaptureImageFeatures', CaptureImageFeatures, self.handleCaptureImageFeatures)
 		print "capture_image_features_server.py: Server ready."
 		rospy.spin()
 		
-	def handle_capture_image_features(self, req):
+	def handleCaptureImageFeatures(self, req):
 		print "capture_image_features_server.py: Handling capture image features request."
 		self.capture_request = True
-		while time()-self.tstamp > 1:
+		tref=time()
+		while time()-self.capture_tstamp > 0.5:
 			# print 'capture_image_features_server.py: waiting for feature captures'
-			pass
+			# if no updated image captures for 1 second, return with error
+			if time()-tref>1:
+				print 'wait for image timeout'
+				self.capture_request = False
+				return CaptureImageFeaturesResponse(1,Float32MultiArray(),Float32MultiArray())
+		
+		# while loop exits with met condition, capture successful
 		self.capture_request = False
 		kppt = self.kppt
 		desc = self.desc
-		return capture_image_featuresResponse(kppt, desc)
+		return CaptureImageFeaturesResponse(0, kppt, desc)
 	
 	def navdataCallback(self, msg):
 		self.check_capture(msg)
 		#print 'navdata callback'
 		
 	def check_capture(self,navd):
-		"""Check if capture flag should be set to tell imgproc to 
+		"""Check if capture_ok flag should be set to tell imgproc to 
 		capture and save image for feature extraction"""
 		alt_ok = 0
 		ang_ok = 0
@@ -102,7 +109,7 @@ class ImageCapturer:
 			self.kppt = self.toFloat32MultiArray(img_kppt)
 			self.desc = self.toFloat32MultiArray(img_desc)
 			
-			self.tstamp = time()
+			self.capture_tstamp = time()
 			
 			#capture_image_featuresResponse(np.zeros(2),np.ones(2))
 	
@@ -116,12 +123,12 @@ class ImageCapturer:
 		undist_pts[:,1] = undist_pts[:,1]*self.fy+self.v0
 		return undist_pts
 		
-	def toFloat32MultiArray(self, somearray):
+	def toFloat32MultiArray(self, inputarray):
 		msg = Float32MultiArray()
-		somearray_dim = np.shape(somearray)
-		msg.layout.dim.append(MultiArrayDimension('nrows, ncols', somearray_dim[0], somearray_dim[1]))
-		somearray_aslist=list(np.reshape(somearray,np.size(somearray)))
-		msg.data = somearray_aslist
+		inputarray_dim = np.shape(inputarray)
+		msg.layout.dim.append(MultiArrayDimension('nrows, ncols', inputarray_dim[0], inputarray_dim[1]))
+		inputarray_aslist=list(np.reshape(inputarray,np.size(inputarray)))
+		msg.data = inputarray_aslist
 		return msg
 
 	def loadCameraInfo(self):

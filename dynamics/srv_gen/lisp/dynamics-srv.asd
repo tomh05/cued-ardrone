@@ -7,6 +7,8 @@
   :components ((:file "_package")
     (:file "CamSelect" :depends-on ("_package_CamSelect"))
     (:file "_package_CamSelect" :depends-on ("_package"))
+    (:file "CaptureImageFeatures" :depends-on ("_package_CaptureImageFeatures"))
+    (:file "_package_CaptureImageFeatures" :depends-on ("_package"))
     (:file "HullSelect" :depends-on ("_package_HullSelect"))
     (:file "_package_HullSelect" :depends-on ("_package"))
     (:file "capture_image_features" :depends-on ("_package_capture_image_features"))

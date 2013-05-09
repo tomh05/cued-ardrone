@@ -45,12 +45,13 @@ include CMakeFiles/ROSBUILD_gensrv_py.dir/progress.make
 CMakeFiles/ROSBUILD_gensrv_py: ../src/dynamics/srv/__init__.py
 
 ../src/dynamics/srv/__init__.py: ../src/dynamics/srv/_CamSelect.py
+../src/dynamics/srv/__init__.py: ../src/dynamics/srv/_CaptureImageFeatures.py
 ../src/dynamics/srv/__init__.py: ../src/dynamics/srv/_HullSelect.py
 ../src/dynamics/srv/__init__.py: ../src/dynamics/srv/_capture_image_features.py
 ../src/dynamics/srv/__init__.py: ../src/dynamics/srv/_LedAnim.py
 	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_1)
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Generating ../src/dynamics/srv/__init__.py"
-	/opt/ros/fuerte/share/rospy/rosbuild/scripts/gensrv_py.py --initpy /home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv/CamSelect.srv /home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv/HullSelect.srv /home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv/capture_image_features.srv /home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv/LedAnim.srv
+	/opt/ros/fuerte/share/rospy/rosbuild/scripts/gensrv_py.py --initpy /home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv/CamSelect.srv /home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv/CaptureImageFeatures.srv /home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv/HullSelect.srv /home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv/capture_image_features.srv /home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv/LedAnim.srv
 
 ../src/dynamics/srv/_CamSelect.py: ../srv/CamSelect.srv
 ../src/dynamics/srv/_CamSelect.py: /opt/ros/fuerte/share/rospy/rosbuild/scripts/gensrv_py.py
@@ -93,6 +94,50 @@ CMakeFiles/ROSBUILD_gensrv_py: ../src/dynamics/srv/__init__.py
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Generating ../src/dynamics/srv/_CamSelect.py"
 	/opt/ros/fuerte/share/rospy/rosbuild/scripts/gensrv_py.py --noinitpy /home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv/CamSelect.srv
 
+../src/dynamics/srv/_CaptureImageFeatures.py: ../srv/CaptureImageFeatures.srv
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/share/rospy/rosbuild/scripts/gensrv_py.py
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/share/roslib/bin/gendeps
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/share/std_msgs/msg/Float32MultiArray.msg
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/share/std_msgs/msg/MultiArrayLayout.msg
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/share/std_msgs/msg/MultiArrayDimension.msg
+../src/dynamics/srv/_CaptureImageFeatures.py: ../manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/share/geometry_msgs/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/share/sensor_msgs/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/stacks/vision_opencv/opencv2/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/share/roslang/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/share/roscpp/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/stacks/vision_opencv/cv_bridge/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/share/rospy/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/share/std_msgs/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/share/ros/core/rosbuild/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/share/roslib/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/share/rosconsole/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/stacks/pluginlib/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/share/message_filters/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/stacks/image_common/image_transport/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/share/std_srvs/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/stacks/bullet/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/stacks/geometry/angles/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/share/rostest/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/share/roswtf/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/stacks/geometry/tf/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/stacks/common_rosdeps/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/stacks/image_common/camera_calibration_parsers/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/stacks/image_common/camera_info_manager/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /home/rujian/fuerte_workspace/ccny_vision/artoolkit/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/share/visualization_msgs/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/stacks/robot_model/resource_retriever/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/manifest.xml
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/stacks/geometry/tf/msg_gen/generated
+../src/dynamics/srv/_CaptureImageFeatures.py: /opt/ros/fuerte/stacks/geometry/tf/srv_gen/generated
+../src/dynamics/srv/_CaptureImageFeatures.py: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/msg_gen/generated
+../src/dynamics/srv/_CaptureImageFeatures.py: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/srv_gen/generated
+../src/dynamics/srv/_CaptureImageFeatures.py: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/msg_gen/generated
+	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_3)
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Generating ../src/dynamics/srv/_CaptureImageFeatures.py"
+	/opt/ros/fuerte/share/rospy/rosbuild/scripts/gensrv_py.py --noinitpy /home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv/CaptureImageFeatures.srv
+
 ../src/dynamics/srv/_HullSelect.py: ../srv/HullSelect.srv
 ../src/dynamics/srv/_HullSelect.py: /opt/ros/fuerte/share/rospy/rosbuild/scripts/gensrv_py.py
 ../src/dynamics/srv/_HullSelect.py: /opt/ros/fuerte/share/roslib/bin/gendeps
@@ -130,7 +175,7 @@ CMakeFiles/ROSBUILD_gensrv_py: ../src/dynamics/srv/__init__.py
 ../src/dynamics/srv/_HullSelect.py: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/msg_gen/generated
 ../src/dynamics/srv/_HullSelect.py: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/srv_gen/generated
 ../src/dynamics/srv/_HullSelect.py: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/msg_gen/generated
-	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_3)
+	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_4)
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Generating ../src/dynamics/srv/_HullSelect.py"
 	/opt/ros/fuerte/share/rospy/rosbuild/scripts/gensrv_py.py --noinitpy /home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv/HullSelect.srv
 
@@ -174,7 +219,7 @@ CMakeFiles/ROSBUILD_gensrv_py: ../src/dynamics/srv/__init__.py
 ../src/dynamics/srv/_capture_image_features.py: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/msg_gen/generated
 ../src/dynamics/srv/_capture_image_features.py: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/srv_gen/generated
 ../src/dynamics/srv/_capture_image_features.py: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/msg_gen/generated
-	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_4)
+	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_5)
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Generating ../src/dynamics/srv/_capture_image_features.py"
 	/opt/ros/fuerte/share/rospy/rosbuild/scripts/gensrv_py.py --noinitpy /home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv/capture_image_features.srv
 
@@ -215,13 +260,14 @@ CMakeFiles/ROSBUILD_gensrv_py: ../src/dynamics/srv/__init__.py
 ../src/dynamics/srv/_LedAnim.py: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/msg_gen/generated
 ../src/dynamics/srv/_LedAnim.py: /home/rujian/fuerte_workspace/cued-ardrone/ardrone_autonomy/srv_gen/generated
 ../src/dynamics/srv/_LedAnim.py: /home/rujian/fuerte_workspace/ccny_vision/ar_pose/msg_gen/generated
-	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_5)
+	$(CMAKE_COMMAND) -E cmake_progress_report /home/rujian/fuerte_workspace/cued-ardrone/dynamics/build/CMakeFiles $(CMAKE_PROGRESS_6)
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --blue --bold "Generating ../src/dynamics/srv/_LedAnim.py"
 	/opt/ros/fuerte/share/rospy/rosbuild/scripts/gensrv_py.py --noinitpy /home/rujian/fuerte_workspace/cued-ardrone/dynamics/srv/LedAnim.srv
 
 ROSBUILD_gensrv_py: CMakeFiles/ROSBUILD_gensrv_py
 ROSBUILD_gensrv_py: ../src/dynamics/srv/__init__.py
 ROSBUILD_gensrv_py: ../src/dynamics/srv/_CamSelect.py
+ROSBUILD_gensrv_py: ../src/dynamics/srv/_CaptureImageFeatures.py
 ROSBUILD_gensrv_py: ../src/dynamics/srv/_HullSelect.py
 ROSBUILD_gensrv_py: ../src/dynamics/srv/_capture_image_features.py
 ROSBUILD_gensrv_py: ../src/dynamics/srv/_LedAnim.py
