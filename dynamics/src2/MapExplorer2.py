@@ -15,6 +15,7 @@ from geometry_msgs.msg import Twist
 from std_msgs.msg import Empty, UInt8
 from std_msgs.msg import Float32MultiArray, MultiArrayDimension
 from nav_msgs.msg import Path
+import cv2
 
 import math
 import pickle
@@ -23,7 +24,7 @@ from time import time, sleep
 from PositionController2 import PositionController
 
 	
-def resolveFromFloat32MultiArray(self, msg):
+def resolveFromFloat32MultiArray(msg):
 	nrows = msg.layout.dim[0].size
 	ncols = msg.layout.dim[0].stride
 	array = np.reshape(msg.data, [nrows, ncols])
@@ -43,8 +44,12 @@ class MapExplorer2:
 		# Set up capture_feature proxy.
 		# Initialize lists for storing found template keypoints and template descriptors
 		self.capture_image_features = rospy.ServiceProxy('CaptureImageFeatures', CaptureImageFeatures)
-		self.tempskppt = []
-		self.tempsdesc = []
+		self.seq = 0;
+		self.tempskppt = []		# stores keypoints for found templates
+		self.tempsdesc = []		# stores descriptors for found templates
+		self.kppt = []	# current kp
+		self.desc = []	# current desc
+		self.img = np.asarray([])		# current img
 		sleep(1)
 		
 		# make sure cmd_vel topic is clear and drone is reset
@@ -75,22 +80,30 @@ class MapExplorer2:
 		# 3. Hover and request to take template
 		pc.pc_timer_shutdown(); print 'stop pc timer; hover'
 		
-		resp = self.capture_image_features(0)
+		resp = self.capture_image_features(self.seq)
 		self.handleCapturedFeatures(resp)
+		for p in self.kppt:
+			cv2.circle(self.img, tuple(p.astype(int)), 5, (255, 0, 0))
+		cv2.imwrite('showfeatures'+str(self.seq)+'.png',self.img)
 		
 		sleep(0.2)
 		
 		# 4. Restart position control, move left x meters
 		cpw=(0,0,1); pc.cpw_handler(cpw)
-		dpw=(0,0.5,1); pc.dpw_handler(dpw);
+		dpw=(0,0.4,1); pc.dpw_handler(dpw);
 		pc.pc_timer_init(); print 'start PC timer; enable control system'
 		sleep(5)
 		
 		# 5. Hover and request template
 		pc.pc_timer_shutdown(); print 'stop pc timer; hover'
 		
-		resp = self.capture_image_features(1)
-		
+		self.seq+=1
+		resp = self.capture_image_features(self.seq)
+		self.handleCapturedFeatures(resp)
+		for p in self.kppt:
+			cv2.circle(self.img, tuple(p.astype(int)), 5, (0, 0, 255))
+		cv2.imwrite('showfeatures'+str(self.seq)+'.png',self.img)
+				
 		sleep(0.2)
 		
 		# 6. Match template
@@ -114,8 +127,19 @@ class MapExplorer2:
 	
 	def handleCapturedFeatures(self, resp):
 		if resp.error == 0:
-			self.tempskppt.append(self.resolveFromFloat32MultiArray(resp.kppt))
-			self.tempsdesc.append(self.resolveFromFloat32MultiArray(resp.desc))		
+			try:				
+				self.kppt = resolveFromFloat32MultiArray(resp.kppt)
+				self.desc = resolveFromFloat32MultiArray(resp.desc)
+				#~ self.tempskppt.append(self.kppt)
+				#~ self.tempsdesc.append(self.desc)
+				
+				# convert 2d matrix into 3 channel BGR and save in self.img
+				img2dmat = resolveFromFloat32MultiArray(resp.img)
+				_r = img2dmat.shape[0]; _c = img2dmat.shape[1]
+				self.img = np.reshape(img2dmat, [_r, _c/3, 3])
+				
+			except:
+				print 'handleCapturedFeatures exception'
 		print resp.alt
 		
 			

@@ -35,11 +35,12 @@ class ImageCapturer:
 		self.capture_count = 0
 		self.capture_ok = False
 		self.capture_request = False
-		self.timeout_value = 10		# wait 10 seconds for capture (need both capture_ok and capture_request on)
+		self.timeout_value = 5		# wait 10 seconds for capture (need both capture_ok and capture_request on)
 		
 		self.kppt = Float32MultiArray()
 		self.desc = Float32MultiArray()
 		self.alt = -1000
+		self.img = Float32MultiArray()
 		self.t_latest_capture = time()-10
 		
 		s = rospy.Service('CaptureImageFeatures', CaptureImageFeatures, self.handleCaptureImageFeatures)
@@ -51,12 +52,12 @@ class ImageCapturer:
 		self.capture_request = True
 		treq = time()
 		while time()-self.t_latest_capture > 0.4:
-			# print 'capture_image_features_server.py: waiting for feature captures'
 			# if no updated image captures for 1 second, return with error
 			if time()-treq > self.timeout_value:
 				print 'Timeout. ', self.timeout_value, ' seconds'
 				self.capture_request = False
-				return CaptureImageFeaturesResponse(1,Float32MultiArray(),Float32MultiArray(),-1000)
+				return CaptureImageFeaturesResponse(1, \
+				Float32MultiArray(),Float32MultiArray(),-1000, Float32MultiArray())
 		
 		# while loop exits with met condition, capture successful
 		print 'time to capture = ', time()-treq
@@ -64,7 +65,8 @@ class ImageCapturer:
 		kppt = self.kppt
 		desc = self.desc
 		alt = self.alt
-		return CaptureImageFeaturesResponse(0, kppt, desc, alt)
+		img = self.img
+		return CaptureImageFeaturesResponse(0, kppt, desc, alt, img)
 	
 	def navdataCallback(self, msg):
 		self.check_capture(msg)
@@ -103,6 +105,12 @@ class ImageCapturer:
 			cvimg = bridge.imgmsg_to_cv(d,"bgr8")
 			img = np.asarray(cvimg)
 			print 'captured image. capture_count = ', self.capture_count
+			
+			# reshape captured image to 2d matrix before converting to Float32MultiArray
+			_r = img.shape[0]
+			_c = img.shape[1]
+			img2dmat = np.reshape(img, [_r, _c*3])
+			self.img = self.toFloat32MultiArray(img2dmat)
 			
 			# capture image, extract features (keypoints and descriptors), undistort keypoint points (kppt)
 			img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
