@@ -25,17 +25,17 @@ def scanButtons(d): # debounce buttons and fire events
 
 def takeoff():
     rospy.loginfo("Taking off")
-    pub = rospy.Publisher('/ardrone/takeoff',Empty);
+    pub = rospy.Publisher('ardrone/takeoff',Empty);
     pub.publish()
 
 def land():
     rospy.loginfo("Landing")
-    pub = rospy.Publisher('/ardrone/land',Empty);
+    pub = rospy.Publisher('ardrone/land',Empty);
     pub.publish()
 
 def reset():
     rospy.loginfo("Resetting")
-    pub = rospy.Publisher('/ardrone/reset',Empty);
+    pub = rospy.Publisher('ardrone/reset',Empty);
     pub.publish()
 
 def fire_a():
@@ -109,7 +109,7 @@ def scanAxes(d):
 
 def init():
     rospy.init_node('xbox_controller')
-    rospy.Subscriber('/joy',Joy,processJoy)
+    rospy.Subscriber('joy',Joy,processJoy)
 
 
 

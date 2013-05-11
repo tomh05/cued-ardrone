@@ -1,18 +1,76 @@
 <launch>
 
-<group ns="pumba">
-    <node name="pumba_driver" pkg="ardrone_autonomy" type="ardrone_driver" args="-ip 172.31.193.4"/>
-
+<group ns="wilbur">
+    <param name="tf_prefix" type="string" value="wilbur" />
+    <node name="wilbur_driver" pkg="ardrone_autonomy" type="ardrone_driver" args="-ip 192.168.1.1"/>
     <group ns="ardrone/front">
-    <node name="image_proc" pkg="image_proc" type="image_proc" />
+        <node name="image_proc" pkg="image_proc" type="image_proc" />
     </group>
+  <node name="IMU_parser" pkg="particlefilter" type="imu_movement.py" />
+
+    <node name="ar_pose" pkg="ar_pose" type="ar_multi" output="screen">
+        <remap from="/usb_cam/camera_info" to="ardrone/front/camera_info" />
+        <remap from="/usb_cam/image_raw" to="ardrone/front/image_rect" />
+        
+        <param name="marker_pattern_list" type="string" value="$(find ar_pose)/data/lab1"/>
+		<param name="threshold" type="int" value="100"/>
+    
+    </node>
+
+    <node name="Particle_Filter" pkg="particlefilter" type="particlefilter.py" output="screen">
+        <param name="map_path" type="string" value="$(find particlefilter)/maps/lab1.map" />
+        <param name="xy_noise" type="double" value="0.005" />
+        <param name="altitude_noise" type="double" value="0.05" />
+        <param name="pitch_noise" type="double" value="0.005" />
+        <param name="yaw_noise" type="double" value="0.005" />
+        <param name="roll_noise" type="double" value="0.005" />
+        <param name="marker_noise_p" type="double" value="0.8" />
+        <param name="marker_noise_r" type="double" value="0.05" />
+    </node>
+
+<!--
+    <node name="DroneMovement" pkg="dynamics" type="droneMovement.py" output="screen">
+    </node>
+-->
+
+    <node name="Joy" pkg="joy" type="joy_node" />
+    <node name="Xbox" pkg="xboxcontroller" type="control.py" />
 </group>
 
-<group ns="wilbur">
-    <node name="wilbur_driver" pkg="ardrone_autonomy" type="ardrone_driver" args="-ip 172.31.193.1"/>
+
+<group ns="pumba">
+  <param name="tf_prefix" type="string" value="pumba" />
+    <node name="pumba_driver" pkg="ardrone_autonomy" type="ardrone_driver" args="-ip 192.168.3.1"/>
+
     <group ns="ardrone/front">
     <node name="image_proc" pkg="image_proc" type="image_proc" />
     </group>
+
+  <node name="IMU_parser" pkg="particlefilter" type="imu_movement.py" />
+
+    <node name="ar_pose" pkg="ar_pose" type="ar_multi" output="screen">
+        <remap from="/usb_cam/camera_info" to="ardrone/front/camera_info" />
+        <remap from="/usb_cam/image_raw" to="ardrone/front/image_rect" />
+        
+        <param name="marker_pattern_list" type="string" value="$(find ar_pose)/data/lab1"/>
+		<param name="threshold" type="int" value="100"/>
+    
+    </node>
+
+    <node name="Particle_Filter" pkg="particlefilter" type="particlefilter.py" output="screen">
+        <param name="map_path" type="string" value="$(find particlefilter)/maps/lab1.map" />
+        <param name="xy_noise" type="double" value="0.005" />
+        <param name="altitude_noise" type="double" value="0.05" />
+        <param name="pitch_noise" type="double" value="0.005" />
+        <param name="yaw_noise" type="double" value="0.005" />
+        <param name="roll_noise" type="double" value="0.005" />
+        <param name="marker_noise_p" type="double" value="0.8" />
+        <param name="marker_noise_r" type="double" value="0.05" />
+    </node>
+<!--
+    <node name="DroneMovement" pkg="dynamics" type="droneMovement.py" output="screen">
+    </node>
+    -->
 </group>
 
 

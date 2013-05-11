@@ -157,8 +157,9 @@ class Particle:
         q_base_frontcam = np.array([-0.5,0.5,-0.5,0.5])
         rot_mat_base_to_frontcam = tf.transformations.quaternion_matrix(q_base_frontcam)[:3,:3]
         #print 'MARKERS', len(ar_markers.markers)
-        #for i in range(len(ar_markers.markers)):
-        for i in range(1):
+
+        for i in range(len(ar_markers.markers)):
+        #for i in range(1): # when marker library didn't work
             i = len(ar_markers.markers) - 1
             # convert marker position to numpy format
             t = ar_markers.markers[i].pose.pose.position
@@ -188,7 +189,7 @@ class Particle:
             conf = ar_markers.markers[i].confidence
 
             if (mapPosition is not None and conf>70):
-                print "I'm looking at marker " + str(worldmap.markers[j].id)
+                #print "I'm looking at marker " + str(worldmap.markers[j].id)
                 error2 = (mapPosition.x-self.markerPos[0])**2 + (mapPosition.y-self.markerPos[1])**2 + (mapPosition.z-self.markerPos[2])**2
                 error2 = np.sqrt(error2)
                 #print 'prior w', weight 

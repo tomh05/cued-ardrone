@@ -150,14 +150,14 @@ m = ARMarker()
 m.header.frame_id           = "/world"
 m.id                        = 7  # this refers to the order in the ar_posemarker configuration file, not the filename of the marker
 
-m.pose.pose.position.x      = -2.380
-m.pose.pose.position.y      = -0.51
-m.pose.pose.position.z      = 0.38
+m.pose.pose.position.x      = -0.450
+m.pose.pose.position.y      = 2.450
+m.pose.pose.position.z      = 0.470
 
-m.pose.pose.orientation.x   = 0.5
-m.pose.pose.orientation.y   = 0.5
-m.pose.pose.orientation.z   = 0.5
-m.pose.pose.orientation.w   = 0.5
+m.pose.pose.orientation.x   = 0.707
+m.pose.pose.orientation.y   = 0.0
+m.pose.pose.orientation.z   = 0.0
+m.pose.pose.orientation.w   = 0.707
 
 markermap.markers.append(m)
 # copy above section for more markers
@@ -168,14 +168,14 @@ m = ARMarker()
 m.header.frame_id           = "/world"
 m.id                        = 8  # this refers to the order in the ar_posemarker configuration file, not the filename of the marker
 
-m.pose.pose.position.x      = -1.400
-m.pose.pose.position.y      = -1.750
-m.pose.pose.position.z      = 0.940
+m.pose.pose.position.x      = 0.620
+m.pose.pose.position.y      = 2.450
+m.pose.pose.position.z      = 0.810
 
-m.pose.pose.orientation.x   = 0.0
-m.pose.pose.orientation.y   = 0.707
-m.pose.pose.orientation.z   = 0.707
-m.pose.pose.orientation.w   = 0.0
+m.pose.pose.orientation.x   = 0.707
+m.pose.pose.orientation.y   = 0.0
+m.pose.pose.orientation.z   = 0.0
+m.pose.pose.orientation.w   = 0.707
 
 markermap.markers.append(m)
 # copy above section for more markers

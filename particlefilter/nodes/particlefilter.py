@@ -36,19 +36,19 @@ publishTf = True
 
 #------------------------------------------------------
 # Params setup
-xyNoise     = rospy.get_param("/Particle_Filter/xy_noise",0.0)
-altNoise    = rospy.get_param("/Particle_Filter/altitude_noise",0.0)
-pitchNoise  = rospy.get_param("/Particle_Filter/pitch_noise",0.0)
-yawNoise    = rospy.get_param("/Particle_Filter/yaw_noise",0.0)
-rollNoise   = rospy.get_param("/Particle_Filter/roll_noise",0.0)
-markerNoiseP= rospy.get_param("/Particle_Filter/marker_noise_p",0.0)
-markerNoiseR= rospy.get_param("/Particle_Filter/marker_noise_r",0.0)
+xyNoise     = rospy.get_param("Particle_Filter/xy_noise",0.0)
+altNoise    = rospy.get_param("Particle_Filter/altitude_noise",0.0)
+pitchNoise  = rospy.get_param("Particle_Filter/pitch_noise",0.0)
+yawNoise    = rospy.get_param("Particle_Filter/yaw_noise",0.0)
+rollNoise   = rospy.get_param("Particle_Filter/roll_noise",0.0)
+markerNoiseP= rospy.get_param("Particle_Filter/marker_noise_p",0.0)
+markerNoiseR= rospy.get_param("Particle_Filter/marker_noise_r",0.0)
 
 #------------------------------------------------------
 # Map Setup
 #mapfile = open("../maps/singlemarker.map","r")
 #mapfile = open("../maps/multimarker.map","r")
-map_path = rospy.get_param("/Particle_Filter/map_path")
+map_path = rospy.get_param("Particle_Filter/map_path")
 mapfile = open(map_path,'r')
 
 worldmap = pickle.load(mapfile)
@@ -95,7 +95,7 @@ mapVisualisation.markers.append(marker)
 
 class ParticleFilter:
     def __init__(self):
-        self.N            = 20      # number of particles
+        self.N            = 7      # number of particles 20 was best
         self.p            = []      # particle list
         self.ar_markers   = None 
         self.w            = [1.0]*self.N
@@ -123,14 +123,14 @@ class ParticleFilter:
         self.mapMarkerPub = rospy.Publisher('map_markers',MarkerArray)
 
         # move particles each time navigation data arrives
-        rospy.Subscriber('/ardrone/navdata',ardrone_autonomy.msg.Navdata,self.navdataCallback)
+        rospy.Subscriber('ardrone/navdata',ardrone_autonomy.msg.Navdata,self.navdataCallback)
 
 
         # reset gamma
         rospy.Subscriber('/xboxcontroller/button_a',Empty,self.resetgammaCallback)
 
         # and compute weights each time pose data arrives
-    	rospy.Subscriber('/ar_pose_marker',ARMarkers,self.markerCallback,None,1) # Queue size 1
+    	rospy.Subscriber('ar_pose_marker',ARMarkers,self.markerCallback,None,1) # Queue size 1
 
         self.createParticles()
 
@@ -160,23 +160,23 @@ class ParticleFilter:
             # update particle locations
             self.p[i].move(movement)
 
-        self.visualiseParticles()
+        #######################self.visualiseParticles()
         if (self.ar_markers is not None ):
             #weigh and resample
             # only do this for marker data that is older than the current deadreckon data - if deadreckoning is behind, skip the
             # marker data and catch up on position
             if (len(self.ar_markers.markers)>0 and cmp(self.ar_markers.markers[0].header.stamp,navdata.header.stamp)<0):
                 self.findWeights(self.ar_markers)
-                print 'now',rospy.Time.now() 
-                print 'mark',self.ar_markers.markers[0].header
-                print 'nav',navdata.header
+                #print 'now',rospy.Time.now() 
+                #print 'mark',self.ar_markers.markers[0].header
+                #print 'nav',navdata.header
                 firstmarker = self.ar_markers.markers[0].id
                 # debug: if the markers were used, draw estimates
                 if self.w[0]!=1.0:
                     # flash marker red
                     mapVisualisation.markers[firstmarker].color.g = 0.0
                     self.mapMarkerPub.publish(mapVisualisation)
-                    self.visualiseEstimates()
+                    ######################self.visualiseEstimates()
                     self.resample()
                     mapVisualisation.markers[firstmarker].color.g = 1.0
         self.ar_markers = None
@@ -339,10 +339,9 @@ class ParticleFilter:
 
             clonedParticle = self.p[index].clone()
             clonedParticle.setNoise(xyNoise,altNoise,rollNoise,pitchNoise,yawNoise,markerNoiseP,markerNoiseR)
-            # add random noise after resample
-            #clonedParticle.pos[0] += random.gauss(0.0,0.05)
-            #clonedParticle.pos[1] += random.gauss(0.0,0.05)
-            #clonedParticle.orientation = clonedParticle.addRotNoise(clonedParticle.orientation,0.00,0.00,0.1)
+            clonedParticle.pos[0] += random.gauss(0.0,0.05)
+            clonedParticle.pos[1] += random.gauss(0.0,0.05)
+            clonedParticle.orientation = clonedParticle.addRotNoise(clonedParticle.orientation,0.00,0.00,0.1)
             new_p.append(clonedParticle)
         self.p = new_p
         self.maxWparticle = self.w.index(mw)
@@ -391,7 +390,7 @@ class ParticleFilter:
                                   #self.p[i].morientation,
                                   #(0.5,0.5,0.5,0.49),
                                   time, 
-                                  "/ardrone_base_link_particle_filter",
+                                  "/"+rospy.get_param('tf_prefix')+"/ardrone_base_link_particle_filter",
                                   "/world")
     #    def bestGuess(self):
     #    for i in range(self.N):

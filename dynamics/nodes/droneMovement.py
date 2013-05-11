@@ -8,6 +8,7 @@ import rospy
 from dynamics.msg import Navdata
 from geometry_msgs.msg import Twist, Pose, PoseStamped
 from std_msgs.msg import Empty
+import ardrone_autonomy.msg
 import tf
 from time import time, sleep
 import sys
@@ -19,20 +20,21 @@ class DroneMovement:
     def __init__(self):
         self.twist = Twist()
         self.cmdpub = rospy.Publisher('cmd_vel', Twist)
-        self.landpub = rospy.Publisher('/ardrone/land', Empty)
-        self.resetpub = rospy.Publisher('/ardrone/reset', Empty)
-        self.takeoffpub = rospy.Publisher('/ardrone/takeoff', Empty)
+        self.landpub = rospy.Publisher('ardrone/land', Empty)
+        self.resetpub = rospy.Publisher('ardrone/reset', Empty)
+        self.takeoffpub = rospy.Publisher('ardrone/takeoff', Empty)
          
         self.currentPos = (0.0, 0.0, 0.0)
-        self.currentYaw =0.0
+        self.currentYaw = 0.0
         self.targetPos = (0.0,0.0,1.0) #self.currentPos
         self.targetYaw = self.currentYaw
         
+    def startup(self,d):
         self.positionController = PositionController(self.targetPos,self.targetYaw,self.currentPos,self.currentYaw)
         self.positionController.refalon = False # compare current and target z. 
         self.positionController.yawon = True # TODO enable yaw control once gyros fixed
-
-
+        self.positionController.pc_timer_init()
+        self.startupSubscriber.unregister()
 
     def resetTwist(self):
         # TODO decide if useful, and implement actual twist sending
@@ -66,7 +68,7 @@ class DroneMovement:
     def updatePose(self,data):
         ###### Currently un-used: position is determined by the positionController directly
 
-        if (data.transforms[0].child_frame_id == '/ardrone_base_link'):
+        if (data.transforms[0].child_frame_id == 'ardrone_base_link'):
             self.currentPos = (data.transforms[0].transform.translation.x,
                                data.transforms[0].transform.translation.y,
                                data.transforms[0].transform.translation.z)
@@ -81,10 +83,10 @@ if __name__ == '__main__':
         rospy.init_node('movementHandler')
         droneMovement = DroneMovement()
         rospy.sleep(1.0)
-        droneMovement.positionController.pc_timer_init()
         print 'created'
-        #rospy.Subscriber('/targetPose',Pose,droneMovement.goToWorldPose);
+        rospy.Subscriber('target',Pose,droneMovement.goToWorldPose);
+        droneMovement.startupSubscriber = rospy.Subscriber('ardrone/navdata',ardrone_autonomy.msg.Navdata,droneMovement.startup);
         rospy.Subscriber('/targetPose',Pose,droneMovement.setK);
         rospy.Subscriber('/move_base_simple/goal',PoseStamped,droneMovement.goToPoseStamped);
-        rospy.Subscriber('/tf',tf.msg.tfMessage,droneMovement.updatePose);
+        #rospy.Subscriber('/tf',tf.msg.tfMessage,droneMovement.updatePose);
         rospy.spin()
