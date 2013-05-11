@@ -128,7 +128,8 @@ class MapExplorer2:
 	
 	def handleCapturedFeatures(self, resp):
 		"""Process feature server's response and update 
-		self.kppt, self.desc, self.alt, self.img."""
+		self.kppt, self.desc, self.alt, self.img.
+		"""
 		if resp.error == 0:
 			try:				
 				self.kppt = resolveFromFloat32MultiArray(resp.kppt)
@@ -146,8 +147,18 @@ class MapExplorer2:
 				print 'handleCapturedFeatures exception'
 		print resp.alt
 	
+	
+	def matchToKnownTemplates(self):
+		"""Uses self.kppt, self.desc, self.alt, and self.templateLib, 
+		to determine with of the known templates in self.templateLib 
+		matches the current captured frame of features. 
+		Calculates transform from world/model frame to current camera 
+		frame.
+		"""
+	
 	def extractTemplate(self, kppt):
-		"""Selects a subset of the image keypoints to form a template
+		"""Selects a subset of the image keypoints to form a template.
+		Calculates obj coordinates of the keypoints (in model frame).
 		"""
 		return np.array(list(x for x in kppt if abs(x[0]-180)<140 and abs(x[1]-320)<250)
 		
@@ -157,7 +168,8 @@ class MapExplorer2:
 
 	def check_capture(self,navd):
 		"""Check if capture flag should be set to tell imgproc to 
-		capture and save image for feature extraction"""
+		capture and save image for feature extraction
+		"""
 		alt_ok = 0
 		ang_ok = 0
 		vel_ok = 0
