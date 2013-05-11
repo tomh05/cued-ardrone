@@ -9,4 +9,6 @@
           DESC
           ALT-VAL
           ALT
+          IMG-VAL
+          IMG
 ))

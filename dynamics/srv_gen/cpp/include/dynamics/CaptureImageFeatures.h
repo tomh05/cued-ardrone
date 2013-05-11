@@ -20,6 +20,7 @@
 
 #include "std_msgs/Float32MultiArray.h"
 #include "std_msgs/Float32MultiArray.h"
+#include "std_msgs/Float32MultiArray.h"
 
 namespace dynamics
 {
@@ -60,6 +61,7 @@ struct CaptureImageFeaturesResponse_ {
   , kppt()
   , desc()
   , alt(0)
+  , img()
   {
   }
 
@@ -68,6 +70,7 @@ struct CaptureImageFeaturesResponse_ {
   , kppt(_alloc)
   , desc(_alloc)
   , alt(0)
+  , img(_alloc)
   {
   }
 
@@ -82,6 +85,9 @@ struct CaptureImageFeaturesResponse_ {
 
   typedef int32_t _alt_type;
   int32_t alt;
+
+  typedef  ::std_msgs::Float32MultiArray_<ContainerAllocator>  _img_type;
+   ::std_msgs::Float32MultiArray_<ContainerAllocator>  img;
 
 
   typedef boost::shared_ptr< ::dynamics::CaptureImageFeaturesResponse_<ContainerAllocator> > Ptr;
@@ -161,12 +167,12 @@ template<class ContainerAllocator>
 struct MD5Sum< ::dynamics::CaptureImageFeaturesResponse_<ContainerAllocator> > {
   static const char* value() 
   {
-    return "39445debd8780fece36d10c1049eec15";
+    return "9b4db84fc489a6a68d988437edac66b3";
   }
 
   static const char* value(const  ::dynamics::CaptureImageFeaturesResponse_<ContainerAllocator> &) { return value(); } 
-  static const uint64_t static_value1 = 0x39445debd8780fecULL;
-  static const uint64_t static_value2 = 0xe36d10c1049eec15ULL;
+  static const uint64_t static_value1 = 0x9b4db84fc489a6a6ULL;
+  static const uint64_t static_value2 = 0x8d988437edac66b3ULL;
 };
 
 template<class ContainerAllocator>
@@ -187,6 +193,7 @@ struct Definition< ::dynamics::CaptureImageFeaturesResponse_<ContainerAllocator>
 std_msgs/Float32MultiArray kppt\n\
 std_msgs/Float32MultiArray desc\n\
 int32 alt\n\
+std_msgs/Float32MultiArray img\n\
 \n\
 \n\
 ================================================================================\n\
@@ -271,6 +278,7 @@ template<class ContainerAllocator> struct Serializer< ::dynamics::CaptureImageFe
     stream.next(m.kppt);
     stream.next(m.desc);
     stream.next(m.alt);
+    stream.next(m.img);
   }
 
   ROS_DECLARE_ALLINONE_SERIALIZER;
@@ -286,7 +294,7 @@ template<>
 struct MD5Sum<dynamics::CaptureImageFeatures> {
   static const char* value() 
   {
-    return "c1e4356bc562947c4dacade537cc17ce";
+    return "b8ef2bae196753f15b0d0b9888ac4b4a";
   }
 
   static const char* value(const dynamics::CaptureImageFeatures&) { return value(); } 
@@ -306,7 +314,7 @@ template<class ContainerAllocator>
 struct MD5Sum<dynamics::CaptureImageFeaturesRequest_<ContainerAllocator> > {
   static const char* value() 
   {
-    return "c1e4356bc562947c4dacade537cc17ce";
+    return "b8ef2bae196753f15b0d0b9888ac4b4a";
   }
 
   static const char* value(const dynamics::CaptureImageFeaturesRequest_<ContainerAllocator> &) { return value(); } 
@@ -326,7 +334,7 @@ template<class ContainerAllocator>
 struct MD5Sum<dynamics::CaptureImageFeaturesResponse_<ContainerAllocator> > {
   static const char* value() 
   {
-    return "c1e4356bc562947c4dacade537cc17ce";
+    return "b8ef2bae196753f15b0d0b9888ac4b4a";
   }
 
   static const char* value(const dynamics::CaptureImageFeaturesResponse_<ContainerAllocator> &) { return value(); } 

@@ -4,3 +4,4 @@ uint8 error
 std_msgs/Float32MultiArray kppt
 std_msgs/Float32MultiArray desc
 int32 alt
+std_msgs/Float32MultiArray img

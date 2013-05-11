@@ -49,6 +49,7 @@ class MapExplorer2:
 		self.tempsdesc = []		# stores descriptors for found templates
 		self.kppt = []	# current kp
 		self.desc = []	# current desc
+		self.alt = -1000
 		self.img = np.asarray([])		# current img
 		sleep(1)
 		
@@ -126,12 +127,15 @@ class MapExplorer2:
 		#rospy.spin()
 	
 	def handleCapturedFeatures(self, resp):
+		"""Process feature server's response and update 
+		self.kppt, self.desc, self.alt, self.img."""
 		if resp.error == 0:
 			try:				
 				self.kppt = resolveFromFloat32MultiArray(resp.kppt)
 				self.desc = resolveFromFloat32MultiArray(resp.desc)
 				#~ self.tempskppt.append(self.kppt)
 				#~ self.tempsdesc.append(self.desc)
+				self.alt = resp.alt
 				
 				# convert 2d matrix into 3 channel BGR and save in self.img
 				img2dmat = resolveFromFloat32MultiArray(resp.img)
@@ -141,6 +145,11 @@ class MapExplorer2:
 			except:
 				print 'handleCapturedFeatures exception'
 		print resp.alt
+	
+	def extractTemplate(self, kppt):
+		"""Selects a subset of the image keypoints to form a template
+		"""
+		return np.array(list(x for x in kppt if abs(x[0]-180)<140 and abs(x[1]-320)<250)
 		
 			
 	def navdataCallback(self, msg):

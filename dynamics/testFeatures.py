@@ -229,7 +229,7 @@ class Tester:
 		self.cameraMatrix, self.distCoeffs)
 		print rvec
 		print tvec
-		print inliers
+		print i2_matched_pts
 		
 		#~ undistorted = cv2.undistort(img, self.cameraMatrix, self.distCoeffs)
 		#~ stacked = img - undistorted
