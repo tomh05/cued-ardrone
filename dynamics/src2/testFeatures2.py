@@ -9,9 +9,11 @@ import numpy as np
 from sensor_msgs.msg import Image
 import matplotlib.pyplot as plot
 import tf
+from tf import transformations
 from std_msgs.msg import Float32MultiArray
 from nav_msgs.msg import Path
 import math
+from math import sin, cos
 from time import time, sleep
 import os
 import pickle
@@ -211,7 +213,7 @@ class Tester:
 		
 		# Find matches in image 2 and template
 		t1_matched_pts, i2_matched_pts = self.matchPoints(t1_desc, img2_desc, t1_kppt, i2_kppt)
-		print t1_matched_pts.shape, i2_matched_pts.shape
+		#~ print t1_matched_pts.shape, i2_matched_pts.shape
 
 		# Draw matches
 		undistorted2 = cv2.undistort(colorimg2, self.cameraMatrix, self.distCoeffs)
@@ -224,13 +226,22 @@ class Tester:
 		
 		# Calculate Nx3 object coordinates for matched points in template
 		t1_matched_coords = self.calcObjCoord(t1_matched_pts, 1000)
+		#~ print t1_matched_coords, t1_matched_coords.shape
 		
 		# Find template in image 2 and determine camera pose
 		rvec, tvec, inliers = cv2.solvePnPRansac(t1_matched_coords, i2_matched_pts, \
 		self.cameraMatrix, self.distCoeffs)
 		print rvec
 		print tvec
-		print i2_matched_pts
+		rmat = cv2.Rodrigues(rvec)[0]
+		print rmat
+		rot = transformations.euler_from_matrix(rmat)[2]
+		Rf = np.array([[cos(rot), -sin(rot), 0],[sin(rot),cos(rot),0],[0,0,1]])
+		print Rf
+		Tf = tvec; Tf[2] = 0
+		print Tf
+		
+		#~ print i2_matched_pts
 		
 		#~ undistorted = cv2.undistort(img, self.cameraMatrix, self.distCoeffs)
 		#~ stacked = img - undistorted
