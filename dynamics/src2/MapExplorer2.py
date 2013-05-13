@@ -19,6 +19,7 @@ from tf import transformations
 import cv2
 
 import math
+from math import cos, sin
 import pickle
 import numpy as np
 from time import time, sleep
@@ -55,6 +56,7 @@ class MapExplorer2:
 		self.img = np.asarray([])		# current img
 		self.templatelib = []
 		
+		self.dm = cv2.DescriptorMatcher_create('BruteForce')
 		self.loadCameraInfo()
 		sleep(1)
 		
@@ -104,11 +106,12 @@ class MapExplorer2:
 		resp = self.capture_image_features(self.seq)
 		kppt, desc, alt, img = self.handleFeatureResponse(resp)
 		self.img = img.copy()
-		for p in kppt:
+		
+		for p in kppt:	# show captured features in file
 			cv2.circle(img, tuple(p.astype(int)), 5, (255, 0, 0))
 		cv2.imwrite('showfeatures'+str(self.seq)+'.png',img)
-		self.analyseFeatures(kppt, desc, alt)
 		
+		self.analyseFeatures(kppt, desc, alt)	# main step for calculating pose and new template
 		
 		sleep(0.2)
 		
@@ -124,9 +127,13 @@ class MapExplorer2:
 		self.seq+=1
 		resp = self.capture_image_features(self.seq)
 		kppt, desc, alt, img = self.handleFeatureResponse(resp)
-		for p in kppt:
+		
+		for p in kppt:		# show captured features in file
 			cv2.circle(img, tuple(p.astype(int)), 5, (255, 0, 0))
-		cv2.imwrite('showfeatures'+str(self.seq)+'.png',img)				
+		cv2.imwrite('showfeatures'+str(self.seq)+'.png',img)
+		
+		self.analyseFeatures(kppt, desc, alt)	# main step for calculating pose and new template
+						
 		sleep(0.2)
 		
 		# 6. Match template
@@ -155,6 +162,7 @@ class MapExplorer2:
 		if resp.error == 0:		
 			kppt = resolveFromFloat32MultiArray(resp.kppt)
 			desc = resolveFromFloat32MultiArray(resp.desc)
+			desc = desc.astype('float32')
 			#~ self.tempskppt.append(self.kppt)
 			#~ self.tempsdesc.append(self.desc)
 			alt = resp.alt
@@ -184,6 +192,7 @@ class MapExplorer2:
 		> Choose a new template, save in self.templatelib.
 		"""
 		if self.templatelib == []:
+			# analyse features and collect elements for new template
 			Q = np.eye(3)
 			S = np.zeros([3,1])
 			ntkppt, ntindices = self.extractTemplate(kppt, [])
@@ -192,7 +201,12 @@ class MapExplorer2:
 			ntdesc = desc[ntindices]
 			mid = 0
 			tm = time()
+			
+			# construct new template and save
 			t = Template(tm,ntkppt,ntdesc,objc,objm,Q,S,mid)
+			self.templatelib.append(t)
+			self.templatelib.append(t)
+			self.templatelib.append(t)
 			
 			#~ print ntkppt, ntdesc
 			print kppt.shape, desc.shape
@@ -204,22 +218,40 @@ class MapExplorer2:
 			cv2.imwrite('template'+str(self.seq)+'.png',img)
 			
 		else:
-			pass
+			# match features with all known templates; receive Rf, Tf, inliers for all templates.
+			allpt = [x.kppt for x in self.templatelib]
+			alldt = [x.desc for x in self.templatelib]
+			allobjm = [x.objm for x in self.templatelib]
+			nl = len(self.templatelib)
+			
+			res = map(self.matchFeaturesEstimatePose,[kppt]*nl, [desc]*nl, allpt, alldt, allobjm)
+			unzipped = zip(*res)
+			allRf = unzipped[0]
+			allTf = unzipped[1]
+			allinliers = unzipped[2]
+			
+			print allRf
+			print '-'*50
+			print allTf
+			print '-'*50
+			print allinliers
+			
 	
 	def matchFeaturesEstimatePose(self, pf, df, pt, dt, objm):
 		""" keypoints feature, desc feature, keypoints template, desc template, obj coord in model frame.
 		Returns Rf, Tf, inliers.
 		"""
 		# find match
-		pfmatch, ptmatch = self.matchPoints(df, dt, pf, pt)
+		pfmatch, ptmatch, pfmatch_i, ptmatch_i = self.matchPoints(df, dt, pf, pt)
 		# estimate pose
-		rvec, tvec, inliers = cv2.solvePnPRansac(objm, pfmatch, \
+		objm_match = objm[ptmatch_i,:]
+		rvec, tvec, inliers = cv2.solvePnPRansac(objm_match, pfmatch, \
 		self.cameraMatrix, self.distCoeffs)
 		# flatten
 		rmat = cv2.Rodrigues(rvec)[0]
 		rot = transformations.euler_from_matrix(rmat)[2]
 		Rf = np.array([[cos(rot), -sin(rot), 0],[sin(rot),cos(rot),0],[0,0,1]])
-		print Rf
+		#~ print Rf
 		Tf = tvec; Tf[2] = 0
 		return Rf, Tf, inliers
 		
@@ -250,7 +282,7 @@ class MapExplorer2:
 		i2_pts = kppt2_array[i2_indices,:]
 		i1_pts = i1_pts.astype('float32')
 		i2_pts = i2_pts.astype('float32')		
-		return i1_pts, i2_pts
+		return i1_pts, i2_pts, i1_indices, i2_indices
 	
 	
 	def calcObjcCoord(self, kppt, Zc):

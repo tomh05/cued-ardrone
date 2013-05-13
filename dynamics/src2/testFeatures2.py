@@ -103,7 +103,7 @@ class Tester:
 		i2_pts = kppt2_array[i2_indices,:]
 		i1_pts = i1_pts.astype('float32')
 		i2_pts = i2_pts.astype('float32')		
-		return i1_pts, i2_pts
+		return i1_pts, i2_pts, i1_indices, i2_indices
 		
 	def calcObjCoord(self, kppt, Zc=1000):
 		# Calculate Nx3 object coordinates for template points
@@ -212,8 +212,10 @@ class Tester:
 		#~ print t1_kpcoord
 		
 		# Find matches in image 2 and template
-		t1_matched_pts, i2_matched_pts = self.matchPoints(t1_desc, img2_desc, t1_kppt, i2_kppt)
-		#~ print t1_matched_pts.shape, i2_matched_pts.shape
+		t1_matched_pts, i2_matched_pts, t1_matched_i, i2_matched_i = \
+		 self.matchPoints(t1_desc, img2_desc, t1_kppt, i2_kppt)
+		print t1_matched_i, i2_matched_i
+		print len(t1_matched_i), len(i2_matched_i), 't1_matched_i, i2_matched_i'
 
 		# Draw matches
 		undistorted2 = cv2.undistort(colorimg2, self.cameraMatrix, self.distCoeffs)
@@ -231,9 +233,9 @@ class Tester:
 		# Find template in image 2 and determine camera pose
 		rvec, tvec, inliers = cv2.solvePnPRansac(t1_matched_coords, i2_matched_pts, \
 		self.cameraMatrix, self.distCoeffs)
-		print rvec
-		print tvec
-		print inliers
+		print rvec, 'rvec'
+		print tvec, 'tvec'
+		print inliers.shape, 'inliers'
 		rmat = cv2.Rodrigues(rvec)[0]
 		#~ print rmat
 		rot = transformations.euler_from_matrix(rmat)[2]
@@ -242,7 +244,7 @@ class Tester:
 		Tf = tvec; Tf[2] = 0
 		#~ print Tf
 		
-		print i2_matched_pts
+		print i2_matched_pts.shape, 'i2_matched_pts'
 		
 		
 		# Draw inliers
