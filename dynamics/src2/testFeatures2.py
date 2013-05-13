@@ -200,8 +200,8 @@ class Tester:
 				t1_desc.append(img_desc[i])
 		t1_kppt = np.array(t1_kppt)
 		t1_desc = np.array(t1_desc)
-		for p in t1_kppt:
-			cv2.circle(undistorted, tuple(p.astype(int)) , 5, (0, 0, 255))
+		#~ for p in t1_kppt:
+			#~ cv2.circle(undistorted, tuple(p.astype(int)) , 5, (0, 0, 255))
 		
 		#~ # Calculate Nx3 object coordinates for template points
 		#~ Zc = 1000 		# assume 1 meter hover height
@@ -233,15 +233,29 @@ class Tester:
 		self.cameraMatrix, self.distCoeffs)
 		print rvec
 		print tvec
+		print inliers
 		rmat = cv2.Rodrigues(rvec)[0]
-		print rmat
+		#~ print rmat
 		rot = transformations.euler_from_matrix(rmat)[2]
 		Rf = np.array([[cos(rot), -sin(rot), 0],[sin(rot),cos(rot),0],[0,0,1]])
-		print Rf
+		#~ print Rf
 		Tf = tvec; Tf[2] = 0
-		print Tf
+		#~ print Tf
 		
-		#~ print i2_matched_pts
+		print i2_matched_pts
+		
+		
+		# Draw inliers
+		for i in inliers[:,0]:
+			cv2.circle(undistorted, tuple(t1_matched_pts[i].astype(int)) , 4, (0, 0, 255))
+			cv2.circle(undistorted2, tuple(i2_matched_pts[i].astype(int)) , 4, (0, 0, 255))
+		stacked_img = stackImagesVertically(undistorted, undistorted2)
+		for i in range(len(t1_matched_pts)):
+			cv2.line(stacked_img, tuple(t1_matched_pts[i].astype(int)), \
+			(int(i2_matched_pts[i,0]), int(i2_matched_pts[i,1])+360), (0,0,255))
+		cv2.imshow('img',stacked_img)
+		cv2.waitKey(0)			
+		
 		
 		#~ undistorted = cv2.undistort(img, self.cameraMatrix, self.distCoeffs)
 		#~ stacked = img - undistorted

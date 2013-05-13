@@ -52,7 +52,7 @@ class MapExplorer2:
 		#~ self.kppt = []	# current kp
 		#~ self.desc = []	# current desc
 		#~ self.alt = -1000
-		#~ self.img = np.asarray([])		# current img
+		self.img = np.asarray([])		# current img
 		self.templatelib = []
 		
 		self.loadCameraInfo()
@@ -103,6 +103,7 @@ class MapExplorer2:
 		
 		resp = self.capture_image_features(self.seq)
 		kppt, desc, alt, img = self.handleFeatureResponse(resp)
+		self.img = img.copy()
 		for p in kppt:
 			cv2.circle(img, tuple(p.astype(int)), 5, (255, 0, 0))
 		cv2.imwrite('showfeatures'+str(self.seq)+'.png',img)
@@ -183,7 +184,24 @@ class MapExplorer2:
 		> Choose a new template, save in self.templatelib.
 		"""
 		if self.templatelib == []:
-			pass
+			Q = np.eye(3)
+			S = np.zeros([3,1])
+			ntkppt, ntindices = self.extractTemplate(kppt, [])
+			objc = self.calcObjcCoord(ntkppt, alt)
+			objm = objc
+			ntdesc = desc[ntindices]
+			mid = 0
+			tm = time()
+			t = Template(tm,ntkppt,ntdesc,objc,objm,Q,S,mid)
+			
+			#~ print ntkppt, ntdesc
+			print kppt.shape, desc.shape
+			print ntkppt.shape, ntdesc.shape, objc.shape, objm.shape
+			
+			img = self.img.copy()
+			for p in ntkppt:
+				cv2.circle(img, tuple(p.astype(int)), 5, (0, 0, 0))
+			cv2.imwrite('template'+str(self.seq)+'.png',img)
 			
 		else:
 			pass
@@ -247,11 +265,24 @@ class MapExplorer2:
 		return kpcoord
 	
 	
-	def extractTemplate(self, kppt):
+	def extractTemplate(self, kppt, inliers):
 		"""Selects a subset of the image keypoints to form a template.
-		Calculates obj coordinates of the keypoints (in model frame).
+		Uses inliers of current match to select a new template in image.
+		returns new template's keypoints and indices in old kppt.
 		"""
-		return np.array(list(x for x in kppt if abs(x[0]-180)<140 and abs(x[1]-320)<250))
+		ntkppt = []		# new template keypoints
+		ntindex = []	# new template indices (of kppt)
+		
+		#~ for i in range(kppt.shape[0]):
+			#~ if abs(kppt[i][0]-180)<140 and abs(kppt[i][1]-320)<250)):
+				#~ ntkppt.append(kppt[i])
+				#~ ntindex.append(i)
+				
+		c = zip(*[(i, x) for i, x in enumerate(list(kppt)) \
+		 if abs(x[0]-320)<250 and abs(x[1]-180)<140])
+		ntkppt = np.array(c[1])
+		ntindex = list(c[0])
+		return ntkppt, ntindex
 	
 	
 	#~ def navdataCallback(self, msg):
