@@ -96,9 +96,11 @@ class MapExplorer2:
 		sleep(4)
 		pc=PositionController(self.dpw,self.dyw,self.cpw,self.cyw, 1.0/3000, -0.010, -0.0002); print 'construct position controller'
 		sleep(1)
+		# --------------------------------------------------------------
+		
 		
 		# 2. Start position control by starting pc_timer
-		pc.pc_timer_init(); print 'start PC timer; enable control system'
+		pc.pc_timer_init(); print '\n\n\nstart PC timer; enable control system'
 		sleep(4)
 		
 		# 3. Hover and request to take template
@@ -113,13 +115,14 @@ class MapExplorer2:
 		cv2.imwrite('showfeatures'+str(self.seq)+'.png',img)
 		
 		self.analyseFeatures(kppt, desc, alt)	# main step for calculating pose and new template
-		
 		sleep(0.2)
+		# --------------------------------------------------------------
+		
 		
 		# 4. Restart position control, move left x meters
 		cpw=(0,0,1); pc.cpw_handler(cpw)
 		dpw=(0,0.4,1); pc.dpw_handler(dpw);
-		pc.pc_timer_init(); print 'start PC timer; enable control system'
+		pc.pc_timer_init(); print '\n\n\nstart PC timer; enable control system'
 		sleep(5)
 		
 		# 5. Hover and request template
@@ -135,10 +138,53 @@ class MapExplorer2:
 		cv2.imwrite('showfeatures'+str(self.seq)+'.png',img)
 		
 		self.analyseFeatures(kppt, desc, alt)	# main step for calculating pose and new template
-						
 		sleep(0.2)
+		# --------------------------------------------------------------
 		
-		# 6. Match template
+				
+		# 4. Restart position control, move left x meters
+		cpw=(0,0,1); pc.cpw_handler(cpw)
+		dpw=(0,0.4,1); pc.dpw_handler(dpw);
+		pc.pc_timer_init(); print '\n\n\nstart PC timer; enable control system'
+		sleep(5)
+
+		# 5. Hover and request template
+		pc.pc_timer_shutdown(); print 'stop pc timer; hover'
+		
+		self.seq+=1
+		resp = self.capture_image_features(self.seq)
+		kppt, desc, alt, img = self.handleFeatureResponse(resp)
+		self.img = img.copy()
+		
+		for p in kppt:		# show captured features in file
+			cv2.circle(img, tuple(p.astype(int)), 5, (255, 0, 0))
+		cv2.imwrite('showfeatures'+str(self.seq)+'.png',img)
+		
+		self.analyseFeatures(kppt, desc, alt)	# main step for calculating pose and new template
+		sleep(0.2)
+		# --------------------------------------------------------------
+		
+				
+		# 4. Restart position control, move left x meters
+		cpw=(0,0,1); pc.cpw_handler(cpw)
+		dpw=(0,0.4,1); pc.dpw_handler(dpw);
+		pc.pc_timer_init(); print '\n\n\nstart PC timer; enable control system'
+		sleep(5)
+
+		# 5. Hover and request template
+		pc.pc_timer_shutdown(); print 'stop pc timer; hover'
+		
+		self.seq+=1
+		resp = self.capture_image_features(self.seq)
+		kppt, desc, alt, img = self.handleFeatureResponse(resp)
+		self.img = img.copy()
+		
+		for p in kppt:		# show captured features in file
+			cv2.circle(img, tuple(p.astype(int)), 5, (255, 0, 0))
+		cv2.imwrite('showfeatures'+str(self.seq)+'.png',img)
+		
+		self.analyseFeatures(kppt, desc, alt)	# main step for calculating pose and new template
+		sleep(0.2)
 		
 		
 		#~ # reset position and move right x meters
@@ -192,8 +238,13 @@ class MapExplorer2:
 		from camera to model, points to c frame).
 		> Calculates objc, using alt. Calculates objm, using Q, S.
 		> Choose a new template, save in self.templatelib.
+		
+		Returns 0 if normal exit. Returns -1 if error.
 		"""
 		if self.templatelib == []:
+			print '\n\n\n current templatelib length: 0'
+			print '-'*50
+			
 			# analyse features and collect elements for new template
 			Q = np.eye(3)
 			S = np.zeros([3,1])
@@ -209,14 +260,16 @@ class MapExplorer2:
 			self.templatelib.append(t)
 			
 			#~ print ntkppt, ntdesc
-			print kppt.shape, desc.shape
-			print ntkppt.shape, ntdesc.shape, objc.shape, objm.shape
+			print kppt.shape, desc.shape, 'kppt shape, desc shape'
+			print ntkppt.shape, ntdesc.shape, objc.shape, objm.shape, 'new template: ntkppt, ntdesc, objc, objm shape'
 			
 			img = self.img.copy()
 			for p in ntkppt:
 				cv2.circle(img, tuple(p.astype(int)), 5, (0, 0, 0))
 			cv2.imwrite('template'+str(self.seq)+'.png',img)
 			self.imglib.append(img)
+			
+			return 0
 			
 		else:
 			# match features with all known templates; receive Rf, Tf, inliers for all templates.
@@ -234,7 +287,19 @@ class MapExplorer2:
 			
 			# find the template with most inliers matched with current image features
 			all_n_inliers = map(len, allinliers)	# number of matched inliers for all templates
-			tmatch_index = all_n_inliers.index(max(all_n_inliers))
+			max_n_inliers = max(all_n_inliers)
+			tmatch_index = all_n_inliers.index(max_n_inliers)
+			print all_n_inliers, 'all numbers of inliers'
+			print '-'*50
+			print tmatch_index, max_n_inliers, 'tmatch_index, max number of inliers'
+			print '-'*50
+			
+			threshold = 30
+			if max_n_inliers < threshold:
+				print 'Max number of matched features with current templates < ', threshold, '. Land.'
+				self.landpub.publish(Empty())
+				return -1
+			
 			#~ tmatch = self.templatelib[tmatch_index] 		# best template with most inliers
 			Rf = allRf[tmatch_index]
 			Tf = allTf[tmatch_index]
@@ -250,11 +315,7 @@ class MapExplorer2:
 			#~ print allTf, 'allTf'
 			#~ print '-'*50
 			#~ print allinliers, 'allinliers'
-			print '-'*50
-			print all_n_inliers, 'all numbers of inliers'
-			print '-'*50
-			print tmatch_index, len(inliers), 'tmatch_index, max number of inliers'
-			print '-'*50
+			#~ print '-'*50
 			print Rf, Tf, Q, S, 'matched Rf, Tf, Q, S'
 			print '-'*50
 			#~ print tmatch, 'matched template'
@@ -274,6 +335,7 @@ class MapExplorer2:
 			Xm = Q_Xc + tileS
 			print Q_Xc.shape, nXc, 'Q_Xc, nXc'
 			objm = np.transpose(Xm)
+			objm = objm.astype('float32')
 			
 			# pick out the ntdesc's
 			ntdesc = desc[ntindices]
@@ -290,6 +352,8 @@ class MapExplorer2:
 				cv2.circle(img, tuple(p.astype(int)), 5, (0, 0, 0))
 			cv2.imwrite('template'+str(self.seq)+'.png',img)
 			self.imglib.append(img)	
+			
+			return 0
 			
 	
 	def matchFeaturesEstimatePose(self, pf, df, pt, dt, objm):
@@ -308,6 +372,9 @@ class MapExplorer2:
 		Rf = np.array([[cos(rot), -sin(rot), 0],[sin(rot),cos(rot),0],[0,0,1]])
 		#~ print Rf
 		Tf = tvec; Tf[2] = 0
+		#~ print '\n', rvec, 'rvec\n', tvec, 'tvec\n'
+		if inliers == None:
+			inliers = np.array([])
 		return Rf, Tf, inliers
 		
 	
@@ -367,8 +434,12 @@ class MapExplorer2:
 				
 		c = zip(*[(i, x) for i, x in enumerate(list(kppt)) \
 		 if abs(x[0]-320)<270 and abs(x[1]-180)<150])
-		ntkppt = np.array(c[1])
-		ntindex = list(c[0])
+		try:
+			ntkppt = np.array(c[1])
+			ntindex = list(c[0])
+		except:
+			print 'Error occurred when extracting new template - no features for template found. Land.'
+			self.landpub.publish(Empty())
 		return ntkppt, ntindex
 	
 	

@@ -32,10 +32,14 @@ class ImageCapturer:
 		self.de = cv2.DescriptorExtractor_create('SIFT')
 		self.dm = cv2.DescriptorMatcher_create('BruteForce')
 		
+		self.alt_ok = 0
+		self.ang_ok = 0
+		self.vel_ok = 0
+		
 		self.capture_count = 0
 		self.capture_ok = False
 		self.capture_request = False
-		self.timeout_value = 5		# wait 10 seconds for capture (need both capture_ok and capture_request on)
+		self.timeout_value = 10		# wait 10 seconds for capture (need both capture_ok and capture_request on)
 		
 		self.kppt = Float32MultiArray()
 		self.desc = Float32MultiArray()
@@ -55,6 +59,7 @@ class ImageCapturer:
 			# if no updated image captures for 1 second, return with error
 			if time()-treq > self.timeout_value:
 				print 'Timeout. ', self.timeout_value, ' seconds'
+				print self.alt_ok, self.ang_ok, self.vel_ok, 'self.alt_ok, self.ang_ok, self.vel_ok'
 				self.capture_request = False
 				return CaptureImageFeaturesResponse(1, \
 				Float32MultiArray(),Float32MultiArray(),-1000, Float32MultiArray())
@@ -84,7 +89,11 @@ class ImageCapturer:
 			ang_ok = 1
 		if abs(navd.vx) < 50 and abs(navd.vy) < 50:
 			vel_ok = 1
-			
+		
+		self.alt_ok = alt_ok
+		self.ang_ok = ang_ok
+		self.vel_ok = vel_ok
+		
 		if alt_ok == 1 and ang_ok ==1 and vel_ok ==1:
 			self.alt = navd.altd
 			self.capture_ok = True
