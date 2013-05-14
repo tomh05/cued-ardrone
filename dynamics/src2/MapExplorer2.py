@@ -54,6 +54,7 @@ class MapExplorer2:
 		#~ self.desc = []	# current desc
 		#~ self.alt = -1000
 		self.img = np.asarray([])		# current img
+		self.imglib = []
 		self.templatelib = []
 		
 		self.dm = cv2.DescriptorMatcher_create('BruteForce')
@@ -127,6 +128,7 @@ class MapExplorer2:
 		self.seq+=1
 		resp = self.capture_image_features(self.seq)
 		kppt, desc, alt, img = self.handleFeatureResponse(resp)
+		self.img = img.copy()
 		
 		for p in kppt:		# show captured features in file
 			cv2.circle(img, tuple(p.astype(int)), 5, (255, 0, 0))
@@ -205,8 +207,6 @@ class MapExplorer2:
 			# construct new template and save
 			t = Template(tm,ntkppt,ntdesc,objc,objm,Q,S,mid)
 			self.templatelib.append(t)
-			self.templatelib.append(t)
-			self.templatelib.append(t)
 			
 			#~ print ntkppt, ntdesc
 			print kppt.shape, desc.shape
@@ -216,6 +216,7 @@ class MapExplorer2:
 			for p in ntkppt:
 				cv2.circle(img, tuple(p.astype(int)), 5, (0, 0, 0))
 			cv2.imwrite('template'+str(self.seq)+'.png',img)
+			self.imglib.append(img)
 			
 		else:
 			# match features with all known templates; receive Rf, Tf, inliers for all templates.
@@ -223,6 +224,7 @@ class MapExplorer2:
 			alldt = [x.desc for x in self.templatelib]
 			allobjm = [x.objm for x in self.templatelib]
 			nl = len(self.templatelib)
+			print '\n\n\n current templatelib length: ', nl
 			
 			res = map(self.matchFeaturesEstimatePose,[kppt]*nl, [desc]*nl, allpt, alldt, allobjm)
 			unzipped = zip(*res)
@@ -230,11 +232,64 @@ class MapExplorer2:
 			allTf = unzipped[1]
 			allinliers = unzipped[2]
 			
-			print allRf
+			# find the template with most inliers matched with current image features
+			all_n_inliers = map(len, allinliers)	# number of matched inliers for all templates
+			tmatch_index = all_n_inliers.index(max(all_n_inliers))
+			#~ tmatch = self.templatelib[tmatch_index] 		# best template with most inliers
+			Rf = allRf[tmatch_index]
+			Tf = allTf[tmatch_index]
+			inliers = allinliers[tmatch_index]
+			
+			# calculate Q, S
+			Q = np.linalg.inv(Rf)
+			S = -np.dot(Q,Tf)
+			
+			
+			#~ print allRf, 'allRf'
+			#~ print '-'*50
+			#~ print allTf, 'allTf'
+			#~ print '-'*50
+			#~ print allinliers, 'allinliers'
 			print '-'*50
-			print allTf
+			print all_n_inliers, 'all numbers of inliers'
 			print '-'*50
-			print allinliers
+			print tmatch_index, len(inliers), 'tmatch_index, max number of inliers'
+			print '-'*50
+			print Rf, Tf, Q, S, 'matched Rf, Tf, Q, S'
+			print '-'*50
+			#~ print tmatch, 'matched template'
+			
+			
+			# extract a new template using kppt and inliers, get ntkppt, ntindices
+			ntkppt, ntindices = self.extractTemplate(kppt, inliers)
+			
+			# calculate objc for ntkppt
+			objc = self.calcObjcCoord(ntkppt, alt)
+			
+			# use Q, S to calculate objm from objc. Xm = Q.Xc + S
+			Xc = np.transpose(objc)
+			Q_Xc = Q.dot(Xc)
+			nXc = objc.shape[0]		# number of objc points
+			tileS = np.tile(S, (1, nXc))
+			Xm = Q_Xc + tileS
+			print Q_Xc.shape, nXc, 'Q_Xc, nXc'
+			objm = np.transpose(Xm)
+			
+			# pick out the ntdesc's
+			ntdesc = desc[ntindices]
+			
+			# construct new template and save
+			mid = 0
+			tm = time()
+			t = Template(tm,ntkppt,ntdesc,objc,objm,Q,S,mid)
+			self.templatelib.append(t)
+			
+			
+			img = self.img.copy()
+			for p in ntkppt:
+				cv2.circle(img, tuple(p.astype(int)), 5, (0, 0, 0))
+			cv2.imwrite('template'+str(self.seq)+'.png',img)
+			self.imglib.append(img)	
 			
 	
 	def matchFeaturesEstimatePose(self, pf, df, pt, dt, objm):
@@ -311,7 +366,7 @@ class MapExplorer2:
 				#~ ntindex.append(i)
 				
 		c = zip(*[(i, x) for i, x in enumerate(list(kppt)) \
-		 if abs(x[0]-320)<250 and abs(x[1]-180)<140])
+		 if abs(x[0]-320)<270 and abs(x[1]-180)<150])
 		ntkppt = np.array(c[1])
 		ntindex = list(c[0])
 		return ntkppt, ntindex
