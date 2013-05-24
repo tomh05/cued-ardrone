@@ -1,0 +1,4 @@
+<launch>
+<node name="Joy" pkg="joy" type="joy_node" />
+<node name="Xbox" pkg="xboxcontroller" type="control.py" />
+</launch>

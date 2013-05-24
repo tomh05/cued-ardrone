@@ -21,7 +21,7 @@ import tf
 
 from time import time, sleep
 import sys
-from math import sin, cos, radians, degrees, pi
+from math import sin, cos, radians, degrees, pi, sqrt, pow
 from visualization_msgs.msg import MarkerArray, Marker
 
 
@@ -35,9 +35,11 @@ class PositionController:
         self.d2=d2            #-0.00032 for marker and indep modes control  
         self.dpw=dpw0
         self.dyw=dyw0
+        self.arrived = False  
         
         self.reftm = time()
-        self.cmd_log = {'tm':0.0, 'tw':0.0}
+        self.cmd_log = {'tm':rospy.Time(0).to_sec(), 'tw':0.0}
+        self.kParticle = 0.1 # particle filter merging constant
         self.nd_log = {'tm':0.0, 'nd':0.0, 'ph':0.0, 'th':0.0, 'ps':0.0, 'vx':0.0, 'vy':0.0, 'vz':0.0, 'al':0.0, 'cpw':cpw0, 'cyw':dyw0}
         
         self.ref = {'al':1500}    #'al' for height
@@ -47,6 +49,7 @@ class PositionController:
         
         self.twist = Twist()
         self.cmdpub = rospy.Publisher('cmd_vel', Twist)
+        self.targetreachedpub = rospy.Publisher('targetreached', Empty)
         self.landpub = rospy.Publisher('ardrone/land', Empty)
         self.resetpub = rospy.Publisher('ardrone/reset', Empty)
         self.takeoffpub = rospy.Publisher('ardrone/takeoff', Empty)
@@ -66,6 +69,7 @@ class PositionController:
         self.kParticle = 0.1 # particle filter merging constant
         self.kParticleRot = 0.05 # particle filter merging constant
         self.kParticleRot = 0.01 # particle filter merging constant
+        self.kParticleRot = 0.03 # particle filter merging constant
         #self.kParticle = 1.0 # particle filter merging constant
 
         self.markerPub = rospy.Publisher('positionControlMarkers',MarkerArray)
@@ -100,7 +104,7 @@ class PositionController:
     
     
     def navdataCallback(self, msg):
-        self.nd_logger(msg)
+        #self.nd_logger(msg)
         if(True): #try
             if self.justgotpose:
                 # TODO permanant fix
@@ -109,14 +113,15 @@ class PositionController:
                 #self.justgotpose = True
             else:
                 
-                dt=(msg.header.stamp - self.nd_log['nd'].header.stamp).to_sec()
+                dt=min(msg.header.stamp.to_sec() - self.nd_log['tm'],1.0)
+                #print msg.header.stamp, self.nd_log['nd'].header.stamp
                 dx=(msg.vx+self.nd_log['vx'])*dt/2.0/1000.0
                 dy=(msg.vy+self.nd_log['vy'])*dt/2.0/1000.0
                 dz=(msg.altd-self.nd_log['al'])/1000.0
                 #print 'dz: ', dz
                  # bring in particle filter estimates...v
                 (self.pfPos,self.pfRot) = self.tfListener.lookupTransform('/world',"/"+rospy.get_param('tf_prefix')+"/ardrone_base_link_particle_filter",rospy.Time(0)) # get latest transform
-
+                
                 drotZ=msg.rotZ - self.nd_log['ps'] #TODO rotZ offset fix
                 if drotZ > 300:        #to account for discontinuity in yaw around 0
                     drotZ = drotZ - 360
@@ -145,7 +150,6 @@ class PositionController:
                 
                 du=dx*cos(yaw)-dy*sin(yaw)                        #du, dv are displacement in  world frame
                 dv=dx*sin(yaw)+dy*cos(yaw)
-                
                 # pfPos = (0.0,500.0,0.0) # debug - test an extreme position
                 du += dt * self.kParticle * (self.pfPos[0] - self.nd_log['cpw'][0]) 
                 dv += dt * self.kParticle * (self.pfPos[1] - self.nd_log['cpw'][1]) 
@@ -153,7 +157,7 @@ class PositionController:
                 self.nd_log['cpw'] = ((self.nd_log['cpw'][0]+du, self.nd_log['cpw'][1]+dv, self.nd_log['cpw'][2]+dz))
                 self.nd_log['cyw'] =(cywnew)
 
-                #self.drawMarkers()
+                self.drawMarkers()
             
     # throw all navdata into storage 
     def nd_logger(self,msg):
@@ -165,7 +169,7 @@ class PositionController:
         
 
         #print msg.rotZ
-        self.nd_log['tm'] = (time()-self.reftm)
+        self.nd_log['tm'] = msg.header.stamp.to_sec()
         self.nd_log['nd'] = (msg)
     
         self.nd_log['th'] = (msg.rotY)        # forw+ backw-
@@ -198,6 +202,7 @@ class PositionController:
     
     
     def dpw_handler(self, dpw):
+        self.arrived = False;
         self.dpw = dpw   #dpw is the destination world coordinate
         
     
@@ -215,7 +220,7 @@ class PositionController:
             self.twist.linear.z = max(min(0.0013*self.error['al'], 1.0), -1.0) # bound to +-1
         else:
             zerror = self.dpw[2]-self.nd_log['cpw'][2]                        #zerror is in meters
-            #print 'zerror: ', zerror, ' is ', self.dpw[2], ' minus ', self.nd_log['cpw'][-1][2]
+            #print 'zerror: ', zerror, ' is ', self.dpw[2], ' minus ', self.nd_log['cpw'][2]
             #print 'dpw: ', self.dpw[2]
             self.twist.linear.z = max(min(0.0013*zerror*1000, 1.0), -1.0)
     
@@ -247,14 +252,10 @@ class PositionController:
             rx=1000.0*xrc*self.d0+oldth*self.d1+oldvx*self.d2
             ry=1000.0*yrc*self.d0+oldph*self.d1+oldvy*self.d2
             
-            #print rx, ry
-            #print psw
-            #llim=0.5    #linear cmd limit
-            llim=0.01    #linear cmd limit
-            llim=0.2    #linear cmd limit
+            llim=0.2    #linear cmd limit - max speed
+            
             self.twist.linear.x=max(min(rx,llim),-llim)
             self.twist.linear.y=max(min(ry,llim),-llim)
-            #print 'resultant twist x: ' + str(self.twist.linear.x) + ' twist y: ' + str(self.twist.linear.y) 
         else:
             pass
             #print 'calculate command error'
@@ -262,6 +263,12 @@ class PositionController:
         #self.cleartwist() #TODO REMOVE
         self.cmdpub.publish(self.twist)
         self.cmd_logger(self.twist)
+       
+        targetSize = 1.0
+        if (pow(xrw,2)+pow(yrw,2)< targetSize and not self.arrived):
+            self.arrived = True
+            self.targetreachedpub.publish()
+
         #print 'twist: \n', self.twist
         
     #compute yaw difference    
@@ -272,7 +279,7 @@ class PositionController:
             rem=rem-360
         return rem
 
-
+    # Not used...
     def sendTransform(self):
        self.br.sendTransform((self.pfPos[0],self.pfPos[1], self.pfPos[2]),
                                   (self.pfRot[0], self.pfRot[1], self.pfRot[2], self.pfRot[3]),
@@ -330,7 +337,6 @@ class PositionController:
         marker.pose.position.x = self.nd_log['cpw'][0]
         marker.pose.position.y = self.nd_log['cpw'][1]
         marker.pose.position.z = self.nd_log['cpw'][2]
-
         markerArray.markers.append(marker)
 
         # particle filter
@@ -343,7 +349,7 @@ class PositionController:
         marker.scale.z = 0.4
         marker.color.a = 1.0
         marker.color.r = 0.0
-        marker.color.g = 0.0
+        marker.color.g = 0.2
         marker.color.b = 1.0
         marker.id=3
         marker.pose.orientation.x = self.pfRot[0]
@@ -353,7 +359,7 @@ class PositionController:
         marker.pose.position.x = self.pfPos[0]
         marker.pose.position.y = self.pfPos[1]
         marker.pose.position.z = self.pfPos[2]
-
+        
         markerArray.markers.append(marker)
 
         self.markerPub.publish(markerArray)

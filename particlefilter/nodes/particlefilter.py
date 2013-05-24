@@ -95,7 +95,7 @@ mapVisualisation.markers.append(marker)
 
 class ParticleFilter:
     def __init__(self):
-        self.N            = 7      # number of particles 20 was best
+        self.N            = 20      # number of particles, 20 was best
         self.p            = []      # particle list
         self.ar_markers   = None 
         self.w            = [1.0]*self.N
@@ -160,7 +160,7 @@ class ParticleFilter:
             # update particle locations
             self.p[i].move(movement)
 
-        #######################self.visualiseParticles()
+        self.visualiseParticles()
         if (self.ar_markers is not None ):
             #weigh and resample
             # only do this for marker data that is older than the current deadreckon data - if deadreckoning is behind, skip the
@@ -176,7 +176,7 @@ class ParticleFilter:
                     # flash marker red
                     mapVisualisation.markers[firstmarker].color.g = 0.0
                     self.mapMarkerPub.publish(mapVisualisation)
-                    ######################self.visualiseEstimates()
+                    self.visualiseEstimates()
                     self.resample()
                     mapVisualisation.markers[firstmarker].color.g = 1.0
         self.ar_markers = None
@@ -293,7 +293,7 @@ class ParticleFilter:
                 marker.scale.x = 0.4
                 marker.scale.y = 0.4
                 marker.scale.z = 0.05
-                marker.color.a = 1.0
+                marker.color.a = 0.8
                 marker.color.r = 0.0
                 marker.color.g = 1.0
                 marker.color.b = 0.0
