@@ -25,13 +25,38 @@ import numpy as np
 from time import time, sleep
 from PositionController2 import PositionController
 from Template import *
-
+from visualization_msgs.msg import Marker
 	
 def resolveFromFloat32MultiArray(msg):
 	nrows = msg.layout.dim[0].size
 	ncols = msg.layout.dim[0].stride
 	array = np.reshape(msg.data, [nrows, ncols])
 	return array
+
+def stackImagesVertically(top_image, bottom_image):
+	if len(top_image.shape)==2:
+		# Get image dimensions
+		h1, w1 = top_image.shape[:2]
+		h2, w2 = bottom_image.shape[:2]
+		# Create an empty array that is bounding box size of image stack
+		stacked = np.zeros((h1+h2, max(w1,w2)), np.uint8)
+		# Drop in the top_image
+		stacked[:h1, :w1] = top_image
+		# Drop in the bottom_image
+		stacked[h1:h1+h2, :w2] = bottom_image
+		return stacked
+	else:
+		# Get image dimensions
+		h1, w1, d1 = top_image.shape[:3]
+		h2, w2, d2 = bottom_image.shape[:3]
+		# Create an empty array that is bounding box size of image stack
+		stacked = np.zeros((h1+h2, max(w1,w2), max(d1,d2)), np.uint8)
+		# Drop in the top_image
+		stacked[:h1, :w1, :d1] = top_image
+		# Drop in the bottom_image
+		stacked[h1:h1+h2, :w2, :d2] = bottom_image
+		return stacked
+
 
 class MapExplorer2:
 		
@@ -43,6 +68,8 @@ class MapExplorer2:
 		self.takeoffpub = rospy.Publisher('/ardrone/takeoff', Empty)
 		self.camselectclient = rospy.ServiceProxy('/ardrone/setcamchannel', CamSelect)
 		#~ rospy.Subscriber('/ardrone/navdata', Navdata, self.navdataCallback)
+		self.mpub = rospy.Publisher('addmarker',Marker)
+		self.clrmkrpub = rospy.Publisher('clearmarkers', Empty)
 		
 		# Set up capture_feature proxy.
 		# Initialize template library for storing templates
@@ -66,6 +93,9 @@ class MapExplorer2:
 		sleep(1)
 		self.resetpub.publish(Empty())
 		self.cmdpub.publish(Twist())
+		
+		# clear visualizer markers
+		self.clrmkrpub.publish(Empty())
 		
 		self.camselectclient(1); print 'select bottom camera'
 		self.dpw=(0,0,1)
@@ -96,6 +126,7 @@ class MapExplorer2:
 		sleep(4)
 		pc=PositionController(self.dpw,self.dyw,self.cpw,self.cyw, 1.0/3000, -0.010, -0.0002); print 'construct position controller'
 		sleep(1)
+		step = 0.33
 		# --------------------------------------------------------------
 		
 		
@@ -116,13 +147,14 @@ class MapExplorer2:
 		cv2.imwrite('showfeatures'+str(self.seq)+'.png',img)
 		
 		self.analyseFeatures(kppt, desc, alt)	# main step for calculating pose and new template
+		self.calcDistance()
 		sleep(0.2)
 		# --------------------------------------------------------------
 		
 		
 		# 4. Restart position control, move left x meters
 		cpw=(0,0,1); pc.cpw_handler(cpw)
-		dpw=(0,0.4,1); pc.dpw_handler(dpw);
+		dpw=(0, step ,1); pc.dpw_handler(dpw);
 		pc.pc_timer_init(); print '\n\n\nstart PC timer; enable control system'
 		sleep(5)
 		
@@ -140,13 +172,14 @@ class MapExplorer2:
 		cv2.imwrite('showfeatures'+str(self.seq)+'.png',img)
 		
 		self.analyseFeatures(kppt, desc, alt)	# main step for calculating pose and new template
+		self.calcDistance()
 		sleep(0.2)
 		# --------------------------------------------------------------
 		
 				
 		# 4. Restart position control, move left x meters
 		cpw=(0,0,1); pc.cpw_handler(cpw)
-		dpw=(0,0.4,1); pc.dpw_handler(dpw);
+		dpw=(0, step ,1); pc.dpw_handler(dpw);
 		pc.pc_timer_init(); print '\n\n\nstart PC timer; enable control system'
 		sleep(5)
 
@@ -164,13 +197,14 @@ class MapExplorer2:
 		cv2.imwrite('showfeatures'+str(self.seq)+'.png',img)
 		
 		self.analyseFeatures(kppt, desc, alt)	# main step for calculating pose and new template
+		self.calcDistance()
 		sleep(0.2)
 		# --------------------------------------------------------------
 		
 				
 		# 4. Restart position control, move left x meters
 		cpw=(0,0,1); pc.cpw_handler(cpw)
-		dpw=(0,0.4,1); pc.dpw_handler(dpw);
+		dpw=(0, step ,1); pc.dpw_handler(dpw);
 		pc.pc_timer_init(); print '\n\n\nstart PC timer; enable control system'
 		sleep(5)
 
@@ -188,6 +222,7 @@ class MapExplorer2:
 		cv2.imwrite('showfeatures'+str(self.seq)+'.png',img)
 		
 		self.analyseFeatures(kppt, desc, alt)	# main step for calculating pose and new template
+		self.calcDistance()
 		sleep(0.2)
 		
 		
@@ -205,10 +240,16 @@ class MapExplorer2:
 		# land
 		self.landpub.publish(Empty()); print 'finished - land'
 		
+		# show first and last templates
+		stackedt = stackImagesVertically(self.imglib[0], self.imglib[-1])
+		cv2.imshow('First and last templates', stackedt)
+		cv2.waitKey()
+		
+	def calcDistance(self):
 		p1 = self.templatelib[0].S
-		p2 = self.templatelib[3].S
+		p2 = self.templatelib[-1].S
 		distance = np.linalg.norm(p1-p2)
-		print '\n\ndistance = ', distance
+		print 'distance = ', distance
 		
 		#rospy.spin()
 	
@@ -272,6 +313,10 @@ class MapExplorer2:
 			print kppt.shape, desc.shape, 'kppt shape, desc shape'
 			print ntkppt.shape, ntdesc.shape, objc.shape, objm.shape, 'new template: ntkppt, ntdesc, objc, objm shape'
 			
+			# make marker and send to visualizer
+			self.createMarker(S,self.seq)
+			
+			# save image and new template
 			img = self.img.copy()
 			for p in ntkppt:
 				cv2.circle(img, tuple(p.astype(int)), 5, (0, 0, 0))
@@ -356,7 +401,10 @@ class MapExplorer2:
 			t = Template(tm,ntkppt,ntdesc,objc,objm,Q,S,mid)
 			self.templatelib.append(t)
 			
+			# make marker and send to visualizer
+			self.createMarker(S,self.seq)
 			
+			# save image and new template
 			img = self.img.copy()
 			for p in ntkppt:
 				cv2.circle(img, tuple(p.astype(int)), 5, (0, 0, 0))
@@ -453,6 +501,37 @@ class MapExplorer2:
 			self.landpub.publish(Empty())
 		return ntkppt, ntindex
 	
+	def createMarker(self, S, id):
+		m=Marker()
+		m.header.frame_id='/world'
+		
+		m.ns='basic'
+		m.id=id
+		m.type=Marker.CUBE
+	
+		m.action=Marker.ADD
+		
+		m.pose.position.x=float(S[0])
+		m.pose.position.y=float(S[1])
+		m.pose.position.z=0
+		m.pose.orientation.x=0.0
+		m.pose.orientation.y=0.0
+		m.pose.orientation.z=0.0
+		m.pose.orientation.w=1.0
+		
+		m.scale.x=50
+		m.scale.y=50
+		m.scale.z=1.0
+		
+		m.color.r=0.0
+		m.color.g=1.0
+		m.color.b=0.0
+		m.color.a=1.0
+		
+		m.lifetime=rospy.Duration(1.0)
+		
+		self.mpub.publish(m)
+
 	
 	#~ def navdataCallback(self, msg):
 		#~ self.check_capture(msg)
