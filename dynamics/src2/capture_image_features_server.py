@@ -87,7 +87,7 @@ class ImageCapturer:
 			alt_ok = 1
 		if abs(navd.rotX) < 0.4 and abs(navd.rotY) < 0.4:
 			ang_ok = 1
-		if abs(navd.vx) < 50 and abs(navd.vy) < 50:
+		if abs(navd.vx) < 75 and abs(navd.vy) < 75:
 			vel_ok = 1
 		
 		self.alt_ok = alt_ok
@@ -98,8 +98,8 @@ class ImageCapturer:
 			self.alt = navd.altd
 			self.capture_ok = True
 		else:
-			#~ if self.capture_request == True:
-				#~ print 'alt, ang, vel: \n', alt_ok, ang_ok, vel_ok
+			if self.capture_request == True:
+				print 'alt, ang, vel: \n', alt_ok, ang_ok, vel_ok
 			self.capture_ok = False
 		
 	def imgproc(self, d):

@@ -38,6 +38,8 @@ class PositionController:
 		self.refalon = True
 		self.yawon = False
 		
+		self.altgain = 0.0014  # 0.0013
+		
 		self.twist = Twist()
 		self.cmdpub = rospy.Publisher('cmd_vel', Twist)
 		self.landpub = rospy.Publisher('/ardrone/land', Empty)
@@ -60,6 +62,8 @@ class PositionController:
 	def pc_timer_shutdown(self):
 		try:
 			self.pc_timer.shutdown()
+			sleep(0.1)
+			self.cmdpub.publish(Twist())
 			sleep(0.2)
 			self.cmdpub.publish(Twist())
 			#print 'PositionController2.py: shut down pc timer, zero twist'
@@ -158,12 +162,12 @@ class PositionController:
 			print 'PositionController: Error: altitude too high - landing'
 		
 		if self.refalon == True:
-			self.twist.linear.z = max(min(0.0013*self.error['al'][-1], 1.0), -1.0)
+			self.twist.linear.z = max(min(self.altgain*self.error['al'][-1], 1.0), -1.0)
 		else:
 			zerror = self.dpw[2]-self.nd_log['cpw'][-1][2]						#zerror is in meters
 			#print 'zerror: ', zerror
 			#print 'dpw: ', self.dpw[2]
-			self.twist.linear.z = max(min(0.0013*zerror*1000, 1.0), -1.0)
+			self.twist.linear.z = max(min(self.altgain*zerror*1000, 1.0), -1.0)
 		
 		if self.yawon == True:
 			yawwerror = -self.cyd(degrees(self.nd_log['cyw'][-1]),degrees(self.dyw))		# computes error in yaw world in degrees
