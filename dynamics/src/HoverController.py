@@ -59,6 +59,12 @@ class HoverController:
 		self.pc.refalon = True	
 		self.pc.yawon = False
 		
+		self.resetpub.publish(Empty())
+		sleep(0.8)
+		self.resetpub.publish(Empty())
+		sleep(0.5)
+		self.cmdpub.publish(Twist())
+		
 		self.takeoffpub.publish(Empty()); print 'takeoff'; 
 		sleep(4)
 
@@ -66,21 +72,21 @@ class HoverController:
 		self.hover_timer = rospy.Timer(rospy.Duration(1.0/20.0), self.hover_timer_callback)
 		sleep(2)
 		self.pc.pc_timer_init()
-		sleep(10)
-		self.dpw=(0.8,0.0,1.5); self.pc.dpw_handler(self.dpw)
-		#self.pc.refal_handler(1600)
-		#self.pc.dyw_handler(pi/2)
-		sleep(7)
-		self.dpw=(0.0,0.0,1.5); self.pc.dpw_handler(self.dpw)
-		#self.pc.refal_handler(800)
-		#self.pc.dyw_handler(-pi/2)
-		sleep(7)
-		self.dpw=(-0.8,-0.4,1.5); self.pc.dpw_handler(self.dpw)
-		#self.pc.refal_handler(1300)
-		#self.pc.dyw_handler(pi)
-		sleep(7)
-		self.dpw=(0.0,0.0,1.5); self.pc.dpw_handler(self.dpw)
-		#self.landpub.publish(Empty()); print 'land'
+		#~ sleep(10)
+		#~ self.dpw=(0.8,0.0,1.5); self.pc.dpw_handler(self.dpw)
+		#~ #self.pc.refal_handler(1600)
+		#~ #self.pc.dyw_handler(pi/2)
+		#~ sleep(7)
+		#~ self.dpw=(0.0,0.0,1.5); self.pc.dpw_handler(self.dpw)
+		#~ #self.pc.refal_handler(800)
+		#~ #self.pc.dyw_handler(-pi/2)
+		#~ sleep(7)
+		#~ self.dpw=(-0.8,-0.4,1.5); self.pc.dpw_handler(self.dpw)
+		#~ #self.pc.refal_handler(1300)
+		#~ #self.pc.dyw_handler(pi)
+		#~ sleep(7)
+		#~ self.dpw=(0.0,0.0,1.5); self.pc.dpw_handler(self.dpw)
+		#~ #self.landpub.publish(Empty()); print 'land'
 	
 	
 	def posesub_callback(self, msg):
@@ -89,7 +95,7 @@ class HoverController:
 			self.confmarker = False
 			#print 'no markers'
 		else:
-			if msg.markers[0].confidence > 75:
+			if msg.markers[0].confidence > 30:
 				#print 'found confident marker'
 				self.confmarker = True
 			else:
@@ -107,10 +113,10 @@ class HoverController:
 				tpast=self.tl.getLatestCommonTime('/4x4_94','/ardrone_base_link')
 				tdiff=rospy.Time.to_sec(tnow)-rospy.Time.to_sec(tpast)
 				if (tdiff<0.1):
-					try:
-						(pos, ori) = self.tl.lookupTransform('/4x4_94','/ardrone_base_link', rospy.Time(0))
+					(pos, ori) = self.tl.lookupTransform('/4x4_94','/ardrone_base_link', rospy.Time(0))
+					if pos[0] <0.80 and pos[1]<0.80:
 						self.gottf = True
-					except:
+					else:
 						self.gottf = False
 						#print 'error: transform exception'
 				else:

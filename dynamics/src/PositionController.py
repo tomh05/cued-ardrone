@@ -21,7 +21,7 @@ import pickle
 
 class PositionController:
 	
-	def __init__(self, dpw0, dyw0, cpw0, cyw0, d0=1.0/2400, d1=-0.008, d2=-0.00028):
+	def __init__(self, dpw0, dyw0, cpw0, cyw0, d0=1.0/3000, d1=-0.010, d2=-0.0002):
 		
 		self.d0=d0			#1/2600 for marker and indep modes control
 		self.d1=d1			#-0.008 for marker and indep modes control
