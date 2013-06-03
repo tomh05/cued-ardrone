@@ -138,7 +138,9 @@ class PositionController:
 		self.nd_log['cyw'].append(cyw)	#pose_handler uses cow[2] (z rot, euler) to determine rot of cmd frame wrt. world frame
 		self.nd_log['cpw'].append(cpw)
 		self.justgotpose = True
-		print '\ngotpose - \nposition: ' + str(cpw) + '\norientation-z: ' + str(cyw) + '\ntime: ' + str(time()-self.reftm)
+		#print '\ngotpose - \nposition: ' + str(cpw) + '\norientation-z: ' + str(cyw) + '\ntime: ' + str(time()-self.reftm)
+		print 'PositionController2.py: received cpw: ' + str(cpw)
+		print 'PositionController2.py: received cyw: ' + str(cyw)
 		#print 'gotpose'
 	
 	def cpw_handler(self, cpw):

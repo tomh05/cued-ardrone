@@ -46,7 +46,7 @@ class MarkerVisualizer:
 		while not rospy.is_shutdown():
 			self.br.sendTransform(self.w2dr, tf.transformations.quaternion_from_euler(0, 0, 0),\
 			 rospy.Time.now(), 'ardrone_base_link', "world")
-			self.br.sendTransform((0,0,0), tf.transformations.quaternion_from_euler(pi, 0, pi/2),\
+			self.br.sendTransform((0,0,0), tf.transformations.quaternion_from_euler(pi, 0, -pi/2),\
 			 rospy.Time.now(), 'MEorigin', "world")
 			for m in self.ma.markers:
 				m.header.seq+=1

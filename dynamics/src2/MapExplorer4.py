@@ -19,7 +19,7 @@ from tf import transformations
 import cv2
 
 import math
-from math import cos, sin
+from math import cos, sin, acos
 import pickle
 import numpy as np
 from time import time, sleep
@@ -153,7 +153,8 @@ class MapExplorer2:
 		
 		
 		# 4. Restart position control, move left x meters 111
-		cpw=(0,0,1); pc.cpw_handler(cpw)
+		cpwcyw = self.getcpwcyw()
+		cpw=cpwcyw[0]; cyw=cpwcyw[1]; pc.cpw_cyw_handler(cpw,cyw); 
 		dpw=(cpw[0], cpw[1]+step ,1); pc.dpw_handler(dpw);
 		pc.pc_timer_init(); print '\n\n\nstart PC timer; enable control system'
 		sleep(5)
@@ -178,7 +179,9 @@ class MapExplorer2:
 		
 				
 		# 4. Restart position control, move left x meters 222
-		cpw=(0,0,1); pc.cpw_handler(cpw)
+		cpwcyw = self.getcpwcyw()
+		cpw=cpwcyw[0]; cyw=cpwcyw[1]; pc.cpw_cyw_handler(cpw,cyw); 
+		#~ cpw=(0,0,1); pc.cpw_handler(cpw)
 		dpw=(cpw[0], cpw[1]+step ,1); pc.dpw_handler(dpw);
 		pc.pc_timer_init(); print '\n\n\nstart PC timer; enable control system'
 		sleep(5)
@@ -203,7 +206,9 @@ class MapExplorer2:
 		
 				
 		# 4. Restart position control, move left x meters 333
-		cpw=(0,0,1); pc.cpw_handler(cpw)
+		cpwcyw = self.getcpwcyw()
+		cpw=cpwcyw[0]; cyw=cpwcyw[1]; pc.cpw_cyw_handler(cpw,cyw); 
+		#~ cpw=(0,0,1); pc.cpw_handler(cpw)
 		dpw=(cpw[0], cpw[1]+step ,1); pc.dpw_handler(dpw);
 		pc.pc_timer_init(); print '\n\n\nstart PC timer; enable control system'
 		sleep(5)
@@ -244,6 +249,13 @@ class MapExplorer2:
 		stackedt = stackImagesVertically(self.imglib[0], self.imglib[-1])
 		cv2.imshow('First and last templates', stackedt)
 		cv2.waitKey()
+	
+	def getcpwcyw(self):
+		p = self.templatelib[-1].S/1000.0
+		cpw = (-p[1][0], -p[0][0], 1)
+		q = self.templatelib[-1].Q
+		cyw = -transformations.euler_from_matrix(q)[2]
+		return cpw, cyw
 		
 	def calcDistance(self):
 		p1 = self.templatelib[0].S
