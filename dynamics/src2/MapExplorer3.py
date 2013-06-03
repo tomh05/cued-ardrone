@@ -130,7 +130,7 @@ class MapExplorer2:
 		# --------------------------------------------------------------
 		
 		
-		# 2. Start position control by starting pc_timer
+		# 2. Start position control by starting pc_timer 000
 		pc.pc_timer_init(); print '\n\n\nstart PC timer; enable control system'
 		sleep(4)
 		
@@ -152,9 +152,9 @@ class MapExplorer2:
 		# --------------------------------------------------------------
 		
 		
-		# 4. Restart position control, move left x meters
+		# 4. Restart position control, move left x meters 111
 		cpw=(0,0,1); pc.cpw_handler(cpw)
-		dpw=(0, step ,1); pc.dpw_handler(dpw);
+		dpw=(cpw[0], cpw[1]+step ,1); pc.dpw_handler(dpw);
 		pc.pc_timer_init(); print '\n\n\nstart PC timer; enable control system'
 		sleep(5)
 		
@@ -177,9 +177,9 @@ class MapExplorer2:
 		# --------------------------------------------------------------
 		
 				
-		# 4. Restart position control, move left x meters
+		# 4. Restart position control, move left x meters 222
 		cpw=(0,0,1); pc.cpw_handler(cpw)
-		dpw=(0, step ,1); pc.dpw_handler(dpw);
+		dpw=(cpw[0], cpw[1]+step ,1); pc.dpw_handler(dpw);
 		pc.pc_timer_init(); print '\n\n\nstart PC timer; enable control system'
 		sleep(5)
 
@@ -202,9 +202,9 @@ class MapExplorer2:
 		# --------------------------------------------------------------
 		
 				
-		# 4. Restart position control, move left x meters
+		# 4. Restart position control, move left x meters 333
 		cpw=(0,0,1); pc.cpw_handler(cpw)
-		dpw=(0, step ,1); pc.dpw_handler(dpw);
+		dpw=(cpw[0], cpw[1]+step ,1); pc.dpw_handler(dpw);
 		pc.pc_timer_init(); print '\n\n\nstart PC timer; enable control system'
 		sleep(5)
 
@@ -511,17 +511,17 @@ class MapExplorer2:
 	
 		m.action=Marker.ADD
 		
-		m.pose.position.x=float(S[0])
-		m.pose.position.y=float(S[1])
+		m.pose.position.x=float(S[0]/1000.0)
+		m.pose.position.y=float(S[1]/1000.0)
 		m.pose.position.z=0
 		m.pose.orientation.x=0.0
 		m.pose.orientation.y=0.0
 		m.pose.orientation.z=0.0
 		m.pose.orientation.w=1.0
 		
-		m.scale.x=50
-		m.scale.y=50
-		m.scale.z=1.0
+		m.scale.x=0.070
+		m.scale.y=0.070
+		m.scale.z=0.001
 		
 		m.color.r=0.0
 		m.color.g=1.0
