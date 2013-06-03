@@ -124,7 +124,7 @@ class MapExplorer2:
 		# 1. Take off. Instantiate PositionController
 		self.takeoffpub.publish(Empty()); print 'takeoff'
 		sleep(4)
-		pc=PositionController(self.dpw,self.dyw,self.cpw,self.cyw, 1.0/3000, -0.010, -0.0002); print 'construct position controller'
+		pc=PositionController(self.dpw,self.dyw,self.cpw,self.cyw, 1.0/2800, -0.010, -0.0002); print 'construct position controller'
 		sleep(1)
 		step = 0.33
 		# --------------------------------------------------------------
@@ -132,7 +132,7 @@ class MapExplorer2:
 		
 		# 2. Start position control by starting pc_timer 000
 		pc.pc_timer_init(); print '\n\n\nstart PC timer; enable control system'
-		sleep(4)
+		sleep(3)
 		
 		# 3. Hover and request to take template
 		pc.pc_timer_shutdown(); print 'stop pc timer; hover'
@@ -157,7 +157,7 @@ class MapExplorer2:
 		cpw=cpwcyw[0]; cyw=cpwcyw[1]; pc.cpw_cyw_handler(cpw,cyw); 
 		dpw=(cpw[0], cpw[1]+step ,1); pc.dpw_handler(dpw);
 		pc.pc_timer_init(); print '\n\n\nstart PC timer; enable control system'
-		sleep(5)
+		sleep(4)
 		
 		# 5. Hover and request template
 		pc.pc_timer_shutdown(); print 'stop pc timer; hover'
@@ -184,7 +184,7 @@ class MapExplorer2:
 		#~ cpw=(0,0,1); pc.cpw_handler(cpw)
 		dpw=(cpw[0], cpw[1]+step ,1); pc.dpw_handler(dpw);
 		pc.pc_timer_init(); print '\n\n\nstart PC timer; enable control system'
-		sleep(5)
+		sleep(4)
 
 		# 5. Hover and request template
 		pc.pc_timer_shutdown(); print 'stop pc timer; hover'
@@ -211,7 +211,7 @@ class MapExplorer2:
 		#~ cpw=(0,0,1); pc.cpw_handler(cpw)
 		dpw=(cpw[0], cpw[1]+step ,1); pc.dpw_handler(dpw);
 		pc.pc_timer_init(); print '\n\n\nstart PC timer; enable control system'
-		sleep(5)
+		sleep(4)
 
 		# 5. Hover and request template
 		pc.pc_timer_shutdown(); print 'stop pc timer; hover'
