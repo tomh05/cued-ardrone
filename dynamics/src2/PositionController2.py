@@ -12,6 +12,8 @@ from dynamics.msg import Navdata
 from dynamics.srv import CamSelect
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Empty, UInt8
+from tf import transformations
+import tf
 
 from time import time, sleep
 import sys
@@ -47,7 +49,9 @@ class PositionController:
 		self.takeoffpub = rospy.Publisher('/ardrone/takeoff', Empty)
 		self.navdatasub = rospy.Subscriber('/ardrone/navdata', Navdata, self.navdataCallback)
 		self.camselectclient = rospy.ServiceProxy('/ardrone/setcamchannel', CamSelect)
-				
+		
+		self.br = tf.TransformBroadcaster()
+		
 		self.justgotpose = False
 
 
@@ -101,10 +105,17 @@ class PositionController:
 				yaw=(cywnew+self.nd_log['cyw'][-1])/2.0			#yaw refers to yaw wrt to world frame
 				du=dx*cos(yaw)-dy*sin(yaw)						#du, dv are displacement in  world frame
 				dv=dx*sin(yaw)+dy*cos(yaw)
-				self.nd_log['cpw'].append((self.nd_log['cpw'][-1][0]+du, self.nd_log['cpw'][-1][1]+dv, self.nd_log['cpw'][-1][2]+dz))
+				self.nd_log['cpw'].append((self.nd_log['cpw'][-1][0]+du,\
+				 self.nd_log['cpw'][-1][1]+dv, self.nd_log['cpw'][-1][2]+dz))
 				self.nd_log['cyw'].append(cywnew)
 				#print yaw
 				#print self.nd_log['cpw'][-1]
+			
+			# Publish drone frame transform
+			self.br.sendTransform(self.nd_log['cpw'][-1],\
+			 tf.transformations.quaternion_from_euler(0, 0, self.nd_log['cyw'][-1]),\
+			 rospy.Time.now(), 'ardrone_base_link', "world")
+			
 		except:
 			#self.drone_pos_valid = False
 			print 'PositionController2.py: Exception: navdata callback error'
