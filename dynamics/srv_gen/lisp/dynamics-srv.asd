@@ -5,6 +5,8 @@
   :depends-on (:roslisp-msg-protocol :roslisp-utils :std_msgs-msg
 )
   :components ((:file "_package")
+    (:file "FollowerImageServer" :depends-on ("_package_FollowerImageServer"))
+    (:file "_package_FollowerImageServer" :depends-on ("_package"))
     (:file "CamSelect" :depends-on ("_package_CamSelect"))
     (:file "_package_CamSelect" :depends-on ("_package"))
     (:file "CaptureImageFeatures" :depends-on ("_package_CaptureImageFeatures"))

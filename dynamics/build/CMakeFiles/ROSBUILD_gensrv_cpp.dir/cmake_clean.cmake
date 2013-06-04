@@ -6,6 +6,7 @@ FILE(REMOVE_RECURSE
   "../msg_gen"
   "../srv_gen"
   "CMakeFiles/ROSBUILD_gensrv_cpp"
+  "../srv_gen/cpp/include/dynamics/FollowerImageServer.h"
   "../srv_gen/cpp/include/dynamics/CamSelect.h"
   "../srv_gen/cpp/include/dynamics/CaptureImageFeatures.h"
   "../srv_gen/cpp/include/dynamics/HullSelect.h"
